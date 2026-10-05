@@ -26,7 +26,7 @@ namespace DSExecution.Errors
         public static RuntimeError DivisionByZero()
             => new(
                 RuntimeErrorId.DivisionByZero,
-                "Zero division. TODO: Localize!"
+                "Division by zero. TODO: Localize!"
             );
 
         public static RuntimeError Overflow()
