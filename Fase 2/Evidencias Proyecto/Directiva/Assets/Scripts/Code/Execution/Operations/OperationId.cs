@@ -19,9 +19,9 @@ namespace DSExecution.Operations
         ValueEquals = 8,
         ReferenceEquals = 9,
         GreaterThan = 10,
-        GreaterOrEqualThan = 11,
+        GreaterOrEqual = 11,
         LessThan = 12,
-        LessOrEqualThan = 13,
+        LessOrEqual = 13,
 
         // Boolean
         Not = 14,

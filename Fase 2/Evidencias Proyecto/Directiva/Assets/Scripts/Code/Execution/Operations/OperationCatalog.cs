@@ -52,9 +52,9 @@ namespace DSExecution.Operations
             SetOperation(temp, OperationId.ValueEquals, new(2, OperationResult.Success(DataValue.FromBool(false)), 0, 1));
             SetOperation(temp, OperationId.ReferenceEquals, new(2, OperationResult.Success(DataValue.FromBool(false)), 0, 1));
             SetOperation(temp, OperationId.GreaterThan, new(2, null, 0, 1));
-            SetOperation(temp, OperationId.GreaterOrEqualThan, new(2, null, 0, 1));
+            SetOperation(temp, OperationId.GreaterOrEqual, new(2, null, 0, 1));
             SetOperation(temp, OperationId.LessThan, new(2, null, 0, 1));
-            SetOperation(temp, OperationId.LessOrEqualThan, new(2, null, 0, 1));
+            SetOperation(temp, OperationId.LessOrEqual, new(2, null, 0, 1));
             SetOperation(temp, OperationId.Not, new(1, null, 0));
             SetOperation(temp, OperationId.Copy, new(1, null, 0));
             SetOperation(temp, OperationId.Append, new(2, null, 0));
