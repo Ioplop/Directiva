@@ -39,12 +39,12 @@ namespace DSExecution.DataTypes
 
             DataType?[] result = new DataType?[maxDataTypeId + 1];
 
+            result[(int)DataTypeId.Uninitialized] = DTUninitialized.Instance;
+            result[(int)DataTypeId.None] = DTNone.Instance;
             result[(int)DataTypeId.Bool] = DTBool.Instance;
             result[(int)DataTypeId.Int] = DTInt.Instance;
             result[(int)DataTypeId.Decimal] = DTDecimal.Instance;
             // Remaining to add...
-            // Uninitialized
-            // None
             // String
             // List
             // Set
@@ -126,7 +126,7 @@ namespace DSExecution.DataTypes
             }
         }
 
-        public OperationResult Operate(OperationId operationId, OperationCall opCall)
+        public virtual OperationResult Operate(OperationId operationId, OperationCall opCall)
         {
             OperationHandler? operationHandler = GetOperation(operationId);
 

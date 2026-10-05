@@ -13,6 +13,14 @@ namespace DSExecution.Values
             this.value = value;
         }
 
+        public static DataValue Uninitialized()
+        {
+            return new DataValue(
+                DataTypeId.Uninitialized,
+                0
+            );
+        }
+
         public static DataValue None()
         {
             return new DataValue(

@@ -9,7 +9,8 @@ namespace DSExecution.Errors
         InvalidOperation,
         InvalidMemoryAccess,
         StackOverflow,
-        StackUnderflow
+        StackUnderflow,
+        VariableUsedBeforeInitialization
     }
 
     public sealed class RuntimeError
@@ -33,6 +34,12 @@ namespace DSExecution.Errors
             => new(
                 RuntimeErrorId.Overflow,
                 "Numeric overflow. TODO: Localize!"
+            );
+
+        public static RuntimeError VariableUsedBeforeInitialization()
+            => new(
+                RuntimeErrorId.VariableUsedBeforeInitialization,
+                "Variable used before initialization. TODO: Localize!"
             );
     }
 }
