@@ -1,11 +1,11 @@
-# nullable enable
+﻿# nullable enable
 using DSExecution.Values;
 using DSExecution.Errors;
 
 namespace DSExecution.Operations
 {
     /// <summary>
-    /// Contiene el resultado o retorno de aplicar una operaci�n.
+    /// Contiene el resultado o retorno de aplicar una operación.
     /// </summary>
     public readonly struct OperationResult
     {

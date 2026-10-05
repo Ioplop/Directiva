@@ -1,4 +1,4 @@
-using DSExecution.Operations;
+ï»¿using DSExecution.Operations;
 using DSExecution.Values;
 
 namespace DSExecution.DataTypes
@@ -21,7 +21,7 @@ namespace DSExecution.DataTypes
 
         public (DataValue decimalSide, DataValue otherSide) GetTwoOpSidesByType(OperationCall opCall)
         {
-            // Podemos asumir que uno de los dos valores es decimal porque si no la operación no sería despachada esta clase.
+            // Podemos asumir que uno de los dos valores es decimal porque si no la operaciÃ³n no serÃ­a despachada esta clase.
             var left = opCall.Arguments[0];
             var right = opCall.Arguments[1];
             return left.dataType == DataTypeId.Decimal ? (left, right) : (right, left);

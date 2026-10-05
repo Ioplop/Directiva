@@ -1,11 +1,11 @@
-using System;
+ï»¿using System;
 using System.Linq;
 using DSExecution.Values;
 
 namespace DSExecution.Operations
 {
     /// <summary>
-    /// Información sobre la firma de cada operación: Cuantos valores toma y cuales pueden despachar la operación.
+    /// InformaciÃ³n sobre la firma de cada operaciÃ³n: Cuantos valores toma y cuales pueden despachar la operaciÃ³n.
     /// </summary>
     public readonly struct OperationInfo
     {

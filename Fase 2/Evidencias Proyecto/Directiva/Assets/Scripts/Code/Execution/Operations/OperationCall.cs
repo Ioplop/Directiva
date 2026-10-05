@@ -1,4 +1,4 @@
-# nullable enable
+﻿# nullable enable
 using DSExecution.Operations;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
@@ -7,7 +7,7 @@ using System;
 namespace DSExecution.Operations
 {
     /// <summary>
-    /// Contiene los datos que deben pasarse para poder realizar una operaci�n.
+    /// Contiene los datos que deben pasarse para poder realizar una operación.
     /// </summary>
     public readonly ref struct OperationCall
     {

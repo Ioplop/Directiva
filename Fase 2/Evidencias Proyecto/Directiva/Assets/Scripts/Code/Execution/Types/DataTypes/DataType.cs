@@ -1,4 +1,4 @@
-# nullable enable
+Ôªø# nullable enable
 using System;
 using System.Linq;
 using System.Reflection;
@@ -77,13 +77,13 @@ namespace DSExecution.DataTypes
             // Iterar sobre cada interfaz que esta clase implementa.
             foreach (Type interfaceType in concreteType.GetInterfaces())
             {
-                // Obtenemos cuales son los mÈtodos en esta clase que est·n asociados a los declarados por una interfaz en cuestiÛn.
+                // Obtenemos cuales son los m√©todos en esta clase que est√°n asociados a los declarados por una interfaz en cuesti√≥n.
                 InterfaceMapping map =
                     concreteType.GetInterfaceMap(interfaceType);
 
                 for (int i = 0; i < map.InterfaceMethods.Length; i++)
                 {
-                    // InformaciÛn de un mÈtodo en particular, desde el lado de la interfaz.
+                    // Informaci√≥n de un m√©todo en particular, desde el lado de la interfaz.
                     MethodInfo interfaceMethod =
                         map.InterfaceMethods[i];
 
@@ -96,11 +96,11 @@ namespace DSExecution.DataTypes
                     if (binding == null)
                         continue;
 
-                    // Obtener id de operaciÛn basados en OperationId
+                    // Obtener id de operaci√≥n basados en OperationId
                     int operationIndex =
                         (int)binding.OperationId;
 
-                    // Validamos que la operaciÛn no estÈ implementada varias veces. (aunque permite override del mÈtodo en clases hijas porque las
+                    // Validamos que la operaci√≥n no est√© implementada varias veces. (aunque permite override del m√©todo en clases hijas porque las
                     // implementaciones de clases base que fueron sobrescritas no aparecen en esta lista)
                     if (operations[operationIndex] != null)
                     {
@@ -111,18 +111,18 @@ namespace DSExecution.DataTypes
                         );
                     }
 
-                    // AquÌ traemos informaciÛn del mÈtodo implementado (No la declaraciÛn de interfaz)
+                    // Aqu√≠ traemos informaci√≥n del m√©todo implementado (No la declaraci√≥n de interfaz)
                     MethodInfo targetMethod =
                         map.TargetMethods[i];
 
-                    // Creamos delegado para el mÈtodo en cuestiÛn.
+                    // Creamos delegado para el m√©todo en cuesti√≥n.
                     var handler =
                         (OperationHandler)targetMethod.CreateDelegate(
                             typeof(OperationHandler),
                             this
                         );
 
-                    // Registrar mÈtodo de operaciÛn.
+                    // Registrar m√©todo de operaci√≥n.
                     operations[operationIndex] = handler;
                 }
             }

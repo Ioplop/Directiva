@@ -1,7 +1,7 @@
-namespace DSExecution.Operations
+﻿namespace DSExecution.Operations
 {
     /// <summary>
-    /// Posibles resultados de realizar una operaci�n.
+    /// Posibles resultados de realizar una operación.
     /// </summary>
     public enum OperationStatus
     {

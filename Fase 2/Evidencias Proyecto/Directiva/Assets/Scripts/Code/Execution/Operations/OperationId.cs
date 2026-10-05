@@ -1,11 +1,11 @@
-namespace DSExecution.Operations
+ï»¿namespace DSExecution.Operations
 {
     /// <summary>
     /// Listado de posibles operaciones.
     /// </summary>
     public enum OperationId
     {
-        // Ids explícitos para preservar estabilidad de código compilado si en el futuro se agregan o reordenan operaciones.
+        // Ids explÃ­citos para preservar estabilidad de cÃ³digo compilado si en el futuro se agregan o reordenan operaciones.
         // Arithmetic
         Add = 1,
         Subtract = 2,
