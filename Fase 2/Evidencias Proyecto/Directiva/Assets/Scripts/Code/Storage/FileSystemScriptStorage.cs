@@ -89,7 +89,7 @@ namespace Directiva.CodeUI
 
         public string CreateScript(string relativeFolder, string baseName, string initialContent = "")
         {
-            ValidateSimpleName(baseName);
+            baseName = ValidateSimpleName(baseName);
             var folder = ToFullDirectory(relativeFolder);
             Directory.CreateDirectory(folder);
 
@@ -107,7 +107,7 @@ namespace Directiva.CodeUI
 
         public string CreateFolder(string relativeFolder, string folderName)
         {
-            ValidateSimpleName(folderName);
+            folderName = ValidateSimpleName(folderName);
             var full = EnsureInsideRoot(Path.Combine(ToFullDirectory(relativeFolder), folderName));
 
             if (Directory.Exists(full))
@@ -137,7 +137,7 @@ namespace Directiva.CodeUI
 
         public string RenameScript(string relativeScriptPath, string newBaseName)
         {
-            ValidateSimpleName(newBaseName);
+            newBaseName = ValidateSimpleName(newBaseName);
             var oldFull = ToFullScript(relativeScriptPath);
             var oldBackup = ToFullBackup(relativeScriptPath);
             var directory = Path.GetDirectoryName(oldFull)!;
@@ -160,7 +160,7 @@ namespace Directiva.CodeUI
 
         public string RenameFolder(string relativeFolderPath, string newName)
         {
-            ValidateSimpleName(newName);
+            newName = ValidateSimpleName(newName);
             var oldFull = ToFullDirectory(relativeFolderPath);
             var parent = Path.GetDirectoryName(oldFull)!;
             var newFull = EnsureInsideRoot(Path.Combine(parent, newName));
@@ -217,7 +217,7 @@ namespace Directiva.CodeUI
 
         public string DuplicateScript(string relativeScriptPath, string desiredBaseName, string contentToDuplicate)
         {
-            ValidateSimpleName(desiredBaseName);
+            desiredBaseName = ValidateSimpleName(desiredBaseName);
             var source = ToFullScript(relativeScriptPath);
             var folder = Path.GetDirectoryName(source)!;
 
@@ -235,7 +235,7 @@ namespace Directiva.CodeUI
 
         public string DuplicateFolder(string relativeFolderPath, string desiredName)
         {
-            ValidateSimpleName(desiredName);
+            desiredName = ValidateSimpleName(desiredName);
             var source = ToFullDirectory(relativeFolderPath);
             var parent = Path.GetDirectoryName(source)!;
             var target = EnsureInsideRoot(Path.Combine(parent, desiredName));
@@ -310,7 +310,7 @@ namespace Directiva.CodeUI
             return full;
         }
 
-        private static void ValidateSimpleName(string name)
+        private static string ValidateSimpleName(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new DirectivaLocalizedException("Storage", "name_empty");
@@ -318,13 +318,15 @@ namespace Directiva.CodeUI
             name = name.Trim();
 
             if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                name.Contains("/") || name.Contains("\\"))
+                name.Contains("/") ||
+                name.Contains("\\") ||
+                name == "." ||
+                name == "..")
             {
                 throw new DirectivaLocalizedException("Storage", "invalid_name", name);
             }
 
-            if (name == "." || name == "..")
-                throw new DirectivaLocalizedException("Storage", "invalid_name", name);
+            return name;
         }
 
         private static bool PathsEqual(string a, string b) =>
