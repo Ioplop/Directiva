@@ -39,13 +39,12 @@ namespace DSExecution.DataTypes
 
             DataType?[] result = new DataType?[maxDataTypeId + 1];
 
+            result[(int)DataTypeId.Bool] = DTBool.Instance;
             result[(int)DataTypeId.Int] = DTInt.Instance;
             result[(int)DataTypeId.Decimal] = DTDecimal.Instance;
             // Remaining to add...
             // Uninitialized
             // None
-            // Bool
-            // Decimal
             // String
             // List
             // Set
