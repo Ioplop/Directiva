@@ -1,30 +1,242 @@
-﻿using DSExecution.Operations;
+using System.Numerics;
+using DSExecution.Errors;
+using DSExecution.Operations;
 using DSExecution.Values;
 
 namespace DSExecution.DataTypes
 {
-    // TODO: Implement interfaces. Commented for now so we can finish Int first.
-    public sealed class DTDecimal : DTValue //, IOpArithmetic, IOpOrdering, IOpBoolean
+    public sealed class DTDecimal : DTValue, IOpArithmetic, IOpOrdering, IOpBoolean
     {
         public const long Scale = 10000;
 
         public static DTDecimal Instance { get; } = new DTDecimal();
+
+        private sealed class DecimalPowerState : OperationState
+        {
+            public BigInteger Result { get; set; }
+            public BigInteger Factor { get; set; }
+            public ulong RemainingExponent { get; set; }
+
+            public DecimalPowerState(BigInteger factor, ulong exponent)
+            {
+                Result = Scale;
+                Factor = factor;
+                RemainingExponent = exponent;
+            }
+        }
 
         private DTDecimal()
         {
             // Prevent instantiation from outside
         }
 
-        public long BoolToDecimalValue(bool value) { 
-            return (value ? 1*Scale : 0);
+        private static bool TryResolveScaled(DataValue value, out BigInteger result)
+        {
+            switch (value.dataType)
+            {
+                case DataTypeId.Decimal:
+                    result = unchecked((long)value.value);
+                    return true;
+
+                case DataTypeId.Int:
+                case DataTypeId.Bool:
+                    result = (BigInteger)unchecked((long)value.value) * Scale;
+                    return true;
+
+                default:
+                    result = BigInteger.Zero;
+                    return false;
+            }
         }
 
-        public (DataValue decimalSide, DataValue otherSide) GetTwoOpSidesByType(OperationCall opCall)
+        private static bool TryGetTwoNumericValues(
+            OperationCall opCall,
+            out BigInteger left,
+            out BigInteger right)
         {
-            // Podemos asumir que uno de los dos valores es decimal porque si no la operación no sería despachada esta clase.
-            var left = opCall.Arguments[0];
-            var right = opCall.Arguments[1];
-            return left.dataType == DataTypeId.Decimal ? (left, right) : (right, left);
+            return TryResolveScaled(opCall.Arguments[0], out left) &&
+                   TryResolveScaled(opCall.Arguments[1], out right);
+        }
+
+        private static OperationResult CreateDecimalResult(BigInteger rawValue)
+        {
+            if (rawValue < long.MinValue || rawValue > long.MaxValue)
+                return OperationResult.OpError(RuntimeError.Overflow());
+
+            return OperationResult.Success(
+                DataValue.FromDecimalRaw((long)rawValue)
+            );
+        }
+
+        private static OperationResult CreateBoolResult(bool value)
+        {
+            return OperationResult.Success(DataValue.FromBool(value));
+        }
+
+        private static ulong GetExponentMagnitude(long exponent)
+        {
+            if (exponent >= 0)
+                return (ulong)exponent;
+
+            return unchecked((ulong)(-(exponent + 1))) + 1UL;
+        }
+
+        private static bool TryResolveIntegerExponent(
+            DataValue value,
+            out long exponent)
+        {
+            switch (value.dataType)
+            {
+                case DataTypeId.Bool:
+                case DataTypeId.Int:
+                    exponent = unchecked((long)value.value);
+                    return true;
+
+                case DataTypeId.Decimal:
+                    var rawValue = unchecked((long)value.value);
+
+                    if (rawValue % Scale != 0)
+                    {
+                        exponent = 0;
+                        return false;
+                    }
+
+                    exponent = rawValue / Scale;
+                    return true;
+
+                default:
+                    exponent = 0;
+                    return false;
+            }
+        }
+
+        public OperationResult Add(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateDecimalResult(left + right);
+        }
+
+        public OperationResult Subtract(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateDecimalResult(left - right);
+        }
+
+        public OperationResult Multiply(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateDecimalResult((left * right) / Scale);
+        }
+
+        public OperationResult Divide(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            if (right.IsZero)
+                return OperationResult.OpError(RuntimeError.DivisionByZero());
+
+            return CreateDecimalResult((left * Scale) / right);
+        }
+
+        public OperationResult FloorDivide(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            if (right.IsZero)
+                return OperationResult.OpError(RuntimeError.DivisionByZero());
+
+            var quotient = BigInteger.DivRem(left, right, out var remainder);
+
+            if (!remainder.IsZero && (remainder.Sign < 0) != (right.Sign < 0))
+                quotient--;
+
+            return CreateDecimalResult(quotient * Scale);
+        }
+
+        public OperationResult Modulo(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            if (right.IsZero)
+                return OperationResult.OpError(RuntimeError.DivisionByZero());
+
+            BigInteger.DivRem(left, right, out var remainder);
+
+            if (!remainder.IsZero && (remainder.Sign < 0) != (right.Sign < 0))
+                remainder += right;
+
+            return CreateDecimalResult(remainder);
+        }
+
+        private static OperationResult AdvancePower(DecimalPowerState state)
+        {
+            if (state.RemainingExponent == 0)
+                return CreateDecimalResult(state.Result);
+
+            if ((state.RemainingExponent & 1UL) != 0)
+            {
+                state.Result = (state.Result * state.Factor) / Scale;
+
+                if (state.Result < long.MinValue || state.Result > long.MaxValue)
+                    return OperationResult.OpError(RuntimeError.Overflow());
+            }
+
+            state.RemainingExponent >>= 1;
+
+            if (state.RemainingExponent == 0)
+                return CreateDecimalResult(state.Result);
+
+            state.Factor = (state.Factor * state.Factor) / Scale;
+
+            if (state.Factor < long.MinValue || state.Factor > long.MaxValue)
+                return OperationResult.OpError(RuntimeError.Overflow());
+
+            return OperationResult.Continued(state);
+        }
+
+        public OperationResult Power(OperationCall opCall)
+        {
+            DecimalPowerState state;
+
+            if (opCall.State == null)
+            {
+                if (!TryResolveScaled(opCall.Arguments[0], out var baseValue) ||
+                    !TryResolveIntegerExponent(opCall.Arguments[1], out var exponent))
+                {
+                    return OperationResult.NotImplemented();
+                }
+
+                if (exponent < 0)
+                {
+                    if (baseValue.IsZero)
+                        return OperationResult.OpError(RuntimeError.DivisionByZero());
+
+                    baseValue = ((BigInteger)Scale * Scale) / baseValue;
+                }
+
+                state = new DecimalPowerState(
+                    baseValue,
+                    GetExponentMagnitude(exponent)
+                );
+            }
+            else
+            {
+                state = opCall.State as DecimalPowerState
+                    ?? throw new System.InvalidOperationException(
+                        "Power received an invalid OperationState."
+                    );
+            }
+
+            return AdvancePower(state);
         }
 
         public override OperationResult ValueEquals(OperationCall opCall)
@@ -34,30 +246,10 @@ namespace DSExecution.DataTypes
             if (baseResult.Status != OperationStatus.NotImplemented)
                 return baseResult;
 
-            var (decimalSide, otherSide) = GetTwoOpSidesByType(opCall);
-            long decimalValue = unchecked((long)decimalSide.value);
-
-            // Early out if we have decimal part which is indicative of difference when comparing to bool or int.
-            if (decimalValue % Scale != 0)
-                return OperationResult.Success(DataValue.FromBool(false));
-
-            long otherValue;
-            if (otherSide.dataType == DataTypeId.Bool)
-            {
-                otherValue = otherSide.value == 1 ? Scale : 0;
-            }
-            else if (otherSide.dataType == DataTypeId.Int)
-            {
-                // To prevent overflowing, we convert decimal to int, and not the other way around!
-                decimalValue /= Scale;
-                otherValue = unchecked((long)otherSide.value);
-            }
-            else
-            {
-                // Not implemented!
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
                 return baseResult;
-            }
-            return OperationResult.Success(DataValue.FromBool(decimalValue == otherValue));
+
+            return CreateBoolResult(left == right);
         }
 
         public override OperationResult Hash(OperationCall opCall)
@@ -77,6 +269,43 @@ namespace DSExecution.DataTypes
             return OperationResult.Success(
                 DataValue.FromInt(result)
             );
+        }
+
+        public OperationResult Less(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateBoolResult(left < right);
+        }
+
+        public OperationResult LessOrEqual(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateBoolResult(left <= right);
+        }
+
+        public OperationResult Greater(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateBoolResult(left > right);
+        }
+
+        public OperationResult GreaterOrEqual(OperationCall opCall)
+        {
+            if (!TryGetTwoNumericValues(opCall, out var left, out var right))
+                return OperationResult.NotImplemented();
+
+            return CreateBoolResult(left >= right);
+        }
+
+        public OperationResult Not(OperationCall opCall)
+        {
+            return CreateBoolResult(opCall.Arguments[0].value == 0);
         }
     }
 }
