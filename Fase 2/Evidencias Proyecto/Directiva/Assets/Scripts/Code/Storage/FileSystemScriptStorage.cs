@@ -298,13 +298,16 @@ namespace Directiva.CodeUI
         private string EnsureInsideRoot(string path)
         {
             var full = Path.GetFullPath(path);
-            var rootWithSlash = RootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                                + Path.DirectorySeparatorChar;
+            var relative = Path.GetRelativePath(RootPath, full);
 
-            if (!full.StartsWith(rootWithSlash, StringComparison.OrdinalIgnoreCase) &&
-                !PathsEqual(full, RootPath))
+            if (Path.IsPathRooted(relative) ||
+                relative == ".." ||
+                relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             {
-                throw new DirectivaLocalizedException("Storage", "path_outside_root");
+                throw new DirectivaLocalizedException(
+                    "Storage",
+                    "path_outside_root"
+                );
             }
 
             return full;
