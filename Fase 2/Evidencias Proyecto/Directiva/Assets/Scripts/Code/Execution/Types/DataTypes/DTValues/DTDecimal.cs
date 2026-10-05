@@ -37,7 +37,7 @@ namespace DSExecution.DataTypes
             var (decimalSide, otherSide) = GetTwoOpSidesByType(opCall);
             long decimalValue = unchecked((long)decimalSide.value);
 
-            // Early out if we have decimal part which is indicative of differennce when comparing to bool or int.
+            // Early out if we have decimal part which is indicative of difference when comparing to bool or int.
             if (decimalValue % Scale != 0)
                 return OperationResult.Success(DataValue.FromBool(false));
 
