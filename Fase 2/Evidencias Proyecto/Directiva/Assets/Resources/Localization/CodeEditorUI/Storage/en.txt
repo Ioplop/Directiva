@@ -1,0 +1,8 @@
+[script_already_exists]: A script named {{1}} already exists.
+[folder_already_exists]: A folder named {{1}} already exists.
+[target_already_exists]: An item named {{1}} already exists in the destination.
+[folder_inside_itself]: A folder cannot be moved inside itself or one of its subfolders.
+[invalid_script_path]: The path {{1}} is not a valid Directiva script path.
+[path_outside_root]: The operation attempted to access outside the scripts root folder.
+[name_empty]: The name cannot be empty.
+[invalid_name]: The name {{1}} is not valid.

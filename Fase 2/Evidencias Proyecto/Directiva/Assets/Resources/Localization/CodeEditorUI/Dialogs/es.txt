@@ -1,0 +1,10 @@
+[create_script_title]: Crear script
+[create_script_message]: Crear un nuevo script en {{1}}.
+[create_folder_title]: Crear carpeta
+[create_folder_message]: Crear una nueva carpeta en {{1}}.
+[revert_title]: Revertir cambios
+[revert_message]: ¿Seguro que quieres descartar todos los cambios no guardados de {{1}}?
+[delete_title]: Eliminar
+[delete_message]: ¿Seguro que quieres eliminar {{1}}? Esta acción también elimina su backup si existe.
+[duplicate_title]: Duplicar
+[duplicate_message]: Nombre para la copia de {{1}}.

@@ -1,0 +1,17 @@
+[save]: Guardar
+[revert]: Revertir
+[stop]: Detener
+[pause]: Pausar
+[continue]: Continuar
+[step]: Step
+[step_in]: Step In
+[step_out]: Step Out
+[back]: Atrás
+[options]: Opciones
+[create]: Crear
+[cancel]: Cancelar
+[close]: Cerrar
+[saved]: Guardado: {{1}}
+[operation_failed]: La operación falló: {{1}}
+[analysis_exception]: El análisis de código falló: {{1}}
+[options_not_implemented]: Las opciones generales todavía no están implementadas.

@@ -1,0 +1,17 @@
+[new_script]: Create script
+[new_folder]: Create folder
+[save]: Save changes
+[revert]: Revert changes
+[stop]: Stop execution
+[pause]: Pause execution
+[continue]: Continue execution
+[step]: Execute next instruction
+[step_in]: Step into current call
+[step_out]: Step out of current call
+[back]: Back
+[options]: Options
+[expand_folder]: Expand folder
+[collapse_folder]: Collapse folder
+[collapse_output]: Collapse Output
+[expand_output]: Expand Output
+[clear_output]: Clear Output

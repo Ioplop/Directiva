@@ -1,0 +1,8 @@
+[script_already_exists]: Ya existe un script llamado {{1}}.
+[folder_already_exists]: Ya existe una carpeta llamada {{1}}.
+[target_already_exists]: Ya existe un elemento llamado {{1}} en el destino.
+[folder_inside_itself]: Una carpeta no puede moverse dentro de sí misma ni dentro de una de sus subcarpetas.
+[invalid_script_path]: La ruta {{1}} no corresponde a un script de Directiva válido.
+[path_outside_root]: La operación intentó acceder fuera de la carpeta raíz de scripts.
+[name_empty]: El nombre no puede estar vacío.
+[invalid_name]: El nombre {{1}} no es válido.

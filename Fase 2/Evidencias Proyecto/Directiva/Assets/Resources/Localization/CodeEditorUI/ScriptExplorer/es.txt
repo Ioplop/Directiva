@@ -1,0 +1,8 @@
+[new_script]: Nuevo script
+[new_folder]: Nueva carpeta
+[rename]: Renombrar
+[duplicate]: Duplicar
+[delete]: Eliminar
+[folder]: Carpeta
+[script]: Script
+[root]: Raíz de scripts

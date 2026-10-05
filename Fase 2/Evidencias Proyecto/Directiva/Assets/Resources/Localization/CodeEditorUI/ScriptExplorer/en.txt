@@ -1,0 +1,8 @@
+[new_script]: New script
+[new_folder]: New folder
+[rename]: Rename
+[duplicate]: Duplicate
+[delete]: Delete
+[folder]: Folder
+[script]: Script
+[root]: Scripts root

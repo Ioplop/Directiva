@@ -1,0 +1,17 @@
+[save]: Save
+[revert]: Revert
+[stop]: Stop
+[pause]: Pause
+[continue]: Continue
+[step]: Step
+[step_in]: Step In
+[step_out]: Step Out
+[back]: Back
+[options]: Options
+[create]: Create
+[cancel]: Cancel
+[close]: Close
+[saved]: Saved: {{1}}
+[operation_failed]: The operation failed: {{1}}
+[analysis_exception]: Code analysis failed: {{1}}
+[options_not_implemented]: General options are not implemented yet.

@@ -1,0 +1,1060 @@
+.directiva-code-ui-root {
+    flex-grow: 1;
+    background-color: rgb(24, 26, 30);
+    color: rgb(232, 234, 238);
+}
+
+.app-shell {
+    flex-grow: 1;
+}
+
+.main-area {
+    flex-grow: 1;
+    flex-direction: row;
+    min-height: 0;
+}
+
+.script-explorer {
+    width: 280px;
+    min-width: 180px;
+    max-width: 420px;
+    border-right-width: 1px;
+    border-right-color: rgb(60, 64, 72);
+    background-color: rgb(31, 34, 39);
+}
+
+.explorer-toolbar {
+    height: 42px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 6px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(60, 64, 72);
+}
+
+.explorer-toolbar > Button {
+    margin-right: 4px;
+}
+
+.script-tree {
+    flex-grow: 1;
+}
+
+.tree-wrapper {
+    flex-shrink: 0;
+}
+
+.tree-row {
+    height: 28px;
+    min-height: 28px;
+    flex-direction: row;
+    align-items: center;
+    padding-right: 4px;
+}
+
+.tree-row:hover {
+    background-color: rgb(43, 47, 54);
+}
+
+.tree-row.selected {
+    background-color: rgb(52, 61, 74);
+}
+
+.tree-row.state-dirty .tree-label {
+    color: rgb(242, 203, 87);
+}
+
+.tree-row.state-error .tree-label {
+    color: rgb(238, 93, 93);
+}
+
+.tree-row.drag-over {
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-color: rgb(128, 176, 255);
+    border-bottom-color: rgb(128, 176, 255);
+    border-left-color: rgb(128, 176, 255);
+    border-right-color: rgb(128, 176, 255);
+}
+
+.tree-toggle {
+    width: 20px;
+    min-width: 20px;
+    height: 22px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: 2px;
+}
+
+.tree-state {
+    width: 7px;
+    min-width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-radius: 4px;
+}
+
+.state-dirty-dot {
+    background-color: rgb(242, 203, 87);
+}
+
+.tree-label {
+    flex-grow: 1;
+    -unity-text-align: middle-left;
+    white-space: nowrap;
+}
+
+.tree-mini-button {
+    width: 24px;
+    min-width: 24px;
+    height: 22px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 2px;
+}
+
+.inline-rename {
+    flex-grow: 1;
+    height: 24px;
+}
+
+.right-area {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.top-area {
+    flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(60, 64, 72);
+    background-color: rgb(29, 32, 37);
+}
+
+.script-title {
+    height: 32px;
+    padding-left: 10px;
+    -unity-text-align: middle-left;
+    font-size: 15px;
+    -unity-font-style: bold;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(50, 54, 61);
+}
+
+.toolbar-row {
+    min-height: 42px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+.toolbar-group {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.toolbar-group > Button {
+    margin-right: 4px;
+}
+
+.code-editor {
+    flex-grow: 1;
+    min-height: 0;
+    flex-direction: row;
+    background-color: rgb(20, 22, 26);
+}
+
+.code-gutter-viewport {
+    width: 76px;
+    min-width: 76px;
+    overflow: hidden;
+    background-color: rgb(27, 29, 34);
+    border-right-width: 1px;
+    border-right-color: rgb(54, 58, 66);
+}
+
+.code-gutter-content {
+    flex-shrink: 0;
+    padding-top: 4px;
+}
+
+.gutter-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.breakpoint-button {
+    width: 25px;
+    min-width: 25px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    color: rgb(237, 91, 91);
+}
+
+.line-number {
+    width: 47px;
+    padding-right: 8px;
+    -unity-text-align: middle-right;
+    color: rgb(135, 141, 151);
+}
+
+.code-text-field {
+    flex-grow: 1;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.code-text-field > .unity-text-field__input {
+    background-color: rgb(20, 22, 26);
+    color: rgb(232, 234, 238);
+    white-space: nowrap;
+}
+
+.output-panel {
+    height: 210px;
+    min-height: 32px;
+    flex-shrink: 0;
+    border-top-width: 1px;
+    border-top-color: rgb(60, 64, 72);
+    background-color: rgb(26, 29, 34);
+}
+
+.output-resize-handle {
+    height: 4px;
+    min-height: 4px;
+    background-color: rgb(52, 56, 64);
+}
+
+.output-header {
+    height: 32px;
+    min-height: 32px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 4px;
+    padding-right: 6px;
+}
+
+.output-title {
+    margin-left: 4px;
+    margin-right: 12px;
+    -unity-font-style: bold;
+}
+
+.output-filter {
+    margin-right: 8px;
+}
+
+.output-body {
+    flex-grow: 1;
+    min-height: 0;
+}
+
+.output-scroll {
+    flex-grow: 1;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-bottom: 6px;
+}
+
+.output-entry {
+    white-space: normal;
+    margin-bottom: 2px;
+}
+
+.output-message {
+    color: rgb(238, 238, 238);
+}
+
+.output-warning {
+    color: rgb(242, 203, 87);
+}
+
+.output-error {
+    color: rgb(238, 93, 93);
+}
+
+.output-flash-message {
+    border-top-color: rgb(235, 235, 235);
+    border-top-width: 2px;
+}
+
+.output-flash-warning {
+    border-top-color: rgb(242, 203, 87);
+    border-top-width: 2px;
+}
+
+.output-flash-error {
+    border-top-color: rgb(238, 93, 93);
+    border-top-width: 2px;
+}
+
+.icon-button {
+    width: 30px;
+    min-width: 30px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.popup-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.context-menu {
+    position: absolute;
+    width: 180px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    background-color: rgb(42, 45, 51);
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-color: rgb(79, 84, 94);
+    border-bottom-color: rgb(79, 84, 94);
+    border-left-color: rgb(79, 84, 94);
+    border-right-color: rgb(79, 84, 94);
+}
+
+.context-menu > Button {
+    margin-bottom: 2px;
+}
+
+.modal-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.modal-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.48);
+}
+
+.modal-card {
+    width: 460px;
+    max-width: 85%;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    background-color: rgb(39, 42, 48);
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-color: rgb(85, 91, 103);
+    border-bottom-color: rgb(85, 91, 103);
+    border-left-color: rgb(85, 91, 103);
+    border-right-color: rgb(85, 91, 103);
+}
+
+.modal-title {
+    font-size: 17px;
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.modal-message {
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+.modal-content {
+    margin-bottom: 10px;
+}
+
+.modal-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.modal-actions > Button {
+    margin-left: 6px;
+}
+
+.modal-input {
+    min-height: 28px;
+}
+
+.danger-button {
+    color: rgb(255, 205, 205);
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.2 readability pass
+   Explicit runtime colors avoid depending on the current Unity editor theme.
+   ------------------------------------------------------------------------- */
+
+.directiva-code-ui-root {
+    color: rgb(246, 248, 252);
+}
+
+Label {
+    color: rgb(238, 241, 246);
+}
+
+Button {
+    background-color: rgb(58, 64, 74);
+    color: rgb(250, 251, 253);
+    border-top-color: rgb(92, 100, 114);
+    border-bottom-color: rgb(92, 100, 114);
+    border-left-color: rgb(92, 100, 114);
+    border-right-color: rgb(92, 100, 114);
+}
+
+Button:hover {
+    background-color: rgb(72, 80, 92);
+    color: rgb(255, 255, 255);
+}
+
+Button:active {
+    background-color: rgb(45, 51, 60);
+    color: rgb(255, 255, 255);
+}
+
+Button:disabled {
+    background-color: rgb(39, 43, 50);
+    color: rgb(129, 136, 148);
+    border-top-color: rgb(55, 60, 68);
+    border-bottom-color: rgb(55, 60, 68);
+    border-left-color: rgb(55, 60, 68);
+    border-right-color: rgb(55, 60, 68);
+}
+
+.script-title {
+    color: rgb(250, 251, 253);
+}
+
+.tree-label {
+    color: rgb(229, 233, 240);
+}
+
+.tree-row.selected .tree-label {
+    color: rgb(255, 255, 255);
+    -unity-font-style: bold;
+}
+
+.tree-toggle {
+    color: rgb(218, 224, 234);
+}
+
+.tree-type-icon {
+    width: 18px;
+    min-width: 18px;
+    margin-right: 3px;
+    -unity-text-align: middle-center;
+    font-size: 13px;
+}
+
+.folder-icon {
+    color: rgb(238, 194, 92);
+}
+
+.script-icon {
+    color: rgb(130, 190, 255);
+}
+
+.code-text-field {
+    color: rgb(245, 247, 250);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+}
+
+.code-text-field > .unity-text-field__input {
+    color: rgb(245, 247, 250);
+    background-color: rgb(16, 18, 22);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+}
+
+.line-number {
+    color: rgb(163, 171, 184);
+}
+
+.output-title,
+.output-filter {
+    color: rgb(238, 241, 246);
+}
+
+.output-header {
+    background-color: rgb(31, 35, 41);
+}
+
+.modal-card {
+    color: rgb(246, 248, 252);
+    background-color: rgb(38, 42, 49);
+}
+
+.modal-title,
+.modal-message {
+    color: rgb(246, 248, 252);
+}
+
+.modal-input {
+    color: rgb(248, 249, 252);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+}
+
+.modal-input > .unity-text-field__input {
+    color: rgb(248, 249, 252);
+    background-color: rgb(18, 20, 24);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+    border-top-color: rgb(89, 98, 112);
+    border-bottom-color: rgb(89, 98, 112);
+    border-left-color: rgb(89, 98, 112);
+    border-right-color: rgb(89, 98, 112);
+}
+
+Toggle {
+    color: rgb(238, 241, 246);
+}
+
+.context-menu {
+    color: rgb(246, 248, 252);
+}
+
+
+/* v1.3 explorer root / creation target */
+
+.root-row {
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(61, 66, 75);
+    background-color: rgb(35, 38, 44);
+}
+
+.root-label {
+    -unity-font-style: bold;
+}
+
+.tree-root-spacer {
+    width: 20px;
+    min-width: 20px;
+}
+
+.tree-row.creation-target {
+    border-left-width: 3px;
+    border-left-color: rgb(111, 174, 255);
+    background-color: rgb(42, 49, 59);
+}
+
+.tree-row.creation-target .tree-label {
+    color: rgb(248, 250, 255);
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.4 interaction/readability fixes
+   ------------------------------------------------------------------------- */
+
+.output-filter-group {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 14px;
+}
+
+.output-filter-toggle {
+    width: 20px;
+    min-width: 20px;
+    margin-right: 5px;
+}
+
+.output-filter-label {
+    color: rgb(238, 241, 246);
+    -unity-text-align: middle-left;
+}
+
+.navigation-icon-button {
+    width: 40px;
+    min-width: 40px;
+    font-size: 19px;
+    -unity-font-style: bold;
+}
+
+.inline-rename {
+    flex-grow: 1;
+    height: 24px;
+    color: rgb(248, 249, 252);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+}
+
+.inline-rename > .unity-text-field__input {
+    color: rgb(248, 249, 252);
+    background-color: rgb(18, 20, 24);
+    --unity-cursor-color: rgb(255, 255, 255);
+    --unity-selection-color: rgba(74, 140, 230, 0.62);
+    border-top-color: rgb(103, 158, 224);
+    border-bottom-color: rgb(103, 158, 224);
+    border-left-color: rgb(103, 158, 224);
+    border-right-color: rgb(103, 158, 224);
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.5 control-symbol colors
+   ------------------------------------------------------------------------- */
+
+.navigation-icon-button,
+.execution-symbol-button {
+    -unity-text-align: middle-center;
+}
+
+.options-icon-button {
+    color: rgb(255, 255, 255);
+}
+
+.options-icon-button:hover,
+.options-icon-button:active {
+    color: rgb(255, 255, 255);
+}
+
+.back-icon-button {
+    color: rgb(242, 86, 86);
+}
+
+.back-icon-button:hover,
+.back-icon-button:active {
+    color: rgb(255, 112, 112);
+}
+
+.execution-symbol-button {
+    width: 42px;
+    min-width: 42px;
+    font-size: 18px;
+    -unity-font-style: bold;
+}
+
+.stop-symbol-button {
+    color: rgb(242, 86, 86);
+}
+
+.stop-symbol-button:hover,
+.stop-symbol-button:active {
+    color: rgb(255, 112, 112);
+}
+
+.pause-symbol-button {
+    color: rgb(246, 202, 78);
+}
+
+.pause-symbol-button:hover,
+.pause-symbol-button:active {
+    color: rgb(255, 219, 112);
+}
+
+.continue-symbol-button {
+    color: rgb(93, 211, 122);
+}
+
+.continue-symbol-button:hover,
+.continue-symbol-button:active {
+    color: rgb(121, 230, 148);
+}
+
+.step-symbol-button {
+    color: rgb(104, 171, 255);
+}
+
+/* Global disabled-button styling would otherwise turn these gray. */
+.step-symbol-button:disabled {
+    color: rgb(104, 171, 255);
+    opacity: 0.62;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.6 resizable panes + indentation guides
+   ------------------------------------------------------------------------- */
+
+.horizontal-pane-resize-handle {
+    width: 6px;
+    min-width: 6px;
+    flex-shrink: 0;
+    background-color: rgb(50, 55, 63);
+}
+
+.horizontal-pane-resize-handle:hover,
+.horizontal-pane-resize-handle.resizing {
+    background-color: rgb(104, 171, 255);
+}
+
+.output-resize-handle {
+    height: 6px;
+    min-height: 6px;
+    background-color: rgb(50, 55, 63);
+}
+
+.output-resize-handle:hover {
+    background-color: rgb(104, 171, 255);
+}
+
+.code-editor-stack {
+    flex-grow: 1;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.code-editor-stack > .code-text-field {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.indent-guide-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.indent-guide {
+    position: absolute;
+    width: 1px;
+    min-width: 1px;
+    background-color: rgba(125, 135, 150, 0.28);
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.9 editor typography is controlled at runtime by DirectivaCodeUIController.
+   ------------------------------------------------------------------------- */
+
+
+/* -------------------------------------------------------------------------
+   v1.9 deterministic editor coordinate model
+   ------------------------------------------------------------------------- */
+
+.code-metrics-probe {
+    position: absolute;
+    left: -10000px;
+    top: -10000px;
+    opacity: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    white-space: nowrap;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.12 symbolic file controls + scalable Output header alignment
+   ------------------------------------------------------------------------- */
+
+.file-symbol-button {
+    width: 42px;
+    min-width: 42px;
+    font-size: 18px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+
+.explorer-symbol-button {
+    width: 46px;
+    min-width: 46px;
+    padding-left: 4px;
+    padding-right: 4px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+
+/* Override the original fixed 32 px height. Runtime sets the exact height
+   from Output font size so large zoom levels remain genuinely centered. */
+.output-header {
+    height: auto;
+    min-height: 32px;
+    align-items: center;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.output-title,
+.output-filter-label {
+    -unity-text-align: middle-left;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.13 delayed localized hover tooltips
+   ------------------------------------------------------------------------- */
+
+.tooltip-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.directiva-tooltip {
+    position: absolute;
+    max-width: 320px;
+
+    padding-left: 9px;
+    padding-right: 9px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+
+    background-color: rgb(38, 41, 47);
+
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+
+    border-top-color: rgb(92, 99, 111);
+    border-bottom-color: rgb(92, 99, 111);
+    border-left-color: rgb(92, 99, 111);
+    border-right-color: rgb(92, 99, 111);
+
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.directiva-tooltip-label {
+    color: rgb(244, 246, 250);
+    white-space: normal;
+    -unity-text-align: middle-left;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.14 editor scrolling + inline rename layout
+   ------------------------------------------------------------------------- */
+
+.code-editor-stack {
+    min-height: 0;
+}
+
+.code-text-field {
+    min-height: 0;
+    align-self: stretch;
+}
+
+.inline-rename {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.inline-rename > .unity-text-field__input {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    -unity-text-align: middle-left;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.15 deterministic code-editor scrolling
+   ------------------------------------------------------------------------- */
+
+.app-shell,
+.main-area,
+.right-area,
+.code-editor,
+.code-editor-stack,
+.code-text-field {
+    min-height: 0;
+}
+
+.right-area,
+.code-editor,
+.code-editor-stack,
+.code-text-field {
+    flex-shrink: 1;
+}
+
+.code-editor {
+    overflow: hidden;
+}
+
+.code-editor-stack {
+    height: 100%;
+    overflow: hidden;
+}
+
+.code-text-field {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+
+/* -------------------------------------------------------------------------
+   v1.16 thin Directiva scrollbar skin
+   ------------------------------------------------------------------------- */
+
+/*
+ * Scope everything under .directiva-scroll-view so the rest of the game can
+ * use a completely different scrollbar theme later.
+ */
+
+/* Vertical rail */
+.directiva-scroll-view .unity-scroller--vertical {
+    width: 8px;
+    min-width: 8px;
+    max-width: 8px;
+
+    background-color: rgb(24, 27, 32);
+
+    border-left-width: 1px;
+    border-left-color: rgb(48, 53, 61);
+
+    padding-left: 1px;
+    padding-right: 1px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+/* Horizontal rail */
+.directiva-scroll-view .unity-scroller--horizontal {
+    height: 8px;
+    min-height: 8px;
+    max-height: 8px;
+
+    background-color: rgb(24, 27, 32);
+
+    border-top-width: 1px;
+    border-top-color: rgb(48, 53, 61);
+
+    padding-left: 2px;
+    padding-right: 2px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+/*
+ * IDE-like scrollbars don't need separate arrow buttons.
+ * Removing them also prevents the large light triangles from dominating
+ * narrow scrollbars.
+ */
+.directiva-scroll-view .unity-scroller__low-button,
+.directiva-scroll-view .unity-scroller__high-button {
+    display: none;
+}
+
+/* The slider itself should not paint Unity's default light background. */
+.directiva-scroll-view .unity-scroller__slider {
+    background-color: rgba(0, 0, 0, 0);
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Subtle track. */
+.directiva-scroll-view .unity-base-slider__tracker {
+    background-color: rgb(31, 35, 41);
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+
+/* Neutral thumb matching the rest of Directiva's chrome. */
+.directiva-scroll-view .unity-base-slider__dragger {
+    background-color: rgb(91, 98, 110);
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+
+/* Remove Unity's separate bright dragger outline. */
+.directiva-scroll-view .unity-base-slider__dragger-border {
+    background-color: rgba(0, 0, 0, 0);
+
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+}
+
+/* A little brighter on hover/drag so it is easy to grab without becoming loud. */
+.directiva-scroll-view .unity-base-slider__dragger:hover,
+.directiva-scroll-view .unity-base-slider__dragger:active {
+    background-color: rgb(126, 139, 157);
+}
+
+/* Keep vertical thumbs visually narrow inside the 8 px rail. */
+.directiva-scroll-view .unity-scroller--vertical .unity-base-slider__tracker,
+.directiva-scroll-view .unity-scroller--vertical .unity-base-slider__dragger {
+    width: 5px;
+    min-width: 5px;
+}
+
+/* Same treatment for horizontal scrolling. */
+.directiva-scroll-view .unity-scroller--horizontal .unity-base-slider__tracker,
+.directiva-scroll-view .unity-scroller--horizontal .unity-base-slider__dragger {
+    height: 5px;
+    min-height: 5px;
+}

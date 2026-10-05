@@ -1,0 +1,5 @@
+[title]: Output
+[messages]: Mensajes
+[warnings]: Warnings
+[errors]: Errores
+[clear]: Limpiar

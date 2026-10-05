@@ -1,0 +1,10 @@
+[create_script_title]: Create script
+[create_script_message]: Create a new script in {{1}}.
+[create_folder_title]: Create folder
+[create_folder_message]: Create a new folder in {{1}}.
+[revert_title]: Revert changes
+[revert_message]: Are you sure you want to discard all unsaved changes in {{1}}?
+[delete_title]: Delete
+[delete_message]: Are you sure you want to delete {{1}}? Its backup will also be deleted if present.
+[duplicate_title]: Duplicate
+[duplicate_message]: Name for the copy of {{1}}.
