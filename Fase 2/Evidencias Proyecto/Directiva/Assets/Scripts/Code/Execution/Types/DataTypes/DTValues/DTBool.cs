@@ -113,6 +113,11 @@ namespace DSExecution.DataTypes
             );
         }
 
+        public override OperationResult IsTruthy(OperationCall opCall)
+        {
+            return OperationResult.Success(opCall.Arguments[0]);
+        }
+
         public OperationResult Not(OperationCall opCall)
         {
             return OperationResult.Success(

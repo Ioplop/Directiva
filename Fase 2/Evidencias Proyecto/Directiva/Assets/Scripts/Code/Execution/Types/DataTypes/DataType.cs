@@ -9,7 +9,7 @@ using DSExecution.Values;
 
 namespace DSExecution.DataTypes
 {
-    public abstract class DataType : IOpValueEquality
+    public abstract class DataType : IOpValueEquality, IOpTruthiness
     {
         private static class Registry
         {
@@ -146,6 +146,13 @@ namespace DSExecution.DataTypes
                 return OperationResult.Success(DataValue.FromBool(result));
             }
             return OperationResult.NotImplemented();
+        }
+
+        public virtual OperationResult IsTruthy(OperationCall opCall)
+        {
+            return OperationResult.Success(
+                DataValue.FromBool(opCall.Arguments[0].value != 0)
+            );
         }
     }
 }

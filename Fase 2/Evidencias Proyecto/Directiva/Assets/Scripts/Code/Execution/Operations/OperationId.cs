@@ -39,5 +39,8 @@
 
         // Identity and hashing
         Hash = 22,
+
+        // Truthiness
+        IsTruthy = 23,
     }
 }
