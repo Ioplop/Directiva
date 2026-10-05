@@ -8,6 +8,13 @@ namespace DSExecution.DataTypes
     {
         public const long Scale = 10000;
 
+        public static DTDecimal Instance { get; } = new DTDecimal();
+
+        private DTDecimal()
+        {
+            // Prevent instantiation from outside
+        }
+
         public long BoolToDecimalValue(bool value) { 
             return (value ? 1*Scale : 0);
         }

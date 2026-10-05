@@ -2,7 +2,7 @@ namespace DSExecution.VirtualMachine
 {
     public interface IMemContext
     {
-        object GetHeap(HeapObject memRef);
+        HeapObject GetHeap(uint memRef);
 
         uint AllocHeap(HeapObject obj);
     }

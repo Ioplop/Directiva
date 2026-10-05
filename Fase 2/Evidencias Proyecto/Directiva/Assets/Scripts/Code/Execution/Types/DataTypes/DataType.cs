@@ -12,8 +12,6 @@ namespace DSExecution.DataTypes
     public abstract class DataType : IOpValueEquality
     {
         // TODO: Initialize this singleton registry. Each DType is responsible of registering itself here upon initialization... right? Check!
-        private static readonly DataType?[] dataTypes = CreateTypes();
-
         private static class Registry
         {
             internal static readonly DataType?[] Types = CreateTypes();
@@ -43,6 +41,7 @@ namespace DSExecution.DataTypes
             DataType?[] result = new DataType?[maxDataTypeId + 1];
 
             result[(int)DataTypeId.Int] = DTInt.Instance;
+            result[(int)DataTypeId.Decimal] = DTDecimal.Instance;
             // Remaining to add...
             // Uninitialized
             // None
