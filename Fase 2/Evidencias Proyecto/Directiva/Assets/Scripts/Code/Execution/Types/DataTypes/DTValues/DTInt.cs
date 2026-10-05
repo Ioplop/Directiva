@@ -8,8 +8,6 @@ namespace DSExecution.DataTypes
 {
     public sealed class DTInt : DTValue, IOpArithmetic, IOpOrdering, IOpBoolean
     {
-        // TODO: Capture overflowing behaviour for add, subtract, multiply and power and return error instead.
-
         public static DTInt Instance { get; } = new DTInt();
 
         private DTInt()
