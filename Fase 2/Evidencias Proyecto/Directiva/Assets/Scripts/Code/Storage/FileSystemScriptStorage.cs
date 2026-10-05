@@ -298,11 +298,8 @@ namespace Directiva.CodeUI
         private string EnsureInsideRoot(string path)
         {
             var full = Path.GetFullPath(path);
-            var relative = Path.GetRelativePath(RootPath, full);
 
-            if (Path.IsPathRooted(relative) ||
-                relative == ".." ||
-                relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            if (!IsSameOrDescendant(full, RootPath))
             {
                 throw new DirectivaLocalizedException(
                     "Storage",
@@ -332,19 +329,22 @@ namespace Directiva.CodeUI
             return name;
         }
 
-        private static bool PathsEqual(string a, string b) =>
-            string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
-                          Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
-                          StringComparison.OrdinalIgnoreCase);
+        private static bool PathsEqual(string a, string b)
+        {
+            var relative = Path.GetRelativePath(Path.GetFullPath(a), Path.GetFullPath(b));
+            return relative == ".";
+        }
 
         private static bool IsSameOrDescendant(string candidate, string ancestor)
         {
-            candidate = Path.GetFullPath(candidate).TrimEnd(Path.DirectorySeparatorChar)
-                        + Path.DirectorySeparatorChar;
-            ancestor = Path.GetFullPath(ancestor).TrimEnd(Path.DirectorySeparatorChar)
-                       + Path.DirectorySeparatorChar;
+            var relative = Path.GetRelativePath(
+                Path.GetFullPath(ancestor),
+                Path.GetFullPath(candidate));
 
-            return candidate.StartsWith(ancestor, StringComparison.OrdinalIgnoreCase);
+            return relative == "." ||
+                   (!Path.IsPathRooted(relative) &&
+                    relative != ".." &&
+                    !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
         }
 
         private static void EnsureTargetFree(string scriptPath, string backupPath)
