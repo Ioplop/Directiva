@@ -6,6 +6,9 @@ using DSExecution.Values;
 
 namespace DSExecution.VirtualMachine
 {
+    /// <summary>
+    /// Result of resolving an operation, including the receiver selected for possible continuation.
+    /// </summary>
     internal readonly struct OperationDispatchResult
     {
         public OperationResult Result { get; }
@@ -18,8 +21,14 @@ namespace DSExecution.VirtualMachine
         }
     }
 
+    /// <summary>
+    /// Bridges VM OPERATION instructions with the DataType operation-dispatch system.
+    /// </summary>
     internal static class OperationDispatcher
     {
+        /// <summary>
+        /// Starts an operation by trying its configured receiver types in dispatch order.
+        /// </summary>
         public static OperationDispatchResult Start(
             OperationId operationId,
             DataValue[] arguments,
@@ -61,6 +70,9 @@ namespace DSExecution.VirtualMachine
             );
         }
 
+        /// <summary>
+        /// Resumes a previously continued operation on the receiver that originally accepted it.
+        /// </summary>
         public static OperationResult Continue(
             OperationId operationId,
             DataValue[] arguments,

@@ -44,6 +44,9 @@ namespace DSExecution.VirtualMachine
         public bool HasValuesAbove(int floor, int amount)
             => amount >= 0 && count - floor >= amount;
 
+        /// <summary>
+        /// Pops a call/operation argument list while preserving the original left-to-right order.
+        /// </summary>
         public bool TryPopArguments(int floor, int amount, out DataValue[] arguments)
         {
             if (!HasValuesAbove(floor, amount))
@@ -64,6 +67,9 @@ namespace DSExecution.VirtualMachine
             return true;
         }
 
+        /// <summary>
+        /// Discards every temporary value above the requested stack size.
+        /// </summary>
         public void TrimTo(int newCount)
         {
             if (newCount < 0 || newCount > count)

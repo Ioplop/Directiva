@@ -15,6 +15,9 @@ namespace DSExecution.VirtualMachine
     /// </summary>
     public sealed class DirectivaVM
     {
+        /// <summary>
+        /// Stores the continuation state of an operation that needs more than one VM step.
+        /// </summary>
         private sealed class PendingOperation
         {
             public OperationId OperationId { get; }
@@ -305,6 +308,9 @@ namespace DSExecution.VirtualMachine
             return AdvanceInstruction(frame);
         }
 
+        /// <summary>
+        /// Pops the operation arguments, dispatches the operation and handles its first result.
+        /// </summary>
         private VMAdvanceResult ExecuteOperation(
             CallFrame frame,
             OperationId operationId)
@@ -334,6 +340,9 @@ namespace DSExecution.VirtualMachine
             );
         }
 
+        /// <summary>
+        /// Advances an operation that previously returned Continued without moving the instruction pointer.
+        /// </summary>
         private VMAdvanceResult ContinueOperation(CallFrame frame)
         {
             var pending = pendingOperation!;
@@ -354,6 +363,9 @@ namespace DSExecution.VirtualMachine
             );
         }
 
+        /// <summary>
+        /// Applies an operation result to VM state: push success, fault, or preserve continuation state.
+        /// </summary>
         private VMAdvanceResult HandleOperationResult(
             CallFrame frame,
             OperationId operationId,
@@ -469,6 +481,9 @@ namespace DSExecution.VirtualMachine
             return VMAdvanceResult.Running();
         }
 
+        /// <summary>
+        /// Creates a new call frame after consuming the callee arguments from the evaluation stack.
+        /// </summary>
         private VMAdvanceResult ExecuteCall(CallFrame caller, int functionId)
         {
             if (!Code.TryGetFunction(functionId, out var function))
@@ -499,6 +514,9 @@ namespace DSExecution.VirtualMachine
             return VMAdvanceResult.Running();
         }
 
+        /// <summary>
+        /// Removes the current call frame and forwards its return value to the caller or completes the VM.
+        /// </summary>
         private VMAdvanceResult ExecuteReturn(CallFrame frame)
         {
             if (!evaluationStack.TryPop(frame.EvalStackBase, out var result))
@@ -609,6 +627,9 @@ namespace DSExecution.VirtualMachine
             return VMAdvanceResult.Running();
         }
 
+        /// <summary>
+        /// Permanently faults this VM instance and exposes the runtime error to its caller.
+        /// </summary>
         private VMAdvanceResult Fault(RuntimeError error)
         {
             pendingOperation = null;

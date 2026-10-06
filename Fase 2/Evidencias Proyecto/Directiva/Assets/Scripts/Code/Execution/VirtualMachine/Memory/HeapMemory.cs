@@ -16,6 +16,9 @@ namespace DSExecution.VirtualMachine
         public int ObjectCount => objects.Count;
         public ulong AllocatedSize { get; private set; }
 
+        /// <summary>
+        /// Stores an object and returns a stable non-zero reference that can be kept in a DataValue.
+        /// </summary>
         public uint Allocate(HeapObject obj)
         {
             if (obj == null)
@@ -41,6 +44,9 @@ namespace DSExecution.VirtualMachine
         public bool TryGet(uint memoryReference, out HeapObject heapObject)
             => objects.TryGetValue(memoryReference, out heapObject);
 
+        /// <summary>
+        /// Removes an allocated object. Existing references to it become invalid.
+        /// </summary>
         public bool Free(uint memoryReference)
         {
             if (!objects.TryGetValue(memoryReference, out var obj))
@@ -51,6 +57,9 @@ namespace DSExecution.VirtualMachine
             return true;
         }
 
+        /// <summary>
+        /// Clears the entire heap and restarts reference allocation from 1.
+        /// </summary>
         public void Clear()
         {
             objects.Clear();

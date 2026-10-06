@@ -50,6 +50,9 @@ namespace DSExecution.VirtualMachine
             GlobalCount = globalCount;
         }
 
+        /// <summary>
+        /// Resolves a compiled function by its stable function id.
+        /// </summary>
         public bool TryGetFunction(int functionId, out FunctionContext function)
             => functions.TryGetValue(functionId, out function);
 

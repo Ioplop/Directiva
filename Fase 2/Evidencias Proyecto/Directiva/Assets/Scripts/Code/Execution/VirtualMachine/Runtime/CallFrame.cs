@@ -4,6 +4,9 @@ using DSExecution.Values;
 
 namespace DSExecution.VirtualMachine
 {
+    /// <summary>
+    /// Runtime state for one active function call: instruction pointer, locals and lexical contexts.
+    /// </summary>
     internal sealed class CallFrame
     {
         private readonly Stack<LocalContext> contexts = new();
@@ -43,6 +46,9 @@ namespace DSExecution.VirtualMachine
                 Locals.TrySet(i, arguments[i]);
         }
 
+        /// <summary>
+        /// Enters a lexical scope and resets the local slots assigned to that scope.
+        /// </summary>
         public bool TryEnterContext(int firstLocal, int localCount)
         {
             if (!Locals.IsValidRange(firstLocal, localCount))
@@ -53,6 +59,9 @@ namespace DSExecution.VirtualMachine
             return true;
         }
 
+        /// <summary>
+        /// Leaves the most recent lexical scope and clears its local slots back to Uninitialized.
+        /// </summary>
         public bool TryExitContext()
         {
             if (contexts.Count == 0)

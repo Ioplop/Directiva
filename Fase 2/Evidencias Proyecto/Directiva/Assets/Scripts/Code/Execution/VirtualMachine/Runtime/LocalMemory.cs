@@ -59,6 +59,9 @@ namespace DSExecution.VirtualMachine
             return end <= values.Length;
         }
 
+        /// <summary>
+        /// Resets a contiguous local range to Uninitialized, normally on scope entry or exit.
+        /// </summary>
         internal void ResetRange(int firstLocal, int localCount)
         {
             if (!IsValidRange(firstLocal, localCount))

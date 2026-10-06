@@ -2,6 +2,9 @@ using System;
 
 namespace DSExecution.VirtualMachine
 {
+    /// <summary>
+    /// Safety limits applied to one VM instance, independent of the compiled program.
+    /// </summary>
     public sealed class VMOptions
     {
         public int MaxEvaluationStackSize { get; }

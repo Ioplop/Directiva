@@ -79,6 +79,9 @@ namespace DSExecution.VirtualMachine
             return true;
         }
 
+        /// <summary>
+        /// Resets all shared global slots to Uninitialized without altering heap contents.
+        /// </summary>
         public void ResetGlobals()
         {
             for (int i = 0; i < globals.Length; i++)

@@ -48,6 +48,9 @@ namespace DSExecution.VirtualMachine
                 : throw new ArgumentNullException(nameof(instructions));
         }
 
+        /// <summary>
+        /// Reads an instruction without throwing when the instruction pointer is out of range.
+        /// </summary>
         public bool TryGetInstruction(int instructionIndex, out Instruction instruction)
         {
             if ((uint)instructionIndex >= (uint)instructions.Length)

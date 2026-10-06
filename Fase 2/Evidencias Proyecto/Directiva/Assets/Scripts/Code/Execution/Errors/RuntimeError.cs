@@ -2,6 +2,9 @@ namespace DSExecution.Errors
 {
     // TODO: Localize error messages.
 
+    /// <summary>
+    /// Stable identifiers for runtime failures that can be reported by the VM or data type operations.
+    /// </summary>
     public enum RuntimeErrorId
     {
         DivisionByZero = 0,
@@ -20,6 +23,9 @@ namespace DSExecution.Errors
         InternalVmError = 13
     }
 
+    /// <summary>
+    /// Structured runtime failure returned by script execution instead of throwing through the game.
+    /// </summary>
     public sealed class RuntimeError
     {
         public RuntimeErrorId Id { get; }
