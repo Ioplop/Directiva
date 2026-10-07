@@ -15,6 +15,7 @@ namespace Directiva.CodeUI
         private readonly Button _revert;
 
         private readonly TextField _entryFunction;
+        private readonly Toggle _debugDIL;
 
         private readonly Button _stop;
         private readonly Button _pause;
@@ -35,6 +36,7 @@ namespace Directiva.CodeUI
         public event Action OptionsClicked;
 
         public string EntryFunctionName => (_entryFunction.value ?? string.Empty).Trim();
+        public bool DebugDILEnabled => _debugDIL.value;
 
         public TopBarView(
             LocalizationService locale,
@@ -83,6 +85,20 @@ namespace Directiva.CodeUI
             StyleEntryFunctionField();
             _entryFunction.RegisterCallback<AttachToPanelEvent>(_ => StyleEntryFunctionField());
 
+            _debugDIL = new Toggle("debug")
+            {
+                value = false
+            };
+            _debugDIL.style.height = 24f;
+            _debugDIL.style.marginLeft = 6f;
+            _debugDIL.style.marginRight = 4f;
+            _debugDIL.style.marginTop = 0f;
+            _debugDIL.style.marginBottom = 0f;
+            _debugDIL.style.unityTextAlign = TextAnchor.MiddleLeft;
+            _debugDIL.tooltip =
+                "Inyecta metadata DEBUG_* al parsear DIL para mostrar la línea que ejecuta la VM. " +
+                "No modifica el archivo.";
+
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
             _continue = new Button(() => ContinueClicked?.Invoke());
@@ -114,6 +130,7 @@ namespace Directiva.CodeUI
 
             execution.Add(entryLabel);
             execution.Add(_entryFunction);
+            execution.Add(_debugDIL);
             execution.Add(_stop);
             execution.Add(_pause);
             execution.Add(_continue);
@@ -211,6 +228,9 @@ namespace Directiva.CodeUI
             tooltips.Register(_save, () => _locale.Get("Tooltips", "save"));
             tooltips.Register(_revert, () => _locale.Get("Tooltips", "revert"));
 
+            tooltips.Register(_debugDIL, () =>
+                "Inyectar DEBUG_* temporalmente al parsear DIL y seguir la línea actual.");
+
             tooltips.Register(_stop, () => _locale.Get("Tooltips", "stop"));
             tooltips.Register(_pause, () => _locale.Get("Tooltips", "pause"));
             tooltips.Register(_continue, () => _locale.Get("Tooltips", "continue"));
@@ -239,6 +259,7 @@ namespace Directiva.CodeUI
             {
                 case ScriptExecutionState.Running:
                     _entryFunction.SetEnabled(false);
+                    _debugDIL.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(true);
                     _continue.SetEnabled(false);
@@ -246,6 +267,7 @@ namespace Directiva.CodeUI
 
                 case ScriptExecutionState.Paused:
                     _entryFunction.SetEnabled(false);
+                    _debugDIL.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(true);
@@ -253,6 +275,7 @@ namespace Directiva.CodeUI
 
                 default:
                     _entryFunction.SetEnabled(_hasDocument);
+                    _debugDIL.SetEnabled(_hasDocument);
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);

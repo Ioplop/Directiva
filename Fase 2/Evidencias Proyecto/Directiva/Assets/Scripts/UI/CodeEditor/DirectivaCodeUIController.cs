@@ -76,6 +76,7 @@ namespace Directiva.CodeUI
         private ScriptWorkspace _workspace;
         private VMExecutionController _executionController;
         private string _runningFunctionName;
+        private bool _runningDILDebugEnabled;
 
         private ScriptExplorerView _explorer;
         private CodeEditorView _editor;
@@ -161,6 +162,7 @@ namespace Directiva.CodeUI
         {
             _workspace?.Tick(Time.unscaledTime);
             _executionController?.Tick(executionStepsPerFrame);
+            RefreshDILDebugHighlight();
 
             if (_analysisPending && Time.unscaledTime >= _analysisAt)
             {
@@ -173,6 +175,7 @@ namespace Directiva.CodeUI
         {
             _workspace?.FlushActiveBackup();
             _executionController?.Stop();
+            _editor?.ClearExecutionLine();
         }
 
         private void OnApplicationQuit()
@@ -377,6 +380,7 @@ namespace Directiva.CodeUI
             _editor.OpenDocument(doc.RelativePath, doc.WorkingContent, GetBreakpoints(doc.RelativePath));
             RefreshTopBar();
             ScheduleAnalysis();
+            RefreshDILDebugHighlight();
         }
 
         private void OnPathChanged(string oldPath, string newPath)
@@ -583,6 +587,8 @@ namespace Directiva.CodeUI
 
             _executionController.Stop();
             _runningFunctionName = null;
+            _runningDILDebugEnabled = false;
+            _editor.ClearExecutionLine();
             Output.Write("[DIL] Ejecución detenida.");
         }
 
@@ -603,8 +609,12 @@ namespace Directiva.CodeUI
 
             try
             {
+                bool debugDIL = _topBar.DebugDILEnabled;
                 var provider = new WorkspaceDILSourceProvider(Codebase, _workspace);
-                var parser = new DILParser(provider);
+                var parser = new DILParser(
+                    provider,
+                    new DILParserOptions(generateDebugMetadata: debugDIL)
+                );
                 var code = parser.Parse(moduleName);
 
                 string requestedFunction = _topBar.EntryFunctionName;
@@ -644,6 +654,8 @@ namespace Directiva.CodeUI
 
                 var vm = new DirectivaVM(code, entryFunction.Id);
                 _runningFunctionName = entryFunction.Name;
+                _runningDILDebugEnabled = debugDIL;
+                _editor.ClearExecutionLine();
                 _executionController.Start(vm);
                 Output.Write($"[DIL] Ejecutando {_runningFunctionName}...");
             }
@@ -668,6 +680,8 @@ namespace Directiva.CodeUI
             );
 
             _runningFunctionName = null;
+            _runningDILDebugEnabled = false;
+            _editor.ClearExecutionLine();
         }
 
         private void OnExecutionFaulted(DSExecution.Errors.RuntimeError error)
@@ -681,6 +695,57 @@ namespace Directiva.CodeUI
             );
 
             _runningFunctionName = null;
+            _runningDILDebugEnabled = false;
+            _editor.ClearExecutionLine();
+        }
+
+        private void RefreshDILDebugHighlight()
+        {
+            if (!_runningDILDebugEnabled ||
+                _executionController == null ||
+                _executionController.CurrentVM == null)
+            {
+                _editor?.ClearExecutionLine();
+                return;
+            }
+
+            DirectivaVM vm = _executionController.CurrentVM;
+
+            // DEBUG_FILE, DEBUG_LINE and DEBUG_SPAN still consume separate Advance() calls in this
+            // iteration. If a frame budget ends immediately after DEBUG_FILE, File has changed but
+            // Line still belongs to the previous source location. Keep the previous highlight until
+            // DEBUG_LINE has executed so the UI never displays that transient mismatched pair.
+            if (vm.CurrentFunction != null &&
+                vm.CurrentFunction.TryGetInstruction(vm.InstructionPointer, out Instruction nextInstruction) &&
+                nextInstruction.Id == InstructionId.DebugLine)
+            {
+                return;
+            }
+
+            VMDebugState debug = vm.Debug;
+            if (debug.Line < 0 || string.IsNullOrWhiteSpace(debug.File))
+            {
+                _editor?.ClearExecutionLine();
+                return;
+            }
+
+            var active = _workspace?.Active;
+            if (active == null ||
+                !TryGetModuleName(active.RelativePath, out string activeModule, out _))
+            {
+                _editor?.ClearExecutionLine();
+                return;
+            }
+
+            // DEBUG_FILE injected by the DIL parser uses the canonical dot-qualified module name.
+            // We only highlight when that module is the document currently visible in the editor.
+            if (!string.Equals(activeModule, debug.File, StringComparison.Ordinal))
+            {
+                _editor?.ClearExecutionLine();
+                return;
+            }
+
+            _editor?.SetExecutionLine(debug.Line + 1, ensureVisible: true);
         }
 
         private static string FormatDataValue(DataValue value)

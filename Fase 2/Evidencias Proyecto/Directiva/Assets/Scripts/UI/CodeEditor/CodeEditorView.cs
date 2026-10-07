@@ -40,6 +40,8 @@ namespace Directiva.CodeUI
         private readonly VisualElement _gutterViewport;
         private readonly VisualElement _gutterContent;
         private readonly VisualElement _editorStack;
+        private readonly VisualElement _executionHighlightLayer;
+        private readonly VisualElement _executionLineHighlight;
         private readonly VisualElement _indentGuideLayer;
         private readonly Label _metricsProbe;
         private readonly TextField _textField;
@@ -48,6 +50,7 @@ namespace Directiva.CodeUI
         private ScrollView _internalScroll;
         private bool _textInputGeometryHooked;
         private bool _suppressChange;
+        private int _executionLine = -1;
 
         public string DocumentPath { get; private set; } = string.Empty;
 
@@ -91,6 +94,25 @@ namespace Directiva.CodeUI
             _editorStack = new VisualElement();
             _editorStack.AddToClassList("code-editor-stack");
 
+            _executionHighlightLayer = new VisualElement();
+            _executionHighlightLayer.pickingMode = PickingMode.Ignore;
+            _executionHighlightLayer.style.position = Position.Absolute;
+            _executionHighlightLayer.style.left = 0f;
+            _executionHighlightLayer.style.right = 0f;
+            _executionHighlightLayer.style.top = 0f;
+            _executionHighlightLayer.style.bottom = 0f;
+
+            _executionLineHighlight = new VisualElement();
+            _executionLineHighlight.pickingMode = PickingMode.Ignore;
+            _executionLineHighlight.style.position = Position.Absolute;
+            _executionLineHighlight.style.left = 0f;
+            _executionLineHighlight.style.right = 0f;
+            _executionLineHighlight.style.display = DisplayStyle.None;
+            _executionLineHighlight.style.backgroundColor = new Color(0.20f, 0.48f, 0.82f, 0.20f);
+            _executionLineHighlight.style.borderLeftWidth = 2f;
+            _executionLineHighlight.style.borderLeftColor = new Color(0.40f, 0.70f, 1.00f, 0.90f);
+            _executionHighlightLayer.Add(_executionLineHighlight);
+
             _indentGuideLayer = new VisualElement();
             _indentGuideLayer.AddToClassList("indent-guide-layer");
             _indentGuideLayer.pickingMode = PickingMode.Ignore;
@@ -118,6 +140,7 @@ namespace Directiva.CodeUI
             ApplyEditorLayoutStyles();
 
             _editorStack.Add(_textField);
+            _editorStack.Add(_executionHighlightLayer);
             _editorStack.Add(_indentGuideLayer);
             _editorStack.Add(_metricsProbe);
 
@@ -132,6 +155,8 @@ namespace Directiva.CodeUI
                 UpdateInternalScrollContentSize();
                 RebuildGutter();
                 RebuildIndentGuides();
+                ValidateExecutionLine();
+                UpdateExecutionHighlightPosition();
                 TextChanged?.Invoke(evt.newValue ?? string.Empty);
             });
 
@@ -160,6 +185,7 @@ namespace Directiva.CodeUI
         {
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
+            ClearExecutionLine();
 
             if (breakpoints != null)
                 foreach (var line in breakpoints.Where(x => x > 0))
@@ -180,6 +206,7 @@ namespace Directiva.CodeUI
         {
             DocumentPath = string.Empty;
             _breakpoints.Clear();
+            ClearExecutionLine();
             SetTextWithoutNotify(string.Empty);
             RebuildGutter();
             RebuildIndentGuides();
@@ -194,6 +221,86 @@ namespace Directiva.CodeUI
             UpdateInternalScrollContentSize();
             RebuildGutter();
             RebuildIndentGuides();
+            ValidateExecutionLine();
+            UpdateExecutionHighlightPosition();
+        }
+
+        /// <summary>
+        /// Highlights a one-based source line reported by VM debug metadata.
+        /// The highlight follows vertical scrolling and optionally scrolls the line into view.
+        /// </summary>
+        public void SetExecutionLine(int oneBasedLine, bool ensureVisible = true)
+        {
+            if (oneBasedLine <= 0 || oneBasedLine > Math.Max(1, CountLines(_textField.value)))
+            {
+                ClearExecutionLine();
+                return;
+            }
+
+            _executionLine = oneBasedLine;
+            _executionLineHighlight.style.display = DisplayStyle.Flex;
+
+            if (ensureVisible)
+                ScrollExecutionLineIntoView();
+
+            UpdateExecutionHighlightPosition();
+        }
+
+        public void ClearExecutionLine()
+        {
+            _executionLine = -1;
+            _executionLineHighlight.style.display = DisplayStyle.None;
+        }
+
+        private void ValidateExecutionLine()
+        {
+            if (_executionLine <= 0)
+                return;
+
+            if (_executionLine > Math.Max(1, CountLines(_textField.value)))
+                ClearExecutionLine();
+        }
+
+        private void ScrollExecutionLineIntoView()
+        {
+            if (_internalScroll == null || _executionLine <= 0)
+                return;
+
+            float viewportHeight = _internalScroll.contentViewport != null
+                ? _internalScroll.contentViewport.resolvedStyle.height
+                : _internalScroll.resolvedStyle.height;
+
+            if (viewportHeight <= 0f)
+                return;
+
+            float lineTop = _textOriginY + ((_executionLine - 1) * _lineHeight);
+            float lineBottom = lineTop + _lineHeight;
+            Vector2 offset = _internalScroll.scrollOffset;
+            float targetY = offset.y;
+
+            if (lineTop < offset.y)
+                targetY = lineTop;
+            else if (lineBottom > offset.y + viewportHeight)
+                targetY = lineBottom - viewportHeight;
+
+            if (!Mathf.Approximately(targetY, offset.y))
+            {
+                _internalScroll.scrollOffset = new Vector2(
+                    offset.x,
+                    Mathf.Max(0f, targetY)
+                );
+            }
+        }
+
+        private void UpdateExecutionHighlightPosition()
+        {
+            if (_executionLine <= 0)
+                return;
+
+            float scrollY = _internalScroll?.scrollOffset.y ?? 0f;
+            _executionLineHighlight.style.top =
+                _textOriginY + ((_executionLine - 1) * _lineHeight) - scrollY;
+            _executionLineHighlight.style.height = _lineHeight;
         }
 
         private void SchedulePostLayoutRefresh()
@@ -228,6 +335,7 @@ namespace Directiva.CodeUI
                 UpdateInternalScrollContentSize();
                 RebuildGutter();
                 RebuildIndentGuides();
+                UpdateExecutionHighlightPosition();
             });
         }
 
@@ -386,6 +494,7 @@ namespace Directiva.CodeUI
             UpdateInternalScrollContentSize();
             RebuildGutter();
             RebuildIndentGuides();
+            UpdateExecutionHighlightPosition();
         }
 
         private bool TryReadFontAssetMetrics()
@@ -518,6 +627,7 @@ namespace Directiva.CodeUI
                 {
                     _gutterContent.style.translate = new Translate(0f, -value);
                     UpdateIndentGuideTranslation();
+                    UpdateExecutionHighlightPosition();
                 };
 
                 _internalScroll.horizontalScroller.valueChanged += _ =>
@@ -530,6 +640,7 @@ namespace Directiva.CodeUI
                 RebuildGutter();
                 RebuildIndentGuides();
                 UpdateIndentGuideTranslation();
+                UpdateExecutionHighlightPosition();
             }).ExecuteLater(10);
         }
 

@@ -21,12 +21,28 @@ namespace DSCompilation.DIL
         private sealed class SourceLine
         {
             public int Number { get; }
+            public int StartOffset { get; }
             public string Text { get; }
 
-            public SourceLine(int number, string text)
+            public SourceLine(int number, int startOffset, string text)
             {
                 Number = number;
+                StartOffset = startOffset;
                 Text = text;
+            }
+        }
+
+        private readonly struct SourceLocation
+        {
+            public int Line { get; }
+            public int SpanStart { get; }
+            public int SpanEnd { get; }
+
+            public SourceLocation(int line, int spanStart, int spanEnd)
+            {
+                Line = line;
+                SpanStart = spanStart;
+                SpanEnd = spanEnd;
             }
         }
 
@@ -156,7 +172,8 @@ namespace DSCompilation.DIL
             var compiledFunctions = CompileFunctions(
                 orderedModules,
                 functionIds,
-                globalSlots
+                globalSlots,
+                options.GenerateDebugMetadata
             );
 
             int defaultEntryId = modules[rootModuleName].Functions[0].Id;
@@ -402,7 +419,8 @@ namespace DSCompilation.DIL
         private static FunctionContext[] CompileFunctions(
             ModuleDefinition[] orderedModules,
             Dictionary<string, int> functionIds,
-            Dictionary<string, int> globalSlots)
+            Dictionary<string, int> globalSlots,
+            bool generateDebugMetadata)
         {
             int functionCount = functionIds.Count;
             var compiled = new FunctionContext[functionCount];
@@ -415,7 +433,13 @@ namespace DSCompilation.DIL
 
             foreach (ModuleDefinition module in orderedModules)
             {
-                CompileModule(module, baseSymbols, globalSlots.Count, compiled);
+                CompileModule(
+                    module,
+                    baseSymbols,
+                    globalSlots.Count,
+                    compiled,
+                    generateDebugMetadata
+                );
             }
 
             return compiled;
@@ -425,11 +449,13 @@ namespace DSCompilation.DIL
             ModuleDefinition module,
             Dictionary<string, long> baseSymbols,
             int globalCount,
-            FunctionContext[] output)
+            FunctionContext[] output,
+            bool generateDebugMetadata)
         {
             var symbols = new Dictionary<string, long>(baseSymbols, StringComparer.Ordinal);
             FunctionDefinition? currentFunction = null;
             List<Instruction>? instructions = null;
+            List<SourceLocation>? instructionSources = null;
             Dictionary<string, int>? labels = null;
             List<PendingJump>? pendingJumps = null;
 
@@ -454,12 +480,13 @@ namespace DSCompilation.DIL
                         case "FUNCTION":
                             currentFunction = module.Functions[functionIndex++];
                             instructions = new List<Instruction>();
+                            instructionSources = new List<SourceLocation>();
                             labels = new Dictionary<string, int>(StringComparer.Ordinal);
                             pendingJumps = new List<PendingJump>();
                             continue;
 
                         case "END_FUNCTION":
-                            if (currentFunction == null || instructions == null || labels == null || pendingJumps == null)
+                            if (currentFunction == null || instructions == null || instructionSources == null || labels == null || pendingJumps == null)
                                 Throw(module.Name, sourceLine.Number, "Internal DIL parser state is inconsistent.");
 
                             ResolveJumps(
@@ -470,16 +497,24 @@ namespace DSCompilation.DIL
                                 pendingJumps!
                             );
 
+                            Instruction[] finalInstructions = generateDebugMetadata
+                                ? InjectDebugMetadata(
+                                    module.Name,
+                                    instructions!,
+                                    instructionSources!)
+                                : instructions!.ToArray();
+
                             output[currentFunction!.Id] = new FunctionContext(
                                 currentFunction.Id,
                                 currentFunction.QualifiedName,
                                 currentFunction.ParameterCount,
                                 currentFunction.LocalCount,
-                                instructions!.ToArray()
+                                finalInstructions
                             );
 
                             currentFunction = null;
                             instructions = null;
+                            instructionSources = null;
                             labels = null;
                             pendingJumps = null;
                             continue;
@@ -496,7 +531,7 @@ namespace DSCompilation.DIL
                     }
                 }
 
-                if (currentFunction == null || instructions == null || labels == null || pendingJumps == null)
+                if (currentFunction == null || instructions == null || instructionSources == null || labels == null || pendingJumps == null)
                     Throw(module.Name, sourceLine.Number, "Executable DIL must appear inside a function.");
 
                 if (TryParseLabel(line, out string? label))
@@ -505,6 +540,8 @@ namespace DSCompilation.DIL
                         Throw(module.Name, sourceLine.Number, $"Label '{label}' is declared more than once in this function.");
                     continue;
                 }
+
+                int instructionCountBefore = instructions!.Count;
 
                 ParseInstruction(
                     module.Name,
@@ -517,7 +554,87 @@ namespace DSCompilation.DIL
                     instructions!,
                     pendingJumps!
                 );
+
+                SourceLocation sourceLocation = GetSourceLocation(sourceLine);
+                while (instructionSources!.Count < instructions.Count)
+                    instructionSources.Add(sourceLocation);
+
+                if (instructions.Count <= instructionCountBefore)
+                    Throw(module.Name, sourceLine.Number, "Internal DIL parser error: executable line produced no instruction.");
             }
+        }
+
+        private static SourceLocation GetSourceLocation(SourceLine sourceLine)
+        {
+            string text = sourceLine.Text;
+            int codeEnd = text.IndexOf("//", StringComparison.Ordinal);
+            if (codeEnd < 0)
+                codeEnd = text.Length;
+
+            int start = 0;
+            while (start < codeEnd && char.IsWhiteSpace(text[start]))
+                start++;
+
+            int end = codeEnd;
+            while (end > start && char.IsWhiteSpace(text[end - 1]))
+                end--;
+
+            return new SourceLocation(
+                sourceLine.Number - 1,
+                sourceLine.StartOffset + start,
+                sourceLine.StartOffset + end
+            );
+        }
+
+        /// <summary>
+        /// Expands each executable DIL instruction into DEBUG_FILE / DEBUG_LINE / DEBUG_SPAN
+        /// followed by the original instruction. Jump targets are remapped so debug metadata
+        /// is transparent to DIL semantics, including numeric jump targets.
+        /// </summary>
+        private static Instruction[] InjectDebugMetadata(
+            string moduleName,
+            List<Instruction> instructions,
+            List<SourceLocation> instructionSources)
+        {
+            if (instructions.Count != instructionSources.Count)
+                throw new InvalidOperationException("DIL instruction/source map is inconsistent.");
+
+            var expandedStart = new int[instructions.Count];
+            for (int i = 0; i < instructions.Count; i++)
+                expandedStart[i] = checked(i * 4);
+
+            var expanded = new List<Instruction>(checked(instructions.Count * 4));
+
+            for (int i = 0; i < instructions.Count; i++)
+            {
+                SourceLocation source = instructionSources[i];
+                expanded.Add(Instruction.DebugFile(moduleName));
+                expanded.Add(Instruction.DebugLine(source.Line));
+                expanded.Add(Instruction.DebugSpan(source.SpanStart, source.SpanEnd));
+
+                Instruction instruction = instructions[i];
+                if (instruction.Id == InstructionId.Jump ||
+                    instruction.Id == InstructionId.JumpIfTrue ||
+                    instruction.Id == InstructionId.JumpIfFalse)
+                {
+                    int oldTarget = instruction.OperandA;
+                    if ((uint)oldTarget >= (uint)expandedStart.Length)
+                    {
+                        throw new InvalidOperationException(
+                            $"Validated DIL jump target {oldTarget} is outside the instruction map."
+                        );
+                    }
+
+                    instruction = CreateJump(
+                        instruction.Id,
+                        expandedStart[oldTarget]
+                    );
+                }
+
+                expanded.Add(instruction);
+            }
+
+            return expanded.ToArray();
         }
 
         private static void ParseInstruction(
@@ -1083,9 +1200,16 @@ namespace DSCompilation.DIL
 
             string[] lines = normalized.Split('\n');
             var result = new SourceLine[lines.Length];
+            int startOffset = 0;
 
             for (int i = 0; i < lines.Length; i++)
-                result[i] = new SourceLine(i + 1, lines[i]);
+            {
+                result[i] = new SourceLine(i + 1, startOffset, lines[i]);
+                startOffset += lines[i].Length;
+
+                if (i < lines.Length - 1)
+                    startOffset++;
+            }
 
             return result;
         }
