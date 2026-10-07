@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using DSExecution.Errors;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
@@ -12,9 +13,12 @@ namespace Directiva.CodeUI
     public sealed class VMExecutionController : IScriptExecutionStateProvider
     {
         private DirectivaVM _vm;
+        private readonly Stopwatch _executionTimer = new();
 
         public ScriptExecutionState State { get; private set; } = ScriptExecutionState.Stopped;
         public DirectivaVM CurrentVM => _vm;
+        public long TotalAdvances { get; private set; }
+        public double ElapsedMilliseconds => _executionTimer.Elapsed.TotalMilliseconds;
 
         public event Action<ScriptExecutionState> StateChanged;
         public event Action<DataValue> Completed;
@@ -23,6 +27,8 @@ namespace Directiva.CodeUI
         public void Start(DirectivaVM vm, bool paused = false)
         {
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
+            TotalAdvances = 0;
+            _executionTimer.Restart();
             SetState(paused ? ScriptExecutionState.Paused : ScriptExecutionState.Running);
         }
 
@@ -40,6 +46,9 @@ namespace Directiva.CodeUI
 
         public void Stop()
         {
+            if (_vm != null || State != ScriptExecutionState.Stopped)
+                _executionTimer.Stop();
+
             _vm = null;
             SetState(ScriptExecutionState.Stopped);
         }
@@ -95,10 +104,12 @@ namespace Directiva.CodeUI
                 return false;
 
             VMAdvanceResult result = _vm.Advance();
+            TotalAdvances++;
 
             if (result.Status == VMExecutionStatus.Completed)
             {
                 DataValue returnValue = result.ReturnValue;
+                _executionTimer.Stop();
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Completed?.Invoke(returnValue);
@@ -111,6 +122,7 @@ namespace Directiva.CodeUI
                     "VM reported Faulted without a RuntimeError."
                 );
 
+                _executionTimer.Stop();
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Faulted?.Invoke(error);
@@ -133,10 +145,12 @@ namespace Directiva.CodeUI
                 throw new ArgumentOutOfRangeException(nameof(instructionBudget));
 
             var result = _vm.Run(instructionBudget);
+            TotalAdvances += result.StepsExecuted;
 
             if (result.Status == VMExecutionStatus.Completed)
             {
                 var returnValue = result.ReturnValue;
+                _executionTimer.Stop();
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Completed?.Invoke(returnValue);
@@ -149,6 +163,7 @@ namespace Directiva.CodeUI
                     "VM reported Faulted without a RuntimeError."
                 );
 
+                _executionTimer.Stop();
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Faulted?.Invoke(error);

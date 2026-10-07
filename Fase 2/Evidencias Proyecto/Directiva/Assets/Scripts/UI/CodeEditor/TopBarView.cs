@@ -23,6 +23,7 @@ namespace Directiva.CodeUI
         private readonly Button _step;
         private readonly Button _stepIn;
         private readonly Button _stepOut;
+        private readonly Label _executionMetrics;
 
         private readonly Button _back;
         private readonly Button _options;
@@ -138,6 +139,17 @@ namespace Directiva.CodeUI
             execution.Add(_stepIn);
             execution.Add(_stepOut);
 
+            _executionMetrics = new Label();
+            _executionMetrics.style.height = 24f;
+            _executionMetrics.style.marginLeft = 10f;
+            _executionMetrics.style.marginRight = 8f;
+            _executionMetrics.style.unityTextAlign = TextAnchor.MiddleLeft;
+            _executionMetrics.style.color = new Color(0.64f, 0.68f, 0.75f, 1f);
+            _executionMetrics.style.display = DisplayStyle.None;
+            _executionMetrics.tooltip =
+                "Advances ejecutados y tiempo real transcurrido. El tiempo incluye pausas; " +
+                "DEBUG_* también cuenta como Advances en esta versión.";
+
             var spacer = new VisualElement();
             spacer.style.flexGrow = 1;
 
@@ -156,6 +168,7 @@ namespace Directiva.CodeUI
 
             bars.Add(fileControls);
             bars.Add(execution);
+            bars.Add(_executionMetrics);
             bars.Add(spacer);
             bars.Add(navigation);
 
@@ -240,6 +253,19 @@ namespace Directiva.CodeUI
 
             tooltips.Register(_back, () => _locale.Get("Tooltips", "back"));
             tooltips.Register(_options, () => _locale.Get("Tooltips", "options"));
+        }
+
+        public void ClearExecutionMetrics()
+        {
+            _executionMetrics.text = string.Empty;
+            _executionMetrics.style.display = DisplayStyle.None;
+        }
+
+        public void SetExecutionMetrics(long advances, double elapsedMilliseconds)
+        {
+            _executionMetrics.text =
+                $"{advances:N0} Advances · {elapsedMilliseconds:0.##} ms";
+            _executionMetrics.style.display = DisplayStyle.Flex;
         }
 
         public void SetDocument(string path, bool isDirty)

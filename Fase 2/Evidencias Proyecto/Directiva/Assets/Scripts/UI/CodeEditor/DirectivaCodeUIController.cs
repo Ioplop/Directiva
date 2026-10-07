@@ -609,6 +609,9 @@ namespace Directiva.CodeUI
             }
 
             _executionController.Stop();
+            _topBar.SetExecutionMetrics(
+                _executionController.TotalAdvances,
+                _executionController.ElapsedMilliseconds);
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
             _editor.ClearExecutionLine();
@@ -679,6 +682,7 @@ namespace Directiva.CodeUI
                 _runningFunctionName = entryFunction.Name;
                 _runningDILDebugEnabled = debugDIL;
                 _editor.ClearExecutionLine();
+                _topBar.ClearExecutionMetrics();
                 _executionController.Start(vm, paused: startPaused);
                 Output.Write($"[DIL] Ejecutando {_runningFunctionName}...");
                 return true;
@@ -705,6 +709,10 @@ namespace Directiva.CodeUI
                 $"[DIL] {functionName} retornó {FormatDataValue(returnValue)}"
             );
 
+            _topBar.SetExecutionMetrics(
+                _executionController.TotalAdvances,
+                _executionController.ElapsedMilliseconds);
+
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
             _editor.ClearExecutionLine();
@@ -719,6 +727,10 @@ namespace Directiva.CodeUI
             Output.WriteError(
                 $"[DIL] {functionName} falló ({error.Id}): {error.Message}"
             );
+
+            _topBar.SetExecutionMetrics(
+                _executionController.TotalAdvances,
+                _executionController.ElapsedMilliseconds);
 
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
