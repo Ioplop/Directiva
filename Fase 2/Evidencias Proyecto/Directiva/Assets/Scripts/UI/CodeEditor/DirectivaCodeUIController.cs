@@ -343,6 +343,7 @@ namespace Directiva.CodeUI
             _topBar.StopClicked += Events.RaiseStopRequested;
             _topBar.PauseClicked += Events.RaisePauseRequested;
             _topBar.ContinueClicked += Events.RaiseContinueRequested;
+            _topBar.StepClicked += Events.RaiseStepRequested;
             _topBar.BackClicked += Events.RaiseBackRequested;
             _topBar.OptionsClicked += Events.RaiseOptionsRequested;
 
@@ -363,6 +364,7 @@ namespace Directiva.CodeUI
             Events.ContinueRequested += HandleContinueRequested;
             Events.PauseRequested += HandlePauseRequested;
             Events.StopRequested += HandleStopRequested;
+            Events.StepRequested += HandleStepRequested;
 
             Events.OptionsRequested += () =>
                 Output.Write(Localization.Get("Common", "options_not_implemented"));
@@ -572,6 +574,27 @@ namespace Directiva.CodeUI
                 StartActiveDILExecution();
         }
 
+        private void HandleStepRequested()
+        {
+            if (_executionController == null ||
+                _executionController.State == ScriptExecutionState.Running)
+            {
+                return;
+            }
+
+            if (_executionController.State == ScriptExecutionState.Stopped &&
+                !StartActiveDILExecution(startPaused: true))
+            {
+                return;
+            }
+
+            if (_executionController.State != ScriptExecutionState.Paused)
+                return;
+
+            _executionController.Step(skipDebugMetadata: _runningDILDebugEnabled);
+            RefreshDILDebugHighlight();
+        }
+
         private void HandlePauseRequested()
         {
             _executionController?.Pause();
@@ -592,19 +615,19 @@ namespace Directiva.CodeUI
             Output.Write("[DIL] Ejecución detenida.");
         }
 
-        private void StartActiveDILExecution()
+        private bool StartActiveDILExecution(bool startPaused = false)
         {
             var active = _workspace.Active;
             if (active == null)
             {
                 Output.WriteError("[DIL] No hay ningún archivo seleccionado.");
-                return;
+                return false;
             }
 
             if (!TryGetModuleName(active.RelativePath, out string moduleName, out string moduleError))
             {
                 Output.WriteError("[DIL] " + moduleError);
-                return;
+                return false;
             }
 
             try
@@ -639,7 +662,7 @@ namespace Directiva.CodeUI
                             $"[DIL] La función '{requestedFunction}' no existe en '{active.RelativePath}'. " +
                             "Escribe sólo el nombre local de una función declarada en ese archivo."
                         );
-                        return;
+                        return false;
                     }
                 }
 
@@ -649,23 +672,26 @@ namespace Directiva.CodeUI
                         $"[DIL] No se puede ejecutar '{entryFunction.Name}' desde la interfaz: " +
                         $"requiere {entryFunction.ParameterCount} parámetro(s). Por ahora el runner sólo admite entry points sin parámetros."
                     );
-                    return;
+                    return false;
                 }
 
                 var vm = new DirectivaVM(code, entryFunction.Id);
                 _runningFunctionName = entryFunction.Name;
                 _runningDILDebugEnabled = debugDIL;
                 _editor.ClearExecutionLine();
-                _executionController.Start(vm);
+                _executionController.Start(vm, paused: startPaused);
                 Output.Write($"[DIL] Ejecutando {_runningFunctionName}...");
+                return true;
             }
             catch (DILParseException ex)
             {
                 Output.WriteError("[DIL] Error de parseo: " + ex.Message);
+                return false;
             }
             catch (Exception ex)
             {
                 Output.WriteError("[DIL] No se pudo iniciar la ejecución: " + ex.Message);
+                return false;
             }
         }
 

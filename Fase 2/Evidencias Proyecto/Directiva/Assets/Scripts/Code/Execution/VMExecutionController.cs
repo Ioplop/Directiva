@@ -20,10 +20,10 @@ namespace Directiva.CodeUI
         public event Action<DataValue> Completed;
         public event Action<RuntimeError> Faulted;
 
-        public void Start(DirectivaVM vm)
+        public void Start(DirectivaVM vm, bool paused = false)
         {
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
-            SetState(ScriptExecutionState.Running);
+            SetState(paused ? ScriptExecutionState.Paused : ScriptExecutionState.Running);
         }
 
         public void Pause()
@@ -42,6 +42,82 @@ namespace Directiva.CodeUI
         {
             _vm = null;
             SetState(ScriptExecutionState.Stopped);
+        }
+
+        /// <summary>
+        /// Executes one visible DIL/VM step while paused. DEBUG_* metadata can be consumed
+        /// transparently so parser-injected source metadata does not require extra button presses.
+        /// Continued operations still advance one deterministic VM step at a time, so they remain
+        /// highlighted on the same DIL instruction until their continuation completes.
+        /// </summary>
+        public void Step(bool skipDebugMetadata)
+        {
+            if (State != ScriptExecutionState.Paused || _vm == null)
+                return;
+
+            if (skipDebugMetadata && !ConsumeLeadingDebugMetadata())
+                return;
+
+            if (!AdvanceOnce())
+                return;
+
+            if (skipDebugMetadata)
+                ConsumeLeadingDebugMetadata();
+        }
+
+        private bool ConsumeLeadingDebugMetadata()
+        {
+            while (_vm != null && IsNextInstructionDebugMetadata(_vm))
+            {
+                if (!AdvanceOnce())
+                    return false;
+            }
+
+            return _vm != null;
+        }
+
+        private static bool IsNextInstructionDebugMetadata(DirectivaVM vm)
+        {
+            if (vm.CurrentFunction == null ||
+                !vm.CurrentFunction.TryGetInstruction(vm.InstructionPointer, out Instruction instruction))
+            {
+                return false;
+            }
+
+            return instruction.Id == InstructionId.DebugFile ||
+                   instruction.Id == InstructionId.DebugLine ||
+                   instruction.Id == InstructionId.DebugSpan;
+        }
+
+        private bool AdvanceOnce()
+        {
+            if (_vm == null)
+                return false;
+
+            VMAdvanceResult result = _vm.Advance();
+
+            if (result.Status == VMExecutionStatus.Completed)
+            {
+                DataValue returnValue = result.ReturnValue;
+                _vm = null;
+                SetState(ScriptExecutionState.Stopped);
+                Completed?.Invoke(returnValue);
+                return false;
+            }
+
+            if (result.Status == VMExecutionStatus.Faulted)
+            {
+                RuntimeError error = result.Error ?? RuntimeError.InternalVmError(
+                    "VM reported Faulted without a RuntimeError."
+                );
+
+                _vm = null;
+                SetState(ScriptExecutionState.Stopped);
+                Faulted?.Invoke(error);
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>

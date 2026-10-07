@@ -32,6 +32,7 @@ namespace Directiva.CodeUI
         public event Action StopClicked;
         public event Action PauseClicked;
         public event Action ContinueClicked;
+        public event Action StepClicked;
         public event Action BackClicked;
         public event Action OptionsClicked;
 
@@ -102,7 +103,7 @@ namespace Directiva.CodeUI
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
             _continue = new Button(() => ContinueClicked?.Invoke());
-            _step = new Button();
+            _step = new Button(() => StepClicked?.Invoke());
             _stepIn = new Button();
             _stepOut = new Button();
 
@@ -124,7 +125,6 @@ namespace Directiva.CodeUI
             _stepOut.AddToClassList("execution-symbol-button");
             _stepOut.AddToClassList("step-symbol-button");
 
-            _step.SetEnabled(false);
             _stepIn.SetEnabled(false);
             _stepOut.SetEnabled(false);
 
@@ -263,6 +263,7 @@ namespace Directiva.CodeUI
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(true);
                     _continue.SetEnabled(false);
+                    _step.SetEnabled(false);
                     break;
 
                 case ScriptExecutionState.Paused:
@@ -271,6 +272,7 @@ namespace Directiva.CodeUI
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(true);
+                    _step.SetEnabled(true);
                     break;
 
                 default:
@@ -279,11 +281,12 @@ namespace Directiva.CodeUI
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);
+                    _step.SetEnabled(_hasDocument);
                     break;
             }
 
-            // Debug stepping remains deliberately unavailable in v1.
-            _step.SetEnabled(false);
+            // DIL is already instruction-level, so Step In / Step Out do not have a useful
+            // distinction here. Keep them reserved for future DScript debugging.
             _stepIn.SetEnabled(false);
             _stepOut.SetEnabled(false);
         }
@@ -300,7 +303,7 @@ namespace Directiva.CodeUI
             _pause.text = "Ⅱ";
             _continue.text = "▶";
 
-            // Debug controls are placeholders in v1, but already use their final visual language.
+            // DIL currently supports simple single-step; Step In / Step Out remain reserved for DScript.
             _step.text = "↷";
             _stepIn.text = "↓";
             _stepOut.text = "↑";
