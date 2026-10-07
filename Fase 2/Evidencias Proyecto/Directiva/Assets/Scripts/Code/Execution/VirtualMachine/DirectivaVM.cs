@@ -53,6 +53,7 @@ namespace DSExecution.VirtualMachine
         public VMExecutionStatus Status { get; private set; }
         public RuntimeError? Error => fault;
         public DataValue ReturnValue => returnValue;
+        public int EntryFunctionId { get; }
         public int CallDepth => callStack.Count;
         public int EvaluationStackCount => evaluationStack.Count;
 
@@ -66,7 +67,18 @@ namespace DSExecution.VirtualMachine
             => callStack.Count > 0 ? callStack[^1].Locals : null;
 
         public DirectivaVM(CodeContext code)
-            : this(code, null, null, Array.Empty<DataValue>())
+            : this(code, null, null, 0, true, Array.Empty<DataValue>())
+        {
+        }
+
+        /// <summary>
+        /// Creates a VM that starts from an explicit function instead of the CodeContext default entry.
+        /// </summary>
+        public DirectivaVM(
+            CodeContext code,
+            int entryFunctionId,
+            params DataValue[] entryArguments)
+            : this(code, null, null, entryFunctionId, false, entryArguments)
         {
         }
 
@@ -75,6 +87,30 @@ namespace DSExecution.VirtualMachine
             VMMemoryContext? memory,
             VMOptions? options,
             params DataValue[] entryArguments)
+            : this(code, memory, options, 0, true, entryArguments)
+        {
+        }
+
+        /// <summary>
+        /// Creates a VM using shared memory/options and an explicit entry function.
+        /// </summary>
+        public DirectivaVM(
+            CodeContext code,
+            VMMemoryContext? memory,
+            VMOptions? options,
+            int entryFunctionId,
+            params DataValue[] entryArguments)
+            : this(code, memory, options, entryFunctionId, false, entryArguments)
+        {
+        }
+
+        private DirectivaVM(
+            CodeContext code,
+            VMMemoryContext? memory,
+            VMOptions? options,
+            int entryFunctionId,
+            bool useDefaultEntry,
+            DataValue[] entryArguments)
         {
             Code = code ?? throw new ArgumentNullException(nameof(code));
             this.options = options ?? new VMOptions();
@@ -90,7 +126,19 @@ namespace DSExecution.VirtualMachine
 
             evaluationStack = new EvaluationStack(this.options.MaxEvaluationStackSize);
 
-            var entryFunction = code.GetFunction(code.EntryFunctionId);
+            int resolvedEntryFunctionId = useDefaultEntry
+                ? code.EntryFunctionId
+                : entryFunctionId;
+
+            if (!code.TryGetFunction(resolvedEntryFunctionId, out var entryFunction))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(entryFunctionId),
+                    $"Entry function id {resolvedEntryFunctionId} does not exist in the code context."
+                );
+            }
+
+            EntryFunctionId = resolvedEntryFunctionId;
             entryArguments ??= Array.Empty<DataValue>();
 
             if (entryArguments.Length != entryFunction.ParameterCount)
