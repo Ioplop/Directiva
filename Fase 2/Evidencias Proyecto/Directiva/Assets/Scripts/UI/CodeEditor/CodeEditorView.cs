@@ -49,6 +49,7 @@ namespace Directiva.CodeUI
 
         private ScrollView _internalScroll;
         private bool _textInputGeometryHooked;
+        private bool _textInputKeyHooked;
         private bool _suppressChange;
         private int _executionLine = -1;
 
@@ -152,15 +153,38 @@ namespace Directiva.CodeUI
                 if (_suppressChange)
                     return;
 
+                var value = evt.newValue ?? string.Empty;
+                var normalized = NormalizeLineEndings(value);
+
+                // Keep one canonical newline representation inside the editor. UI Toolkit
+                // presents CRLF as a single visual line break, while string-based edit
+                // helpers count both characters. Letting CRLF survive in the backing value
+                // can therefore make cursor indices drift by one character per preceding
+                // line when TAB is handled manually.
+                if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                {
+                    var cursor = _textField.textSelection.cursorIndex;
+                    var select = _textField.textSelection.selectIndex;
+
+                    _suppressChange = true;
+                    _textField.SetValueWithoutNotify(normalized);
+                    _suppressChange = false;
+
+                    var length = normalized.Length;
+                    _textField.textSelection.SelectRange(
+                        Mathf.Clamp(cursor, 0, length),
+                        Mathf.Clamp(select, 0, length));
+                }
+
                 UpdateInternalScrollContentSize();
                 RebuildGutter();
                 RebuildIndentGuides();
                 ValidateExecutionLine();
                 UpdateExecutionHighlightPosition();
-                TextChanged?.Invoke(evt.newValue ?? string.Empty);
+                TextChanged?.Invoke(normalized);
             });
 
-            _textField.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+            HookTextInputKeyHandling();
             _textField.RegisterCallback<WheelEvent>(OnWheel, TrickleDown.TrickleDown);
 
             RegisterCallback<AttachToPanelEvent>(_ =>
@@ -173,6 +197,7 @@ namespace Directiva.CodeUI
                 schedule.Execute(() =>
                 {
                     HookTextInputGeometry();
+                    HookTextInputKeyHandling();
                     RefreshFontMetricsAndLayout();
                 }).ExecuteLater(1);
             });
@@ -216,7 +241,7 @@ namespace Directiva.CodeUI
         public void SetTextWithoutNotify(string text)
         {
             _suppressChange = true;
-            _textField.SetValueWithoutNotify(text ?? string.Empty);
+            _textField.SetValueWithoutNotify(NormalizeLineEndings(text));
             _suppressChange = false;
             UpdateInternalScrollContentSize();
             RebuildGutter();
@@ -311,6 +336,7 @@ namespace Directiva.CodeUI
             schedule.Execute(() =>
             {
                 HookTextInputGeometry();
+                HookTextInputKeyHandling();
                 RefreshFontMetricsAndLayout();
             }).ExecuteLater(1);
         }
@@ -337,6 +363,22 @@ namespace Directiva.CodeUI
                 RebuildIndentGuides();
                 UpdateExecutionHighlightPosition();
             });
+        }
+
+        private void HookTextInputKeyHandling()
+        {
+            if (_textInputKeyHooked)
+                return;
+
+            var input = GetTextInput();
+            if (input == null)
+                return;
+
+            // Handle TAB on the actual editable input instead of the outer TextField.
+            // This keeps our manual indentation logic tied to the same selection state
+            // that UI Toolkit uses to draw and edit the caret.
+            input.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+            _textInputKeyHooked = true;
         }
 
         public void FocusEditor() => _textField.Focus();
@@ -806,9 +848,9 @@ namespace Directiva.CodeUI
 
             evt.StopImmediatePropagation();
 
-            var text = _textField.value ?? string.Empty;
-            var cursor = Mathf.Clamp(_textField.cursorIndex, 0, text.Length);
-            var select = Mathf.Clamp(_textField.selectIndex, 0, text.Length);
+            var text = NormalizeLineEndings(_textField.value);
+            var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, text.Length);
+            var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
 
             if (cursor != select)
             {
@@ -824,15 +866,14 @@ namespace Directiva.CodeUI
 
         private void ApplySingleTab(string text, int caret)
         {
+            // TAB indents the whole current line, regardless of where the caret is.
+            // Keep the caret at the same logical position within the line by shifting it
+            // along with the text that was moved to the right.
             var lineStart = FindLineStart(text, caret);
-            var column = caret - lineStart;
-            var count = TabSize - (column % TabSize);
-            if (count == 0)
-                count = TabSize;
-
-            var spaces = new string(' ', count);
-            var updated = text.Insert(caret, spaces);
-            ApplyEdit(updated, caret + count, caret + count);
+            var spaces = new string(' ', TabSize);
+            var updated = text.Insert(lineStart, spaces);
+            var newCaret = caret + TabSize;
+            ApplyEdit(updated, newCaret, newCaret);
         }
 
         private void ApplySingleLineOutdent(string text, int caret)
@@ -905,7 +946,9 @@ namespace Directiva.CodeUI
             schedule.Execute(() =>
             {
                 var len = _textField.value?.Length ?? 0;
-                _textField.SelectRange(Mathf.Clamp(cursor, 0, len), Mathf.Clamp(select, 0, len));
+                _textField.textSelection.SelectRange(
+                    Mathf.Clamp(cursor, 0, len),
+                    Mathf.Clamp(select, 0, len));
                 _textField.Focus();
             }).ExecuteLater(1);
         }
@@ -949,6 +992,14 @@ namespace Directiva.CodeUI
             }
 
             return starts;
+        }
+
+        private static string NormalizeLineEndings(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
+            return text.Replace("\r\n", "\n").Replace('\r', '\n');
         }
 
         private static int CountLines(string text)
