@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Directiva.CodeUI
@@ -12,6 +13,8 @@ namespace Directiva.CodeUI
         private readonly Label _title;
         private readonly Button _save;
         private readonly Button _revert;
+
+        private readonly TextField _entryFunction;
 
         private readonly Button _stop;
         private readonly Button _pause;
@@ -30,6 +33,8 @@ namespace Directiva.CodeUI
         public event Action ContinueClicked;
         public event Action BackClicked;
         public event Action OptionsClicked;
+
+        public string EntryFunctionName => (_entryFunction.value ?? string.Empty).Trim();
 
         public TopBarView(
             LocalizationService locale,
@@ -61,6 +66,23 @@ namespace Directiva.CodeUI
             var execution = new VisualElement();
             execution.AddToClassList("toolbar-group");
 
+            var entryLabel = new Label("fn:");
+            entryLabel.style.unityTextAlign = UnityEngine.TextAnchor.MiddleCenter;
+            entryLabel.style.marginLeft = 4f;
+            entryLabel.style.marginRight = 2f;
+
+            _entryFunction = new TextField
+            {
+                value = "main"
+            };
+            _entryFunction.style.width = 150f;
+            _entryFunction.style.minWidth = 90f;
+            _entryFunction.style.maxWidth = 240f;
+            _entryFunction.style.height = 24f;
+            _entryFunction.tooltip = "Nombre de la función DIL a ejecutar dentro del archivo seleccionado.";
+            StyleEntryFunctionField();
+            _entryFunction.RegisterCallback<AttachToPanelEvent>(_ => StyleEntryFunctionField());
+
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
             _continue = new Button(() => ContinueClicked?.Invoke());
@@ -90,6 +112,8 @@ namespace Directiva.CodeUI
             _stepIn.SetEnabled(false);
             _stepOut.SetEnabled(false);
 
+            execution.Add(entryLabel);
+            execution.Add(_entryFunction);
             execution.Add(_stop);
             execution.Add(_pause);
             execution.Add(_continue);
@@ -129,6 +153,56 @@ namespace Directiva.CodeUI
             SetDocument(null, false);
         }
 
+        private void StyleEntryFunctionField()
+        {
+            // TextField has its own internal input element. Styling only the outer field leaves
+            // Unity's default padding/background on the actual editable area, which can make
+            // short toolbar fields almost unreadable.
+            _entryFunction.style.marginLeft = 0f;
+            _entryFunction.style.marginRight = 0f;
+            _entryFunction.style.marginTop = 0f;
+            _entryFunction.style.marginBottom = 0f;
+            _entryFunction.style.paddingLeft = 0f;
+            _entryFunction.style.paddingRight = 0f;
+            _entryFunction.style.paddingTop = 0f;
+            _entryFunction.style.paddingBottom = 0f;
+            _entryFunction.style.color = new Color(0.88f, 0.90f, 0.94f, 1f);
+
+            var input = _entryFunction.Q<VisualElement>(className: "unity-text-field__input")
+                        ?? _entryFunction.Q<VisualElement>(className: "unity-base-text-field__input");
+
+            if (input == null)
+                return;
+
+            input.style.marginLeft = 0f;
+            input.style.marginRight = 0f;
+            input.style.marginTop = 0f;
+            input.style.marginBottom = 0f;
+            input.style.paddingLeft = 6f;
+            input.style.paddingRight = 6f;
+            input.style.paddingTop = 0f;
+            input.style.paddingBottom = 0f;
+            input.style.minHeight = 22f;
+            input.style.height = 24f;
+            input.style.unityTextAlign = TextAnchor.MiddleLeft;
+            input.style.color = new Color(0.88f, 0.90f, 0.94f, 1f);
+            input.style.backgroundColor = new Color(0.075f, 0.086f, 0.105f, 1f);
+
+            var border = new Color(0.25f, 0.28f, 0.33f, 1f);
+            input.style.borderLeftColor = border;
+            input.style.borderRightColor = border;
+            input.style.borderTopColor = border;
+            input.style.borderBottomColor = border;
+            input.style.borderLeftWidth = 1f;
+            input.style.borderRightWidth = 1f;
+            input.style.borderTopWidth = 1f;
+            input.style.borderBottomWidth = 1f;
+            input.style.borderTopLeftRadius = 2f;
+            input.style.borderTopRightRadius = 2f;
+            input.style.borderBottomLeftRadius = 2f;
+            input.style.borderBottomRightRadius = 2f;
+        }
+
         public void RegisterTooltips(HoverTooltipController tooltips)
         {
             if (tooltips == null)
@@ -164,18 +238,21 @@ namespace Directiva.CodeUI
             switch (state)
             {
                 case ScriptExecutionState.Running:
+                    _entryFunction.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(true);
                     _continue.SetEnabled(false);
                     break;
 
                 case ScriptExecutionState.Paused:
+                    _entryFunction.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
-                    _continue.SetEnabled(_hasDocument);
+                    _continue.SetEnabled(true);
                     break;
 
                 default:
+                    _entryFunction.SetEnabled(_hasDocument);
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);

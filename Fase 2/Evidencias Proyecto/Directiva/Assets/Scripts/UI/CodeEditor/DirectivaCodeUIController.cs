@@ -2,6 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Globalization;
+using DSCompilation.DIL;
+using DSExecution.DataTypes;
+using DSExecution.Values;
+using DSExecution.VirtualMachine;
 using UnityEngine;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
@@ -54,6 +59,9 @@ namespace Directiva.CodeUI
         [Header("Output")]
         [SerializeField, Min(1)] private int outputCapacity = 1000;
 
+        [Header("Execution")]
+        [SerializeField, Min(1)] private int executionStepsPerFrame = 2000;
+
         public DirectivaUIEventHub Events { get; private set; }
         public LocalizationService Localization { get; private set; }
         public OutputService Output { get; private set; }
@@ -66,6 +74,8 @@ namespace Directiva.CodeUI
         private UIDocument _document;
         private IScriptStorage _storage;
         private ScriptWorkspace _workspace;
+        private VMExecutionController _executionController;
+        private string _runningFunctionName;
 
         private ScriptExplorerView _explorer;
         private CodeEditorView _editor;
@@ -89,6 +99,7 @@ namespace Directiva.CodeUI
             explorerFontSize = Mathf.Clamp(explorerFontSize, 6f, 48f);
             outputFontSize = Mathf.Clamp(outputFontSize, 6f, 48f);
             tooltipDelaySeconds = Mathf.Max(0f, tooltipDelaySeconds);
+            executionStepsPerFrame = Mathf.Max(1, executionStepsPerFrame);
 
             editorPaddingLeftPx = Mathf.Max(0f, editorPaddingLeftPx);
             editorPaddingTopPx = Mathf.Max(0f, editorPaddingTopPx);
@@ -131,7 +142,11 @@ namespace Directiva.CodeUI
             Codebase = new DirectivaCode(_storage);
             Analyzer = new NoOpCodeAnalyzer();
             Refactorer = new NoOpRefactorer();
-            ExecutionState = new NoOpExecutionStateProvider();
+
+            _executionController = new VMExecutionController();
+            ExecutionState = _executionController;
+            _executionController.Completed += OnExecutionCompleted;
+            _executionController.Faulted += OnExecutionFaulted;
 
             Localization.LocalizationWarning += message => Output.WriteWarning(message);
 
@@ -145,6 +160,7 @@ namespace Directiva.CodeUI
         private void Update()
         {
             _workspace?.Tick(Time.unscaledTime);
+            _executionController?.Tick(executionStepsPerFrame);
 
             if (_analysisPending && Time.unscaledTime >= _analysisAt)
             {
@@ -156,6 +172,7 @@ namespace Directiva.CodeUI
         private void OnDisable()
         {
             _workspace?.FlushActiveBackup();
+            _executionController?.Stop();
         }
 
         private void OnApplicationQuit()
@@ -339,6 +356,10 @@ namespace Directiva.CodeUI
             Events.DuplicateRequested += ShowDuplicatePrompt;
             Events.DeleteRequested += ShowDeleteConfirmation;
             Events.MoveRequested += Move;
+
+            Events.ContinueRequested += HandleContinueRequested;
+            Events.PauseRequested += HandlePauseRequested;
+            Events.StopRequested += HandleStopRequested;
 
             Events.OptionsRequested += () =>
                 Output.Write(Localization.Get("Common", "options_not_implemented"));
@@ -530,6 +551,261 @@ namespace Directiva.CodeUI
 
                 RefreshCodebase();
             });
+        }
+
+        private void HandleContinueRequested()
+        {
+            if (_executionController == null)
+                return;
+
+            if (_executionController.State == ScriptExecutionState.Paused)
+            {
+                _executionController.Continue();
+                return;
+            }
+
+            if (_executionController.State == ScriptExecutionState.Stopped)
+                StartActiveDILExecution();
+        }
+
+        private void HandlePauseRequested()
+        {
+            _executionController?.Pause();
+        }
+
+        private void HandleStopRequested()
+        {
+            if (_executionController == null ||
+                _executionController.State == ScriptExecutionState.Stopped)
+            {
+                return;
+            }
+
+            _executionController.Stop();
+            _runningFunctionName = null;
+            Output.Write("[DIL] Ejecución detenida.");
+        }
+
+        private void StartActiveDILExecution()
+        {
+            var active = _workspace.Active;
+            if (active == null)
+            {
+                Output.WriteError("[DIL] No hay ningún archivo seleccionado.");
+                return;
+            }
+
+            if (!TryGetModuleName(active.RelativePath, out string moduleName, out string moduleError))
+            {
+                Output.WriteError("[DIL] " + moduleError);
+                return;
+            }
+
+            try
+            {
+                var provider = new WorkspaceDILSourceProvider(Codebase, _workspace);
+                var parser = new DILParser(provider);
+                var code = parser.Parse(moduleName);
+
+                string requestedFunction = _topBar.EntryFunctionName;
+                FunctionContext entryFunction;
+
+                if (string.IsNullOrWhiteSpace(requestedFunction))
+                {
+                    entryFunction = code.GetFunction(code.EntryFunctionId);
+                }
+                else
+                {
+                    string qualifiedName = moduleName + "." + requestedFunction;
+                    entryFunction = code.Functions.FirstOrDefault(
+                        function => string.Equals(
+                            function.Name,
+                            qualifiedName,
+                            StringComparison.Ordinal));
+
+                    if (entryFunction == null)
+                    {
+                        Output.WriteError(
+                            $"[DIL] La función '{requestedFunction}' no existe en '{active.RelativePath}'. " +
+                            "Escribe sólo el nombre local de una función declarada en ese archivo."
+                        );
+                        return;
+                    }
+                }
+
+                if (entryFunction.ParameterCount != 0)
+                {
+                    Output.WriteError(
+                        $"[DIL] No se puede ejecutar '{entryFunction.Name}' desde la interfaz: " +
+                        $"requiere {entryFunction.ParameterCount} parámetro(s). Por ahora el runner sólo admite entry points sin parámetros."
+                    );
+                    return;
+                }
+
+                var vm = new DirectivaVM(code, entryFunction.Id);
+                _runningFunctionName = entryFunction.Name;
+                _executionController.Start(vm);
+                Output.Write($"[DIL] Ejecutando {_runningFunctionName}...");
+            }
+            catch (DILParseException ex)
+            {
+                Output.WriteError("[DIL] Error de parseo: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Output.WriteError("[DIL] No se pudo iniciar la ejecución: " + ex.Message);
+            }
+        }
+
+        private void OnExecutionCompleted(DataValue returnValue)
+        {
+            string functionName = string.IsNullOrWhiteSpace(_runningFunctionName)
+                ? "función"
+                : _runningFunctionName;
+
+            Output.Write(
+                $"[DIL] {functionName} retornó {FormatDataValue(returnValue)}"
+            );
+
+            _runningFunctionName = null;
+        }
+
+        private void OnExecutionFaulted(DSExecution.Errors.RuntimeError error)
+        {
+            string functionName = string.IsNullOrWhiteSpace(_runningFunctionName)
+                ? "función"
+                : _runningFunctionName;
+
+            Output.WriteError(
+                $"[DIL] {functionName} falló ({error.Id}): {error.Message}"
+            );
+
+            _runningFunctionName = null;
+        }
+
+        private static string FormatDataValue(DataValue value)
+        {
+            switch (value.dataType)
+            {
+                case DataTypeId.None:
+                    return "None";
+
+                case DataTypeId.Bool:
+                    return value.value == 0 ? "False" : "True";
+
+                case DataTypeId.Int:
+                    return unchecked((long)value.value).ToString(CultureInfo.InvariantCulture);
+
+                case DataTypeId.Decimal:
+                    return FormatDecimalRaw(unchecked((long)value.value));
+
+                case DataTypeId.Uninitialized:
+                    return "<Uninitialized>";
+
+                default:
+                    return $"{value.dataType}({value.value})";
+            }
+        }
+
+        private static string FormatDecimalRaw(long rawValue)
+        {
+            bool negative = rawValue < 0;
+            long whole = rawValue / DTDecimal.Scale;
+            long fractional = rawValue % DTDecimal.Scale;
+
+            if (whole < 0)
+                whole = -whole;
+            if (fractional < 0)
+                fractional = -fractional;
+
+            string fractionalText = fractional
+                .ToString("D4", CultureInfo.InvariantCulture)
+                .TrimEnd('0');
+
+            if (fractionalText.Length == 0)
+                fractionalText = "0";
+
+            return (negative ? "-" : string.Empty) +
+                   whole.ToString(CultureInfo.InvariantCulture) +
+                   "." +
+                   fractionalText;
+        }
+
+        private static bool TryGetModuleName(
+            string relativeScriptPath,
+            out string moduleName,
+            out string error)
+        {
+            moduleName = string.Empty;
+            error = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(relativeScriptPath) ||
+                !relativeScriptPath.EndsWith(
+                    FileSystemScriptStorage.ScriptExtension,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                error = "El archivo seleccionado no es un script .dil válido.";
+                return false;
+            }
+
+            string withoutExtension = relativeScriptPath.Substring(
+                0,
+                relativeScriptPath.Length - FileSystemScriptStorage.ScriptExtension.Length
+            );
+
+            moduleName = withoutExtension
+                .Replace('\\', '.')
+                .Replace('/', '.');
+
+            if (!DILParser.IsValidQualifiedName(moduleName))
+            {
+                error =
+                    $"La ruta '{relativeScriptPath}' no puede convertirse en un nombre de módulo DIL. " +
+                    "Usa sólo identificadores válidos en nombres de carpetas y archivos.";
+                moduleName = string.Empty;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Exposes the editor's current working copies to the DIL parser, including .back content,
+        /// while preserving exact case-sensitive module lookup.
+        /// </summary>
+        private sealed class WorkspaceDILSourceProvider : IDILSourceProvider
+        {
+            private readonly DirectivaCode _codebase;
+            private readonly ScriptWorkspace _workspace;
+
+            public WorkspaceDILSourceProvider(
+                DirectivaCode codebase,
+                ScriptWorkspace workspace)
+            {
+                _codebase = codebase ?? throw new ArgumentNullException(nameof(codebase));
+                _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+            }
+
+            public bool TryReadModule(string moduleName, out string sourceText)
+            {
+                string expectedPath = moduleName.Replace('.', '/') +
+                                      FileSystemScriptStorage.ScriptExtension;
+
+                var script = _codebase.Scripts.FirstOrDefault(
+                    candidate => string.Equals(
+                        candidate.RelativePath,
+                        expectedPath,
+                        StringComparison.Ordinal));
+
+                if (script == null)
+                {
+                    sourceText = string.Empty;
+                    return false;
+                }
+
+                sourceText = _workspace.GetWorkingContent(script.RelativePath);
+                return true;
+            }
         }
 
         private void ScheduleAnalysis()

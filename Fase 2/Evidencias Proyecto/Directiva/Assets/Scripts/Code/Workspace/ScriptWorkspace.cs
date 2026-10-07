@@ -8,7 +8,7 @@ using System.Text;
 namespace Directiva.CodeUI
 {
     /// <summary>
-    /// Mantiene un único script activo y working copies persistidas como .dscript.back.
+    /// Mantiene un único script activo y working copies persistidas como .dil.back.
     /// </summary>
     public sealed class ScriptWorkspace
     {

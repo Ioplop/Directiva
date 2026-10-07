@@ -10,9 +10,8 @@ namespace Directiva.CodeUI
     }
 
     /// <summary>
-    /// Read-only view of the execution state used by the UI.
-    /// A future VM/orchestrator implementation can replace the no-op provider
-    /// without changing TopBarView.
+    /// Read-only view of script execution state consumed by the UI.
+    /// VMExecutionController provides the live implementation used by the code editor.
     /// </summary>
     public interface IScriptExecutionStateProvider
     {

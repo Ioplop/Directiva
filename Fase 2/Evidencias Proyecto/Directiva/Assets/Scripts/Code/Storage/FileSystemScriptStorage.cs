@@ -11,7 +11,7 @@ namespace Directiva.CodeUI
     /// </summary>
     public sealed class FileSystemScriptStorage : IScriptStorage
     {
-        public const string ScriptExtension = ".dscript";
+        public const string ScriptExtension = ".dil";
         public const string BackupSuffix = ".back";
 
         public string RootPath { get; }

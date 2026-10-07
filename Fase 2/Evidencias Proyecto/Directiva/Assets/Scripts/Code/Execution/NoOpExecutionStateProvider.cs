@@ -3,8 +3,8 @@ using System;
 namespace Directiva.CodeUI
 {
     /// <summary>
-    /// Initial v1 execution-state provider.
-    /// There is no real VM execution yet, therefore the state is always Stopped.
+    /// Fallback execution-state provider for contexts that do not attach a VM runner.
+    /// The main code-editor UI now uses VMExecutionController instead.
     /// </summary>
     public sealed class NoOpExecutionStateProvider : IScriptExecutionStateProvider
     {

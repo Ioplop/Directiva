@@ -171,7 +171,7 @@ namespace DSCompilation.DIL
         /// <summary>
         /// Returns true when a dot-separated DIL name consists entirely of valid identifier segments.
         /// </summary>
-        internal static bool IsValidQualifiedName(string? value)
+        public static bool IsValidQualifiedName(string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return false;
