@@ -77,6 +77,8 @@ namespace Directiva.CodeUI
         private VMExecutionController _executionController;
         private string _runningFunctionName;
         private bool _runningDILDebugEnabled;
+        private readonly Dictionary<string, HashSet<int>> _runningBreakpointsByModule =
+            new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
 
         private ScriptExplorerView _explorer;
         private CodeEditorView _editor;
@@ -148,6 +150,7 @@ namespace Directiva.CodeUI
             ExecutionState = _executionController;
             _executionController.Completed += OnExecutionCompleted;
             _executionController.Faulted += OnExecutionFaulted;
+            _executionController.BreakpointHit += OnBreakpointHit;
 
             Localization.LocalizationWarning += message => Output.WriteWarning(message);
 
@@ -326,6 +329,8 @@ namespace Directiva.CodeUI
                     set.Remove(line);
                     Events.RaiseBreakpointRemoved(path, line);
                 }
+
+                UpdateRunningBreakpoint(path, line, added);
             };
 
             _topBar.SaveClicked += () =>
@@ -614,6 +619,8 @@ namespace Directiva.CodeUI
                 _executionController.ElapsedMilliseconds);
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
+            _runningBreakpointsByModule.Clear();
+            _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
             Output.Write("[DIL] Ejecución detenida.");
         }
@@ -636,10 +643,18 @@ namespace Directiva.CodeUI
             try
             {
                 bool debugDIL = _topBar.DebugDILEnabled;
+                BuildRunningBreakpointMap();
+
+                // Breakpoints need the same source metadata used by visual DIL debugging.
+                // If at least one breakpoint exists, instrument the parsed code silently even
+                // when the debug checkbox is off so breakpoints work by themselves.
+                bool generateSourceMetadata =
+                    debugDIL || _runningBreakpointsByModule.Count > 0;
+
                 var provider = new WorkspaceDILSourceProvider(Codebase, _workspace);
                 var parser = new DILParser(
                     provider,
-                    new DILParserOptions(generateDebugMetadata: debugDIL)
+                    new DILParserOptions(generateDebugMetadata: generateSourceMetadata)
                 );
                 var code = parser.Parse(moduleName);
 
@@ -680,7 +695,9 @@ namespace Directiva.CodeUI
 
                 var vm = new DirectivaVM(code, entryFunction.Id);
                 _runningFunctionName = entryFunction.Name;
-                _runningDILDebugEnabled = debugDIL;
+                _runningDILDebugEnabled = generateSourceMetadata;
+                _executionController.BreakpointPredicate =
+                    _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
                 _editor.ClearExecutionLine();
                 _topBar.ClearExecutionMetrics();
                 _executionController.Start(vm, paused: startPaused);
@@ -715,6 +732,8 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
+            _runningBreakpointsByModule.Clear();
+            _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
         }
 
@@ -734,7 +753,22 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningDILDebugEnabled = false;
+            _runningBreakpointsByModule.Clear();
+            _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
+        }
+
+        private void OnBreakpointHit(DirectivaVM vm)
+        {
+            if (vm == null)
+                return;
+
+            VMDebugState debug = vm.Debug;
+            string file = string.IsNullOrWhiteSpace(debug.File) ? "?" : debug.File;
+            string line = debug.Line >= 0 ? (debug.Line + 1).ToString(CultureInfo.InvariantCulture) : "?";
+
+            Output.Write($"[DIL] Breakpoint alcanzado en {file}:{line}.");
+            RefreshDILDebugHighlight();
         }
 
         private void RefreshDILDebugHighlight()
@@ -937,6 +971,82 @@ namespace Directiva.CodeUI
             {
                 Output.WriteError(Localization.Get("Common", "analysis_exception", ex.Message));
             }
+        }
+
+        private void BuildRunningBreakpointMap()
+        {
+            _runningBreakpointsByModule.Clear();
+
+            foreach (var pair in _breakpoints)
+            {
+                if (pair.Value == null || pair.Value.Count == 0)
+                    continue;
+
+                if (!TryGetModuleName(pair.Key, out string moduleName, out _))
+                    continue;
+
+                _runningBreakpointsByModule[moduleName] = new HashSet<int>(pair.Value);
+            }
+        }
+
+        private void UpdateRunningBreakpoint(string path, int line, bool added)
+        {
+            // If this execution was parsed without DEBUG_* metadata, a breakpoint added after
+            // execution started cannot become source-aware until the next run. Existing runs that
+            // already have metadata (debug checkbox or pre-existing breakpoints) can update live.
+            if (!_runningDILDebugEnabled ||
+                _executionController == null ||
+                _executionController.State == ScriptExecutionState.Stopped ||
+                !TryGetModuleName(path, out string moduleName, out _))
+            {
+                return;
+            }
+
+            if (!_runningBreakpointsByModule.TryGetValue(moduleName, out var lines))
+            {
+                if (!added)
+                    return;
+
+                lines = new HashSet<int>();
+                _runningBreakpointsByModule[moduleName] = lines;
+            }
+
+            if (added)
+                lines.Add(line);
+            else
+            {
+                lines.Remove(line);
+                if (lines.Count == 0)
+                    _runningBreakpointsByModule.Remove(moduleName);
+            }
+
+            _executionController.BreakpointPredicate =
+                _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
+        }
+
+        private bool ShouldPauseAtBreakpoint(DirectivaVM vm)
+        {
+            if (vm == null ||
+                vm.CurrentFunction == null ||
+                vm.Debug.Line < 0 ||
+                string.IsNullOrWhiteSpace(vm.Debug.File))
+            {
+                return false;
+            }
+
+            // DEBUG_* describes the source instruction that follows it. Do not stop while the
+            // metadata itself is still being consumed; pause immediately before the real DIL/VM
+            // instruction executes.
+            if (vm.CurrentFunction.TryGetInstruction(vm.InstructionPointer, out Instruction instruction) &&
+                (instruction.Id == InstructionId.DebugFile ||
+                 instruction.Id == InstructionId.DebugLine ||
+                 instruction.Id == InstructionId.DebugSpan))
+            {
+                return false;
+            }
+
+            return _runningBreakpointsByModule.TryGetValue(vm.Debug.File, out var lines) &&
+                   lines.Contains(vm.Debug.Line + 1);
         }
 
         private HashSet<int> GetBreakpoints(string path)

@@ -14,20 +14,30 @@ namespace Directiva.CodeUI
     {
         private DirectivaVM _vm;
         private readonly Stopwatch _executionTimer = new();
+        private int _suppressedBreakpointFunctionId = -1;
+        private int _suppressedBreakpointInstructionPointer = -1;
 
         public ScriptExecutionState State { get; private set; } = ScriptExecutionState.Stopped;
         public DirectivaVM CurrentVM => _vm;
         public long TotalAdvances { get; private set; }
         public double ElapsedMilliseconds => _executionTimer.Elapsed.TotalMilliseconds;
 
+        /// <summary>
+        /// Optional source-level breakpoint predicate evaluated immediately before each VM Advance.
+        /// Returning true pauses before the current instruction executes.
+        /// </summary>
+        public Func<DirectivaVM, bool> BreakpointPredicate { get; set; }
+
         public event Action<ScriptExecutionState> StateChanged;
         public event Action<DataValue> Completed;
         public event Action<RuntimeError> Faulted;
+        public event Action<DirectivaVM> BreakpointHit;
 
         public void Start(DirectivaVM vm, bool paused = false)
         {
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
             TotalAdvances = 0;
+            ClearBreakpointSuppression();
             _executionTimer.Restart();
             SetState(paused ? ScriptExecutionState.Paused : ScriptExecutionState.Running);
         }
@@ -50,6 +60,7 @@ namespace Directiva.CodeUI
                 _executionTimer.Stop();
 
             _vm = null;
+            ClearBreakpointSuppression();
             SetState(ScriptExecutionState.Stopped);
         }
 
@@ -134,7 +145,8 @@ namespace Directiva.CodeUI
 
         /// <summary>
         /// Advances the active VM by at most instructionBudget deterministic VM steps.
-        /// Completion and runtime faults stop the controller and are reported through events.
+        /// Breakpoints are checked before every Advance so execution can pause before the
+        /// source instruction represented by the current DEBUG_* metadata is executed.
         /// </summary>
         public void Tick(int instructionBudget)
         {
@@ -144,30 +156,88 @@ namespace Directiva.CodeUI
             if (instructionBudget <= 0)
                 throw new ArgumentOutOfRangeException(nameof(instructionBudget));
 
-            var result = _vm.Run(instructionBudget);
-            TotalAdvances += result.StepsExecuted;
-
-            if (result.Status == VMExecutionStatus.Completed)
+            // Preserve the existing fast batch path when no breakpoint checks are needed.
+            if (BreakpointPredicate == null)
             {
-                var returnValue = result.ReturnValue;
-                _executionTimer.Stop();
-                _vm = null;
-                SetState(ScriptExecutionState.Stopped);
-                Completed?.Invoke(returnValue);
+                VMRunResult result = _vm.Run(instructionBudget);
+                TotalAdvances += result.StepsExecuted;
+
+                if (result.Status == VMExecutionStatus.Completed)
+                {
+                    DataValue returnValue = result.ReturnValue;
+                    _executionTimer.Stop();
+                    _vm = null;
+                    ClearBreakpointSuppression();
+                    SetState(ScriptExecutionState.Stopped);
+                    Completed?.Invoke(returnValue);
+                    return;
+                }
+
+                if (result.Status == VMExecutionStatus.Faulted)
+                {
+                    RuntimeError error = result.Error ?? RuntimeError.InternalVmError(
+                        "VM reported Faulted without a RuntimeError."
+                    );
+
+                    _executionTimer.Stop();
+                    _vm = null;
+                    ClearBreakpointSuppression();
+                    SetState(ScriptExecutionState.Stopped);
+                    Faulted?.Invoke(error);
+                }
+
                 return;
             }
 
-            if (result.Status == VMExecutionStatus.Faulted)
+            for (int i = 0; i < instructionBudget; i++)
             {
-                var error = result.Error ?? RuntimeError.InternalVmError(
-                    "VM reported Faulted without a RuntimeError."
-                );
+                if (State != ScriptExecutionState.Running || _vm == null)
+                    return;
 
-                _executionTimer.Stop();
-                _vm = null;
-                SetState(ScriptExecutionState.Stopped);
-                Faulted?.Invoke(error);
+                if (TryPauseAtBreakpoint())
+                    return;
+
+                if (!AdvanceOnce())
+                    return;
             }
+        }
+
+        private bool TryPauseAtBreakpoint()
+        {
+            if (_vm == null || BreakpointPredicate == null)
+                return false;
+
+            int functionId = _vm.CurrentFunction?.Id ?? -1;
+            int instructionPointer = _vm.InstructionPointer;
+
+            // Continuing or stepping from a breakpoint must be allowed to execute the instruction
+            // at which we stopped. Once execution leaves that exact instruction, re-arm it so a
+            // loop can hit the same breakpoint again later.
+            if (_suppressedBreakpointFunctionId >= 0)
+            {
+                if (functionId == _suppressedBreakpointFunctionId &&
+                    instructionPointer == _suppressedBreakpointInstructionPointer)
+                {
+                    return false;
+                }
+
+                ClearBreakpointSuppression();
+            }
+
+            if (!BreakpointPredicate(_vm))
+                return false;
+
+            _suppressedBreakpointFunctionId = functionId;
+            _suppressedBreakpointInstructionPointer = instructionPointer;
+            SetState(ScriptExecutionState.Paused);
+            BreakpointHit?.Invoke(_vm);
+            return true;
+        }
+
+        private void ClearBreakpointSuppression()
+        {
+            _suppressedBreakpointFunctionId = -1;
+            _suppressedBreakpointInstructionPointer = -1;
         }
 
         private void SetState(ScriptExecutionState state)
