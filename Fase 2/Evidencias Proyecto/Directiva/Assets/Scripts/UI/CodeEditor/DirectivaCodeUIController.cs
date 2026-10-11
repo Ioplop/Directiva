@@ -152,6 +152,7 @@ namespace Directiva.CodeUI
             _executionController.Completed += OnExecutionCompleted;
             _executionController.Faulted += OnExecutionFaulted;
             _executionController.BreakpointHit += OnBreakpointHit;
+            _executionController.Printed += OnExecutionPrinted;
 
             Localization.LocalizationWarning += message => Output.WriteWarning(message);
 
@@ -717,6 +718,11 @@ namespace Directiva.CodeUI
                 Output.WriteError("[DIL] No se pudo iniciar la ejecución: " + ex.Message);
                 return false;
             }
+        }
+
+        private void OnExecutionPrinted(string text)
+        {
+            Output.Write(text ?? string.Empty);
         }
 
         private void OnExecutionCompleted(DataValue returnValue)

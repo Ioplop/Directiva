@@ -1,3 +1,5 @@
+using DSExecution.DataTypes;
+
 namespace DSExecution.Errors
 {
     // TODO: Localize error messages.
@@ -21,7 +23,9 @@ namespace DSExecution.Errors
         InvalidJumpTarget = 11,
         CallStackOverflow = 12,
         InternalVmError = 13,
-        OutOfMemory = 14
+        OutOfMemory = 14,
+        InvalidCast = 15,
+        InvalidCastValue = 16
     }
 
     /// <summary>
@@ -120,6 +124,21 @@ namespace DSExecution.Errors
             => new(
                 RuntimeErrorId.OutOfMemory,
                 "Directiva heap is out of memory. TODO: Localize!"
+            );
+
+        public static RuntimeError InvalidCast(DataTypeId sourceType, DataTypeId targetType)
+            => new(
+                RuntimeErrorId.InvalidCast,
+                $"Cannot cast {sourceType} to {targetType}. TODO: Localize!"
+            );
+
+        public static RuntimeError InvalidCastValue(
+            DataTypeId sourceType,
+            DataTypeId targetType,
+            string details)
+            => new(
+                RuntimeErrorId.InvalidCastValue,
+                $"Cannot cast value from {sourceType} to {targetType}. {details} TODO: Localize!"
             );
 
         public static RuntimeError InternalVmError(string details)

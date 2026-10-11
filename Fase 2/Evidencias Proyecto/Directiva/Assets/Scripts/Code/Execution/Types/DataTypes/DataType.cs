@@ -1,9 +1,11 @@
-﻿# nullable enable
+# nullable enable
 using System;
 using System.Linq;
 using System.Reflection;
+using DSExecution.Errors;
 using DSExecution.Operations;
 using DSExecution.Values;
+using DSExecution.VirtualMachine;
 
 
 
@@ -134,6 +136,27 @@ namespace DSExecution.DataTypes
                 return OperationResult.NotImplemented();
 
             return operationHandler(opCall);
+        }
+
+        /// <summary>
+        /// Converts a value of this type to a requested target type. The base implementation
+        /// provides the universal identity cast T -> T and rejects every other conversion.
+        /// Concrete DataTypes only override the destinations they explicitly support.
+        /// </summary>
+        public virtual CastResult CastTo(
+            DataTypeId targetType,
+            DataValue value,
+            VMMemoryContext memory)
+        {
+            if (memory == null)
+                throw new ArgumentNullException(nameof(memory));
+
+            if (value.dataType == targetType)
+                return CastResult.Success(value);
+
+            return CastResult.Failure(
+                RuntimeError.InvalidCast(value.dataType, targetType)
+            );
         }
 
         public virtual OperationResult ValueEquals(OperationCall opCall)

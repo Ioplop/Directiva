@@ -18,6 +18,24 @@ namespace DSExecution.DataTypes
         {
         }
 
+        /// <summary>
+        /// Allocates an immutable Directiva string in the shared heap.
+        /// Used by casts whose source type decides how it is represented as text.
+        /// </summary>
+        internal static CastResult CreateValue(string value, VMMemoryContext memory)
+        {
+            if (memory == null)
+                throw new ArgumentNullException(nameof(memory));
+
+            var heapObject = new StringHeapObject(value);
+            if (!memory.TryAllocHeap(heapObject, out uint memoryReference))
+                return CastResult.Failure(RuntimeError.OutOfMemory());
+
+            return CastResult.Success(
+                DataValue.FromStringReference(memoryReference)
+            );
+        }
+
         private static bool TryResolve(
             OperationCall opCall,
             DataValue value,

@@ -1,4 +1,5 @@
 #nullable enable
+using DSExecution.DataTypes;
 using DSExecution.Operations;
 using DSExecution.Values;
 
@@ -15,6 +16,7 @@ namespace DSExecution.VirtualMachine
         public int OperandB { get; }
         public DataValue ValueOperand { get; }
         public OperationId OperationOperand { get; }
+        public DataTypeId DataTypeOperand { get; }
         public string? TextOperand { get; }
 
         private Instruction(
@@ -23,6 +25,7 @@ namespace DSExecution.VirtualMachine
             int operandB = 0,
             DataValue valueOperand = default,
             OperationId operationOperand = default,
+            DataTypeId dataTypeOperand = default,
             string? textOperand = null)
         {
             Id = id;
@@ -30,6 +33,7 @@ namespace DSExecution.VirtualMachine
             OperandB = operandB;
             ValueOperand = valueOperand;
             OperationOperand = operationOperand;
+            DataTypeOperand = dataTypeOperand;
             TextOperand = textOperand;
         }
 
@@ -44,6 +48,12 @@ namespace DSExecution.VirtualMachine
 
         public static Instruction Pop()
             => new(InstructionId.Pop);
+
+        public static Instruction Cast(DataTypeId targetType)
+            => new(InstructionId.Cast, dataTypeOperand: targetType);
+
+        public static Instruction Print()
+            => new(InstructionId.Print);
 
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
@@ -121,6 +131,8 @@ namespace DSExecution.VirtualMachine
             {
                 InstructionId.Push => $"Push {ValueOperand.dataType}:{ValueOperand.value}",
                 InstructionId.PushString => $"PushString \"{TextOperand}\"",
+                InstructionId.Cast => $"Cast {DataTypeOperand}",
+                InstructionId.Print => "Print",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

@@ -122,6 +122,16 @@ namespace DSCompilation.DIL
                 ["IS_TRUTHY"] = OperationId.IsTruthy
             };
 
+        private static readonly Dictionary<string, DataTypeId> DataTypeMnemonics =
+            new(StringComparer.Ordinal)
+            {
+                ["NONE"] = DataTypeId.None,
+                ["BOOL"] = DataTypeId.Bool,
+                ["INT"] = DataTypeId.Int,
+                ["DECIMAL"] = DataTypeId.Decimal,
+                ["STRING"] = DataTypeId.String
+            };
+
         private readonly IDILSourceProvider sourceProvider;
         private readonly DILParserOptions options;
 
@@ -676,6 +686,27 @@ namespace DSCompilation.DIL
                 case "POP":
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
                     instructions.Add(Instruction.Pop());
+                    return;
+
+                case "CAST":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
+                    if (!DataTypeMnemonics.TryGetValue(tokens[1], out DataTypeId targetType))
+                    {
+                        Throw(
+                            moduleName,
+                            lineNumber,
+                            $"Unknown or unsupported CAST target type '{tokens[1]}'."
+                        );
+                    }
+
+                    instructions.Add(Instruction.Cast(targetType));
+                    return;
+                }
+
+                case "PRINT":
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
+                    instructions.Add(Instruction.Print());
                     return;
 
                 case "LOAD_LOCAL":

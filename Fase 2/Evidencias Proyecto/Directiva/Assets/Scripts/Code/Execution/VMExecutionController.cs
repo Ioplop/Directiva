@@ -32,10 +32,15 @@ namespace Directiva.CodeUI
         public event Action<DataValue> Completed;
         public event Action<RuntimeError> Faulted;
         public event Action<DirectivaVM> BreakpointHit;
+        public event Action<string> Printed;
 
         public void Start(DirectivaVM vm, bool paused = false)
         {
+            if (_vm != null)
+                _vm.Printed -= OnVMPrinted;
+
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
+            _vm.Printed += OnVMPrinted;
             TotalAdvances = 0;
             ClearBreakpointSuppression();
             _executionTimer.Restart();
@@ -58,6 +63,9 @@ namespace Directiva.CodeUI
         {
             if (_vm != null || State != ScriptExecutionState.Stopped)
                 _executionTimer.Stop();
+
+            if (_vm != null)
+                _vm.Printed -= OnVMPrinted;
 
             _vm = null;
             ClearBreakpointSuppression();
@@ -121,6 +129,7 @@ namespace Directiva.CodeUI
             {
                 DataValue returnValue = result.ReturnValue;
                 _executionTimer.Stop();
+                _vm.Printed -= OnVMPrinted;
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Completed?.Invoke(returnValue);
@@ -134,6 +143,7 @@ namespace Directiva.CodeUI
                 );
 
                 _executionTimer.Stop();
+                _vm.Printed -= OnVMPrinted;
                 _vm = null;
                 SetState(ScriptExecutionState.Stopped);
                 Faulted?.Invoke(error);
@@ -166,6 +176,7 @@ namespace Directiva.CodeUI
                 {
                     DataValue returnValue = result.ReturnValue;
                     _executionTimer.Stop();
+                    _vm.Printed -= OnVMPrinted;
                     _vm = null;
                     ClearBreakpointSuppression();
                     SetState(ScriptExecutionState.Stopped);
@@ -180,6 +191,7 @@ namespace Directiva.CodeUI
                     );
 
                     _executionTimer.Stop();
+                    _vm.Printed -= OnVMPrinted;
                     _vm = null;
                     ClearBreakpointSuppression();
                     SetState(ScriptExecutionState.Stopped);
@@ -232,6 +244,11 @@ namespace Directiva.CodeUI
             SetState(ScriptExecutionState.Paused);
             BreakpointHit?.Invoke(_vm);
             return true;
+        }
+
+        private void OnVMPrinted(string text)
+        {
+            Printed?.Invoke(text);
         }
 
         private void ClearBreakpointSuppression()

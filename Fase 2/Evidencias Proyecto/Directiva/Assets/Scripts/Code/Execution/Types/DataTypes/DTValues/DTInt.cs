@@ -1,8 +1,10 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using DSExecution.Values;
 using DSExecution.Operations;
 using DSExecution.Errors;
+using DSExecution.VirtualMachine;
 
 namespace DSExecution.DataTypes
 {
@@ -350,6 +352,37 @@ namespace DSExecution.DataTypes
                 return CreateSuccessBoolResult(a >= b);
             }
             return OperationResult.NotImplemented();
+        }
+
+        public override CastResult CastTo(
+            DataTypeId targetType,
+            DataValue value,
+            VMMemoryContext memory)
+        {
+            long intValue = unchecked((long)value.value);
+
+            switch (targetType)
+            {
+                case DataTypeId.String:
+                    return DTString.CreateValue(
+                        intValue.ToString(CultureInfo.InvariantCulture),
+                        memory
+                    );
+
+                case DataTypeId.Decimal:
+                {
+                    BigInteger scaled = (BigInteger)intValue * DTDecimal.Scale;
+                    if (scaled < long.MinValue || scaled > long.MaxValue)
+                        return CastResult.Failure(RuntimeError.Overflow());
+
+                    return CastResult.Success(
+                        DataValue.FromDecimalRaw((long)scaled)
+                    );
+                }
+
+                default:
+                    return base.CastTo(targetType, value, memory);
+            }
         }
 
         public OperationResult Not(OperationCall opCall)

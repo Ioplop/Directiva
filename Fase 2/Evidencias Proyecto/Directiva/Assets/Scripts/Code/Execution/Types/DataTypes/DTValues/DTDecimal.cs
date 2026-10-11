@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Numerics;
 using DSExecution.Errors;
 using DSExecution.Operations;
 using DSExecution.Values;
+using DSExecution.VirtualMachine;
 
 namespace DSExecution.DataTypes
 {
@@ -301,6 +303,55 @@ namespace DSExecution.DataTypes
                 return OperationResult.NotImplemented();
 
             return CreateBoolResult(left >= right);
+        }
+
+        public override CastResult CastTo(
+            DataTypeId targetType,
+            DataValue value,
+            VMMemoryContext memory)
+        {
+            long rawValue = unchecked((long)value.value);
+
+            switch (targetType)
+            {
+                case DataTypeId.String:
+                    return DTString.CreateValue(FormatRawInvariant(rawValue), memory);
+
+                case DataTypeId.Int:
+                    return CastResult.Success(
+                        DataValue.FromInt(rawValue / Scale)
+                    );
+
+                default:
+                    return base.CastTo(targetType, value, memory);
+            }
+        }
+
+        /// <summary>
+        /// Deterministic decimal formatting independent of the host machine culture.
+        /// </summary>
+        public static string FormatRawInvariant(long rawValue)
+        {
+            bool negative = rawValue < 0;
+            long whole = rawValue / Scale;
+            long fractional = rawValue % Scale;
+
+            if (whole < 0)
+                whole = -whole;
+            if (fractional < 0)
+                fractional = -fractional;
+
+            string fractionalText = fractional
+                .ToString("D4", CultureInfo.InvariantCulture)
+                .TrimEnd('0');
+
+            if (fractionalText.Length == 0)
+                fractionalText = "0";
+
+            return (negative ? "-" : string.Empty) +
+                   whole.ToString(CultureInfo.InvariantCulture) +
+                   "." +
+                   fractionalText;
         }
 
         public OperationResult Not(OperationCall opCall)

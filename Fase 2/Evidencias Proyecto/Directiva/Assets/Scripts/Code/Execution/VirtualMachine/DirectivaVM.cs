@@ -44,6 +44,7 @@ namespace DSExecution.VirtualMachine
 
         private PendingOperation? pendingOperation;
         private DataValue[]? activeOperationArguments;
+        private DataValue? activeCastValue;
         private RuntimeError? fault;
         private DataValue returnValue;
 
@@ -57,6 +58,12 @@ namespace DSExecution.VirtualMachine
         public int EntryFunctionId { get; }
         public int CallDepth => callStack.Count;
         public int EvaluationStackCount => evaluationStack.Count;
+
+        /// <summary>
+        /// Emits text produced by the PRINT instruction. The VM itself is UI-agnostic;
+        /// hosts decide where this output is displayed.
+        /// </summary>
+        public event Action<string>? Printed;
 
         public FunctionContext? CurrentFunction
             => callStack.Count > 0 ? callStack[^1].Function : null;
@@ -274,6 +281,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Push => ExecutePush(frame, instruction.ValueOperand),
                 InstructionId.PushString => ExecutePushString(frame, instruction.TextOperand),
                 InstructionId.Pop => ExecutePop(frame),
+                InstructionId.Cast => ExecuteCast(frame, instruction.DataTypeOperand),
+                InstructionId.Print => ExecutePrint(frame),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -326,6 +335,101 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.StackUnderflow());
 
             return AdvanceInstruction(frame);
+        }
+
+        private VMAdvanceResult ExecuteCast(CallFrame frame, DataTypeId targetType)
+        {
+            if (!evaluationStack.TryPop(frame.EvalStackBase, out DataValue value))
+                return Fault(RuntimeError.StackUnderflow());
+
+            CastResult cast = CastValue(value, targetType);
+            if (!cast.IsSuccess)
+            {
+                return Fault(
+                    cast.Error ?? RuntimeError.InternalVmError(
+                        $"Cast from {value.dataType} to {targetType} failed without RuntimeError."
+                    )
+                );
+            }
+
+            if (!evaluationStack.TryPush(cast.Value))
+                return Fault(RuntimeError.StackOverflow());
+
+            return AdvanceInstruction(frame);
+        }
+
+        private VMAdvanceResult ExecutePrint(CallFrame frame)
+        {
+            if (!evaluationStack.TryPop(frame.EvalStackBase, out DataValue value))
+                return Fault(RuntimeError.StackUnderflow());
+
+            CastResult cast = CastValue(value, DataTypeId.String);
+            if (!cast.IsSuccess)
+            {
+                return Fault(
+                    cast.Error ?? RuntimeError.InternalVmError(
+                        $"PRINT failed to cast {value.dataType} to String without RuntimeError."
+                    )
+                );
+            }
+
+            DataValue stringValue = cast.Value;
+            activeCastValue = stringValue;
+            try
+            {
+                if (!stringValue.TryGetHeapReference(out uint memoryReference))
+                {
+                    return Fault(
+                        RuntimeError.InternalVmError(
+                            "CAST STRING returned a non-heap-backed value."
+                        )
+                    );
+                }
+
+                if (!Memory.TryGetHeap(memoryReference, out HeapObject heapObject))
+                    return Fault(RuntimeError.InvalidMemoryAccess(memoryReference));
+
+                if (!(heapObject is StringHeapObject stringObject))
+                {
+                    return Fault(
+                        RuntimeError.InternalVmError(
+                            $"String reference {memoryReference} does not point to StringHeapObject."
+                        )
+                    );
+                }
+
+                Printed?.Invoke(stringObject.Value);
+            }
+            finally
+            {
+                activeCastValue = null;
+            }
+
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Performs a DataType-owned cast while keeping the source value visible to GC.
+        /// This matters for future reference-type casts that may allocate and trigger collection.
+        /// </summary>
+        private CastResult CastValue(DataValue value, DataTypeId targetType)
+        {
+            if (value.dataType == DataTypeId.Uninitialized)
+                return CastResult.Failure(RuntimeError.VariableUsedBeforeInitialization());
+
+            DataType? sourceType = DataType.GetDataType(value.dataType);
+            if (sourceType == null)
+                return CastResult.Failure(RuntimeError.InvalidCast(value.dataType, targetType));
+
+            activeCastValue = value;
+            try
+            {
+                return sourceType.CastTo(targetType, value, Memory);
+            }
+            finally
+            {
+                activeCastValue = null;
+            }
         }
 
         private VMAdvanceResult ExecuteLoadLocal(CallFrame frame, int localIndex)
@@ -739,6 +843,12 @@ namespace DSExecution.VirtualMachine
                     if (value.TryGetHeapReference(out uint memoryReference))
                         yield return memoryReference;
                 }
+            }
+
+            if (activeCastValue.HasValue &&
+                activeCastValue.Value.TryGetHeapReference(out uint activeCastReference))
+            {
+                yield return activeCastReference;
             }
         }
 

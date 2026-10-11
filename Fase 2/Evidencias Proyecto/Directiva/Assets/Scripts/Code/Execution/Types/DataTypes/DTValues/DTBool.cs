@@ -1,6 +1,7 @@
 using System;
 using DSExecution.Operations;
 using DSExecution.Values;
+using DSExecution.VirtualMachine;
 
 namespace DSExecution.DataTypes
 {
@@ -116,6 +117,22 @@ namespace DSExecution.DataTypes
         public override OperationResult IsTruthy(OperationCall opCall)
         {
             return OperationResult.Success(opCall.Arguments[0]);
+        }
+
+        public override CastResult CastTo(
+            DataTypeId targetType,
+            DataValue value,
+            VMMemoryContext memory)
+        {
+            if (targetType == DataTypeId.String)
+            {
+                return DTString.CreateValue(
+                    value.value == 0 ? "False" : "True",
+                    memory
+                );
+            }
+
+            return base.CastTo(targetType, value, memory);
         }
 
         public OperationResult Not(OperationCall opCall)
