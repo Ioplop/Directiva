@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DSExecution.Values;
 
 namespace DSExecution.VirtualMachine
@@ -48,6 +49,12 @@ namespace DSExecution.VirtualMachine
 
             values[localIndex] = value;
             return true;
+        }
+
+        internal IEnumerable<DataValue> EnumerateValues()
+        {
+            for (int i = 0; i < values.Length; i++)
+                yield return values[i];
         }
 
         internal bool IsValidRange(int firstLocal, int localCount)

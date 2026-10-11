@@ -39,6 +39,9 @@ namespace DSExecution.VirtualMachine
         public static Instruction Push(DataValue value)
             => new(InstructionId.Push, valueOperand: value);
 
+        public static Instruction PushString(string value)
+            => new(InstructionId.PushString, textOperand: value);
+
         public static Instruction Pop()
             => new(InstructionId.Pop);
 
@@ -117,6 +120,7 @@ namespace DSExecution.VirtualMachine
             return Id switch
             {
                 InstructionId.Push => $"Push {ValueOperand.dataType}:{ValueOperand.value}",
+                InstructionId.PushString => $"PushString \"{TextOperand}\"",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

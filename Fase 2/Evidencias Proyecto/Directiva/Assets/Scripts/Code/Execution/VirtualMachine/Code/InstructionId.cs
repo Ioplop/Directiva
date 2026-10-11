@@ -28,6 +28,8 @@ namespace DSExecution.VirtualMachine
 
         DebugFile = 15,
         DebugLine = 16,
-        DebugSpan = 17
+        DebugSpan = 17,
+
+        PushString = 18
     }
 }

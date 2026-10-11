@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DSExecution.Values;
 
 namespace DSExecution.VirtualMachine
@@ -39,6 +40,12 @@ namespace DSExecution.VirtualMachine
             value = values[count];
             values[count] = default;
             return true;
+        }
+
+        internal IEnumerable<DataValue> EnumerateValues()
+        {
+            for (int i = 0; i < count; i++)
+                yield return values[i];
         }
 
         public bool HasValuesAbove(int floor, int amount)

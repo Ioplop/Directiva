@@ -46,6 +46,36 @@ namespace DSExecution.Values
             return new DataValue(DataTypeId.Decimal, unchecked((ulong)value));
         }
 
+        public static DataValue FromStringReference(uint memoryReference)
+        {
+            if (memoryReference == 0)
+                throw new System.ArgumentOutOfRangeException(nameof(memoryReference));
+
+            return new DataValue(DataTypeId.String, memoryReference);
+        }
+
+        /// <summary>
+        /// Returns the heap reference carried by this value when its type is heap-backed.
+        /// </summary>
+        public bool TryGetHeapReference(out uint memoryReference)
+        {
+            switch (dataType)
+            {
+                case DataTypeId.String:
+                case DataTypeId.List:
+                case DataTypeId.Set:
+                case DataTypeId.Dict:
+                    if (value == 0 || value > uint.MaxValue)
+                        break;
+
+                    memoryReference = (uint)value;
+                    return true;
+            }
+
+            memoryReference = 0;
+            return false;
+        }
+
         // TODO: Implement other factories
     }
 }

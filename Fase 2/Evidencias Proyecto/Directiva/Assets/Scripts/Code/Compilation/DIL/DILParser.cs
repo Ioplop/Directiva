@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using System.Text;
 using DSExecution.DataTypes;
 using DSExecution.Operations;
 using DSExecution.Values;
@@ -567,7 +568,7 @@ namespace DSCompilation.DIL
         private static SourceLocation GetSourceLocation(SourceLine sourceLine)
         {
             string text = sourceLine.Text;
-            int codeEnd = text.IndexOf("//", StringComparison.Ordinal);
+            int codeEnd = FindCommentStart(text);
             if (codeEnd < 0)
                 codeEnd = text.Length;
 
@@ -806,6 +807,12 @@ namespace DSCompilation.DIL
                         DataValue.FromDecimalRaw(ParseDecimalRaw(moduleName, lineNumber, decimalToken))
                     );
 
+                case "STRING":
+                    RequireTokenCount(moduleName, lineNumber, "PUSH STRING", tokens, 3);
+                    return Instruction.PushString(
+                        ParseStringLiteral(moduleName, lineNumber, tokens[2])
+                    );
+
                 default:
                     Throw(moduleName, lineNumber, $"Unsupported PUSH type '{type}' in the current DIL implementation.");
                     break;
@@ -966,6 +973,68 @@ namespace DSCompilation.DIL
                 Throw(moduleName, lineNumber, $"Undefined parse symbol '{token}'.");
 
             return value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string ParseStringLiteral(string moduleName, int lineNumber, string token)
+        {
+            if (token.Length < 2 || token[0] != '"' || token[^1] != '"')
+                Throw(moduleName, lineNumber, "STRING literal must be enclosed in double quotes.");
+
+            var result = new StringBuilder(token.Length - 2);
+
+            for (int i = 1; i < token.Length - 1; i++)
+            {
+                char c = token[i];
+                if (c != '\\')
+                {
+                    result.Append(c);
+                    continue;
+                }
+
+                if (++i >= token.Length - 1)
+                    Throw(moduleName, lineNumber, "STRING literal ends with an incomplete escape sequence.");
+
+                char escape = token[i];
+                switch (escape)
+                {
+                    case '\\':
+                        result.Append('\\');
+                        break;
+                    case '"':
+                        result.Append('"');
+                        break;
+                    case 'n':
+                        result.Append('\n');
+                        break;
+                    case 'r':
+                        result.Append('\r');
+                        break;
+                    case 't':
+                        result.Append('\t');
+                        break;
+                    case '0':
+                        result.Append('\0');
+                        break;
+                    case 'u':
+                    {
+                        if (i + 4 >= token.Length)
+                            Throw(moduleName, lineNumber, "\\u escape requires exactly four hexadecimal digits.");
+
+                        string hex = token.Substring(i + 1, 4);
+                        if (!ushort.TryParse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ushort codeUnit))
+                            Throw(moduleName, lineNumber, $"Invalid Unicode escape '\\u{hex}'.");
+
+                        result.Append((char)codeUnit);
+                        i += 4;
+                        break;
+                    }
+                    default:
+                        Throw(moduleName, lineNumber, $"Unsupported STRING escape '\\{escape}'.");
+                        break;
+                }
+            }
+
+            return result.ToString();
         }
 
         private static long ParseDecimalRaw(string moduleName, int lineNumber, string token)
@@ -1186,10 +1255,54 @@ namespace DSCompilation.DIL
 
         private static string[] SplitTokens(string line)
         {
-            return line.Split(
-                (char[]?)null,
-                StringSplitOptions.RemoveEmptyEntries
-            );
+            var tokens = new List<string>();
+            int index = 0;
+
+            while (index < line.Length)
+            {
+                while (index < line.Length && char.IsWhiteSpace(line[index]))
+                    index++;
+
+                if (index >= line.Length)
+                    break;
+
+                int start = index;
+                if (line[index] == '"')
+                {
+                    index++;
+                    bool escaped = false;
+
+                    while (index < line.Length)
+                    {
+                        char c = line[index++];
+
+                        if (escaped)
+                        {
+                            escaped = false;
+                            continue;
+                        }
+
+                        if (c == '\\')
+                        {
+                            escaped = true;
+                            continue;
+                        }
+
+                        if (c == '"')
+                            break;
+                    }
+
+                    tokens.Add(line.Substring(start, index - start));
+                    continue;
+                }
+
+                while (index < line.Length && !char.IsWhiteSpace(line[index]))
+                    index++;
+
+                tokens.Add(line.Substring(start, index - start));
+            }
+
+            return tokens.ToArray();
         }
 
         private static SourceLine[] SplitLines(string sourceText)
@@ -1216,11 +1329,53 @@ namespace DSCompilation.DIL
 
         private static string PrepareLine(string line)
         {
-            int commentIndex = line.IndexOf("//", StringComparison.Ordinal);
+            int commentIndex = FindCommentStart(line);
             if (commentIndex >= 0)
                 line = line.Substring(0, commentIndex);
 
             return line.Trim();
+        }
+
+        private static int FindCommentStart(string line)
+        {
+            bool inString = false;
+            bool escaped = false;
+
+            for (int i = 0; i < line.Length - 1; i++)
+            {
+                char c = line[i];
+
+                if (inString)
+                {
+                    if (escaped)
+                    {
+                        escaped = false;
+                        continue;
+                    }
+
+                    if (c == '\\')
+                    {
+                        escaped = true;
+                        continue;
+                    }
+
+                    if (c == '"')
+                        inString = false;
+
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '/' && line[i + 1] == '/')
+                    return i;
+            }
+
+            return -1;
         }
 
         private static bool IsValidIdentifier(string value)

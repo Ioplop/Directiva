@@ -43,6 +43,7 @@ namespace DSExecution.VirtualMachine
         private readonly VMOptions options;
 
         private PendingOperation? pendingOperation;
+        private DataValue[]? activeOperationArguments;
         private RuntimeError? fault;
         private DataValue returnValue;
 
@@ -160,6 +161,7 @@ namespace DSExecution.VirtualMachine
 
             returnValue = DataValue.None();
             Status = VMExecutionStatus.Running;
+            Memory.RegisterVM(this);
         }
 
         /// <summary>
@@ -270,6 +272,7 @@ namespace DSExecution.VirtualMachine
             {
                 InstructionId.Nop => AdvanceInstruction(frame),
                 InstructionId.Push => ExecutePush(frame, instruction.ValueOperand),
+                InstructionId.PushString => ExecutePushString(frame, instruction.TextOperand),
                 InstructionId.Pop => ExecutePop(frame),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
@@ -297,6 +300,21 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecutePush(CallFrame frame, DataValue value)
         {
             if (!evaluationStack.TryPush(value))
+                return Fault(RuntimeError.StackOverflow());
+
+            return AdvanceInstruction(frame);
+        }
+
+        private VMAdvanceResult ExecutePushString(CallFrame frame, string? value)
+        {
+            if (value == null)
+                return Fault(RuntimeError.InvalidInstruction("PushString requires a string literal."));
+
+            var heapObject = new StringHeapObject(value);
+            if (!Memory.TryAllocHeap(heapObject, out uint memoryReference))
+                return Fault(RuntimeError.OutOfMemory());
+
+            if (!evaluationStack.TryPush(DataValue.FromStringReference(memoryReference)))
                 return Fault(RuntimeError.StackOverflow());
 
             return AdvanceInstruction(frame);
@@ -373,19 +391,27 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.StackUnderflow());
             }
 
-            var dispatch = OperationDispatcher.Start(
-                operationId,
-                arguments,
-                Memory
-            );
+            activeOperationArguments = arguments;
+            try
+            {
+                var dispatch = OperationDispatcher.Start(
+                    operationId,
+                    arguments,
+                    Memory
+                );
 
-            return HandleOperationResult(
-                frame,
-                operationId,
-                arguments,
-                dispatch.ReceiverIndex,
-                dispatch.Result
-            );
+                return HandleOperationResult(
+                    frame,
+                    operationId,
+                    arguments,
+                    dispatch.ReceiverIndex,
+                    dispatch.Result
+                );
+            }
+            finally
+            {
+                activeOperationArguments = null;
+            }
         }
 
         /// <summary>
@@ -664,6 +690,56 @@ namespace DSExecution.VirtualMachine
             Debug.SpanStart = start;
             Debug.SpanEnd = end;
             return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Enumerates every heap reference currently owned by this VM for garbage collection.
+        /// OperationState is intentionally excluded by contract: continuation states must never own heap references.
+        /// </summary>
+        public IEnumerable<uint> EnumerateHeapReferences()
+        {
+            if (Status == VMExecutionStatus.Completed)
+            {
+                if (returnValue.TryGetHeapReference(out uint completedReference))
+                    yield return completedReference;
+                yield break;
+            }
+
+            if (Status != VMExecutionStatus.Running)
+                yield break;
+
+            foreach (DataValue value in evaluationStack.EnumerateValues())
+            {
+                if (value.TryGetHeapReference(out uint memoryReference))
+                    yield return memoryReference;
+            }
+
+            foreach (CallFrame frame in callStack)
+            {
+                foreach (DataValue value in frame.Locals.EnumerateValues())
+                {
+                    if (value.TryGetHeapReference(out uint memoryReference))
+                        yield return memoryReference;
+                }
+            }
+
+            if (pendingOperation != null)
+            {
+                foreach (DataValue value in pendingOperation.Arguments)
+                {
+                    if (value.TryGetHeapReference(out uint memoryReference))
+                        yield return memoryReference;
+                }
+            }
+
+            if (activeOperationArguments != null)
+            {
+                foreach (DataValue value in activeOperationArguments)
+                {
+                    if (value.TryGetHeapReference(out uint memoryReference))
+                        yield return memoryReference;
+                }
+            }
         }
 
         private static bool IsValidJumpTarget(CallFrame frame, int target)

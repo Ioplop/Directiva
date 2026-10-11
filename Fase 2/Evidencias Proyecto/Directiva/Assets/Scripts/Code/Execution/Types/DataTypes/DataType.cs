@@ -44,8 +44,8 @@ namespace DSExecution.DataTypes
             result[(int)DataTypeId.Bool] = DTBool.Instance;
             result[(int)DataTypeId.Int] = DTInt.Instance;
             result[(int)DataTypeId.Decimal] = DTDecimal.Instance;
+            result[(int)DataTypeId.String] = DTString.Instance;
             // Remaining to add...
-            // String
             // List
             // Set
             // Dict

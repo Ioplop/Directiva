@@ -20,7 +20,8 @@ namespace DSExecution.Errors
         InvalidGlobalAccess = 10,
         InvalidJumpTarget = 11,
         CallStackOverflow = 12,
-        InternalVmError = 13
+        InternalVmError = 13,
+        OutOfMemory = 14
     }
 
     /// <summary>
@@ -113,6 +114,12 @@ namespace DSExecution.Errors
             => new(
                 RuntimeErrorId.CallStackOverflow,
                 "Call stack overflow. TODO: Localize!"
+            );
+
+        public static RuntimeError OutOfMemory()
+            => new(
+                RuntimeErrorId.OutOfMemory,
+                "Directiva heap is out of memory. TODO: Localize!"
             );
 
         public static RuntimeError InternalVmError(string details)

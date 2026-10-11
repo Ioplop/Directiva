@@ -76,6 +76,7 @@ namespace Directiva.CodeUI
         private ScriptWorkspace _workspace;
         private VMExecutionController _executionController;
         private string _runningFunctionName;
+        private VMMemoryContext _runningMemory;
         private bool _runningDILDebugEnabled;
         private readonly Dictionary<string, HashSet<int>> _runningBreakpointsByModule =
             new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
@@ -618,6 +619,7 @@ namespace Directiva.CodeUI
                 _executionController.TotalAdvances,
                 _executionController.ElapsedMilliseconds);
             _runningFunctionName = null;
+            _runningMemory = null;
             _runningDILDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _executionController.BreakpointPredicate = null;
@@ -695,6 +697,7 @@ namespace Directiva.CodeUI
 
                 var vm = new DirectivaVM(code, entryFunction.Id);
                 _runningFunctionName = entryFunction.Name;
+                _runningMemory = vm.Memory;
                 _runningDILDebugEnabled = generateSourceMetadata;
                 _executionController.BreakpointPredicate =
                     _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
@@ -723,7 +726,7 @@ namespace Directiva.CodeUI
                 : _runningFunctionName;
 
             Output.Write(
-                $"[DIL] {functionName} retornó {FormatDataValue(returnValue)}"
+                $"[DIL] {functionName} retornó {FormatDataValue(returnValue, _runningMemory)}"
             );
 
             _topBar.SetExecutionMetrics(
@@ -731,6 +734,7 @@ namespace Directiva.CodeUI
                 _executionController.ElapsedMilliseconds);
 
             _runningFunctionName = null;
+            _runningMemory = null;
             _runningDILDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _executionController.BreakpointPredicate = null;
@@ -752,6 +756,7 @@ namespace Directiva.CodeUI
                 _executionController.ElapsedMilliseconds);
 
             _runningFunctionName = null;
+            _runningMemory = null;
             _runningDILDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _executionController.BreakpointPredicate = null;
@@ -820,7 +825,7 @@ namespace Directiva.CodeUI
             _editor?.SetExecutionLine(debug.Line + 1, ensureVisible: true);
         }
 
-        private static string FormatDataValue(DataValue value)
+        private static string FormatDataValue(DataValue value, VMMemoryContext memory)
         {
             switch (value.dataType)
             {
@@ -836,12 +841,33 @@ namespace Directiva.CodeUI
                 case DataTypeId.Decimal:
                     return FormatDecimalRaw(unchecked((long)value.value));
 
+                case DataTypeId.String:
+                    if (memory != null &&
+                        value.TryGetHeapReference(out uint stringReference) &&
+                        memory.TryGetHeap(stringReference, out HeapObject heapObject) &&
+                        heapObject is StringHeapObject stringObject)
+                    {
+                        return "\"" + EscapeStringForOutput(stringObject.Value) + "\"";
+                    }
+
+                    return $"String({value.value})";
+
                 case DataTypeId.Uninitialized:
                     return "<Uninitialized>";
 
                 default:
                     return $"{value.dataType}({value.value})";
             }
+        }
+
+        private static string EscapeStringForOutput(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r", "\\r")
+                .Replace("\n", "\\n")
+                .Replace("\t", "\\t");
         }
 
         private static string FormatDecimalRaw(long rawValue)

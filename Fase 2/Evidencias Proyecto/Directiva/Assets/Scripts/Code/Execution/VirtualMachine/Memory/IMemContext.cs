@@ -12,6 +12,11 @@ namespace DSExecution.VirtualMachine
 
         uint AllocHeap(HeapObject obj);
 
+        /// <summary>
+        /// Attempts an allocation, triggering the memory context's lazy GC before reporting failure.
+        /// </summary>
+        bool TryAllocHeap(HeapObject obj, out uint memRef);
+
         bool FreeHeap(uint memRef);
     }
 }
