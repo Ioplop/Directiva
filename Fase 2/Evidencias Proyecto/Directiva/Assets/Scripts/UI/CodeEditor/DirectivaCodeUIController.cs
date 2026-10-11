@@ -74,6 +74,7 @@ namespace Directiva.CodeUI
         private UIDocument _document;
         private IScriptStorage _storage;
         private ScriptWorkspace _workspace;
+        private EditorDocumentMetadataStore _editorMetadataStore;
         private VMExecutionController _executionController;
         private string _runningFunctionName;
         private VMMemoryContext _runningMemory;
@@ -96,6 +97,10 @@ namespace Directiva.CodeUI
 
         private bool _analysisPending;
         private float _analysisAt;
+
+        private string _activeMetadataPath;
+        private bool _editorMetadataDirty;
+        private float _editorMetadataFlushAt;
 
         private void OnValidate()
         {
@@ -137,6 +142,7 @@ namespace Directiva.CodeUI
             var scriptsRoot = Path.Combine(Application.persistentDataPath, "DirectivaScripts");
             _storage = new FileSystemScriptStorage(scriptsRoot);
             _storage.EnsureRoot();
+            _editorMetadataStore = new EditorDocumentMetadataStore(_storage.RootPath);
 
             _workspace = new ScriptWorkspace(_storage)
             {
@@ -166,6 +172,10 @@ namespace Directiva.CodeUI
         private void Update()
         {
             _workspace?.Tick(Time.unscaledTime);
+
+            if (_editorMetadataDirty && Time.unscaledTime >= _editorMetadataFlushAt)
+                FlushActiveEditorMetadata();
+
             _executionController?.Tick(executionStepsPerFrame);
             RefreshDILDebugHighlight();
 
@@ -178,6 +188,7 @@ namespace Directiva.CodeUI
 
         private void OnDisable()
         {
+            FlushActiveEditorMetadata();
             _workspace?.FlushActiveBackup();
             _executionController?.Stop();
             _editor?.ClearExecutionLine();
@@ -185,6 +196,7 @@ namespace Directiva.CodeUI
 
         private void OnApplicationQuit()
         {
+            FlushActiveEditorMetadata();
             _workspace?.FlushActiveBackup();
         }
 
@@ -292,6 +304,7 @@ namespace Directiva.CodeUI
             _editor.TextChanged += text =>
             {
                 _workspace.UpdateActiveWorkingContent(text);
+                MarkActiveEditorMetadataDirty();
                 RefreshTopBar();
                 ScheduleAnalysis();
             };
@@ -334,6 +347,8 @@ namespace Directiva.CodeUI
 
                 UpdateRunningBreakpoint(path, line, added);
             };
+
+            _topBar.EntryFunctionChanged += _ => MarkActiveEditorMetadataDirty();
 
             _topBar.SaveClicked += () =>
             {
@@ -379,14 +394,45 @@ namespace Directiva.CodeUI
 
         private void OnActiveChanged(ScriptWorkspace.ActiveDocument doc)
         {
+            var nextPath = doc?.RelativePath;
+            bool sameMetadataDocument =
+                !string.IsNullOrWhiteSpace(_activeMetadataPath) &&
+                !string.IsNullOrWhiteSpace(nextPath) &&
+                string.Equals(_activeMetadataPath, nextPath, StringComparison.OrdinalIgnoreCase);
+
+            if (!sameMetadataDocument)
+                FlushActiveEditorMetadata();
+
             if (doc == null)
             {
+                _activeMetadataPath = null;
                 _editor.ClearDocument();
+                _topBar.SetEntryFunctionName("main");
                 _topBar.SetDocument(null, false);
                 return;
             }
 
-            _editor.OpenDocument(doc.RelativePath, doc.WorkingContent, GetBreakpoints(doc.RelativePath));
+            EditorDocumentMetadata metadata = null;
+            if (!sameMetadataDocument)
+                metadata = _editorMetadataStore.Load(doc.RelativePath);
+
+            _activeMetadataPath = doc.RelativePath;
+
+            _editor.OpenDocument(
+                doc.RelativePath,
+                doc.WorkingContent,
+                GetBreakpoints(doc.RelativePath),
+                metadata?.undoHistory);
+
+            if (metadata != null)
+                _topBar.SetEntryFunctionName(metadata.entryFunction);
+
+            // Revert and path-remap can replace the active editor buffer without producing
+            // a normal TextChanged event. In that case the in-memory history may have gained
+            // a new state and must be persisted again. Keep the current fn: selection intact.
+            if (sameMetadataDocument)
+                MarkActiveEditorMetadataDirty();
+
             RefreshTopBar();
             ScheduleAnalysis();
             RefreshDILDebugHighlight();
@@ -394,6 +440,9 @@ namespace Directiva.CodeUI
 
         private void OnPathChanged(string oldPath, string newPath)
         {
+            _editor?.RemapDocumentHistory(oldPath, newPath);
+            _activeMetadataPath = RemapEditorPath(_activeMetadataPath, oldPath, newPath);
+
             if (_breakpoints.TryGetValue(oldPath, out var points))
             {
                 _breakpoints.Remove(oldPath);
@@ -401,6 +450,67 @@ namespace Directiva.CodeUI
             }
 
             RefreshCodebase();
+        }
+
+        private void MarkActiveEditorMetadataDirty()
+        {
+            if (string.IsNullOrWhiteSpace(_activeMetadataPath))
+                return;
+
+            _editorMetadataDirty = true;
+            _editorMetadataFlushAt = Time.unscaledTime + Mathf.Max(0.5f, backupIntervalSeconds);
+        }
+
+        private void FlushActiveEditorMetadata()
+        {
+            if (!_editorMetadataDirty ||
+                _editorMetadataStore == null ||
+                _editor == null ||
+                _topBar == null ||
+                string.IsNullOrWhiteSpace(_activeMetadataPath))
+            {
+                return;
+            }
+
+            try
+            {
+                var history = _editor.ExportDocumentHistory(_activeMetadataPath);
+                if (history == null)
+                    return;
+
+                _editorMetadataStore.Save(
+                    _activeMetadataPath,
+                    new EditorDocumentMetadata
+                    {
+                        entryFunction = _topBar.EntryFunctionName,
+                        undoHistory = history
+                    });
+
+                _editorMetadataDirty = false;
+            }
+            catch (Exception ex)
+            {
+                _editorMetadataDirty = false;
+                Debug.LogWarning($"Could not save editor metadata for '{_activeMetadataPath}': {ex.Message}");
+            }
+        }
+
+        private static string RemapEditorPath(string candidate, string oldPath, string newPath)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                return candidate;
+
+            candidate = candidate.Replace('\\', '/');
+            oldPath = (oldPath ?? string.Empty).Replace('\\', '/').TrimEnd('/');
+            newPath = (newPath ?? string.Empty).Replace('\\', '/').TrimEnd('/');
+
+            if (string.Equals(candidate, oldPath, StringComparison.OrdinalIgnoreCase))
+                return newPath;
+
+            var prefix = oldPath + "/";
+            return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? newPath + candidate.Substring(oldPath.Length)
+                : candidate;
         }
 
         private void RefreshTopBar()
@@ -533,6 +643,8 @@ namespace Directiva.CodeUI
                         new RefactorRequest(RefactorOperationKind.Delete, path, string.Empty));
 
                     Refactorer.Apply(Codebase, plan);
+
+                    _editor?.ForgetDocumentHistory(path, isFolder);
 
                     if (isFolder)
                         _workspace.DeleteFolder(path);

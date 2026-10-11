@@ -13,6 +13,7 @@ namespace Directiva.CodeUI
     {
         public const string ScriptExtension = ".dil";
         public const string BackupSuffix = ".back";
+        public const string EditorSuffix = ".editor";
 
         public string RootPath { get; }
 
@@ -121,11 +122,14 @@ namespace Directiva.CodeUI
         {
             var script = ToFullScript(relativeScriptPath);
             var backup = ToFullBackup(relativeScriptPath);
+            var editor = ToFullEditor(relativeScriptPath);
 
             if (File.Exists(script))
                 File.Delete(script);
             if (File.Exists(backup))
                 File.Delete(backup);
+            if (File.Exists(editor))
+                File.Delete(editor);
         }
 
         public void DeleteFolder(string relativeFolderPath)
@@ -140,6 +144,7 @@ namespace Directiva.CodeUI
             newBaseName = ValidateSimpleName(newBaseName);
             var oldFull = ToFullScript(relativeScriptPath);
             var oldBackup = ToFullBackup(relativeScriptPath);
+            var oldEditor = ToFullEditor(relativeScriptPath);
             var directory = Path.GetDirectoryName(oldFull)!;
 
             var fileName = newBaseName.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
@@ -148,12 +153,15 @@ namespace Directiva.CodeUI
 
             var newFull = EnsureInsideRoot(Path.Combine(directory, fileName));
             var newBackup = newFull + BackupSuffix;
+            var newEditor = newFull + EditorSuffix;
 
-            EnsureTargetFree(newFull, newBackup);
+            EnsureTargetFree(newFull, newBackup, newEditor);
             File.Move(oldFull, newFull);
 
             if (File.Exists(oldBackup))
                 File.Move(oldBackup, newBackup);
+            if (File.Exists(oldEditor))
+                File.Move(oldEditor, newEditor);
 
             return ToRelative(newFull);
         }
@@ -176,20 +184,24 @@ namespace Directiva.CodeUI
         {
             var oldFull = ToFullScript(relativeScriptPath);
             var oldBackup = ToFullBackup(relativeScriptPath);
+            var oldEditor = ToFullEditor(relativeScriptPath);
             var targetDir = ToFullDirectory(targetFolder);
             Directory.CreateDirectory(targetDir);
 
             var newFull = EnsureInsideRoot(Path.Combine(targetDir, Path.GetFileName(oldFull)));
             var newBackup = newFull + BackupSuffix;
+            var newEditor = newFull + EditorSuffix;
 
             if (PathsEqual(oldFull, newFull))
                 return ToRelative(oldFull);
 
-            EnsureTargetFree(newFull, newBackup);
+            EnsureTargetFree(newFull, newBackup, newEditor);
             File.Move(oldFull, newFull);
 
             if (File.Exists(oldBackup))
                 File.Move(oldBackup, newBackup);
+            if (File.Exists(oldEditor))
+                File.Move(oldEditor, newEditor);
 
             return ToRelative(newFull);
         }
@@ -274,6 +286,7 @@ namespace Directiva.CodeUI
         }
 
         private string ToFullBackup(string relativePath) => ToFullScript(relativePath) + BackupSuffix;
+        private string ToFullEditor(string relativePath) => ToFullScript(relativePath) + EditorSuffix;
 
         private string ToFullDirectory(string relativePath)
         {
@@ -347,10 +360,14 @@ namespace Directiva.CodeUI
                     !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
         }
 
-        private static void EnsureTargetFree(string scriptPath, string backupPath)
+        private static void EnsureTargetFree(string scriptPath, string backupPath, string editorPath = null)
         {
-            if (File.Exists(scriptPath) || File.Exists(backupPath))
+            if (File.Exists(scriptPath) ||
+                File.Exists(backupPath) ||
+                (!string.IsNullOrEmpty(editorPath) && File.Exists(editorPath)))
+            {
                 throw new DirectivaLocalizedException("Storage", "target_already_exists", Path.GetFileName(scriptPath));
+            }
         }
     }
 }

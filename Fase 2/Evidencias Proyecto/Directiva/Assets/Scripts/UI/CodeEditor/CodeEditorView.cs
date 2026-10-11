@@ -10,6 +10,8 @@ namespace Directiva.CodeUI
     public sealed class CodeEditorView : VisualElement
     {
         private const int TabSize = 4;
+        private const int UndoHistoryCapacity = 200;
+        private const float UndoMergeWindowSeconds = 0.75f;
 
         // The editor uses one deterministic coordinate model:
         // - padding is configured explicitly in pixels;
@@ -46,11 +48,17 @@ namespace Directiva.CodeUI
         private readonly Label _metricsProbe;
         private readonly TextField _textField;
         private readonly HashSet<int> _breakpoints = new HashSet<int>();
+        private readonly Dictionary<string, EditorUndoHistory> _undoHistories =
+            new Dictionary<string, EditorUndoHistory>(StringComparer.OrdinalIgnoreCase);
+
+        private EditorUndoHistory _activeUndoHistory;
 
         private ScrollView _internalScroll;
         private bool _textInputGeometryHooked;
         private bool _textInputKeyHooked;
         private bool _suppressChange;
+        private bool _historyApplying;
+        private bool _forceHistoryBoundaryNextChange;
         private int _executionLine = -1;
 
         public string DocumentPath { get; private set; } = string.Empty;
@@ -176,6 +184,23 @@ namespace Directiva.CodeUI
                         Mathf.Clamp(select, 0, length));
                 }
 
+                if (!_historyApplying && _activeUndoHistory != null)
+                {
+                    var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, normalized.Length);
+                    var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, normalized.Length);
+
+                    _activeUndoHistory.Record(
+                        normalized,
+                        cursor,
+                        select,
+                        _forceHistoryBoundaryNextChange,
+                        Time.realtimeSinceStartup,
+                        UndoMergeWindowSeconds);
+
+                    _forceHistoryBoundaryNextChange = false;
+                    ScheduleHistorySelectionRefresh();
+                }
+
                 UpdateInternalScrollContentSize();
                 RebuildGutter();
                 RebuildIndentGuides();
@@ -206,8 +231,22 @@ namespace Directiva.CodeUI
             SetTextWithoutNotify(string.Empty);
         }
 
-        public void OpenDocument(string path, string content, IEnumerable<int> breakpoints = null)
+        public void OpenDocument(
+            string path,
+            string content,
+            IEnumerable<int> breakpoints = null)
         {
+            OpenDocument(path, content, breakpoints, null);
+        }
+
+        internal void OpenDocument(
+            string path,
+            string content,
+            IEnumerable<int> breakpoints,
+            EditorUndoHistoryData persistedHistory)
+        {
+            CaptureActiveHistorySelection();
+
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -216,19 +255,45 @@ namespace Directiva.CodeUI
                 foreach (var line in breakpoints.Where(x => x > 0))
                     _breakpoints.Add(line);
 
+            var normalized = NormalizeLineEndings(content ?? string.Empty);
+            if (!_undoHistories.TryGetValue(DocumentPath, out _activeUndoHistory))
+            {
+                _activeUndoHistory = persistedHistory != null
+                    ? EditorUndoHistory.Import(persistedHistory, normalized, UndoHistoryCapacity)
+                    : new EditorUndoHistory(normalized, 0, 0, UndoHistoryCapacity);
+
+                _undoHistories[DocumentPath] = _activeUndoHistory;
+            }
+            else if (!string.Equals(_activeUndoHistory.Current.Text, normalized, StringComparison.Ordinal))
+            {
+                // External/editor-level buffer replacement (notably Revert) is kept as
+                // one undoable action instead of destroying the document history.
+                var previous = _activeUndoHistory.Current;
+                _activeUndoHistory.Record(
+                    normalized,
+                    Mathf.Clamp(previous.Cursor, 0, normalized.Length),
+                    Mathf.Clamp(previous.Select, 0, normalized.Length),
+                    true,
+                    Time.realtimeSinceStartup,
+                    UndoMergeWindowSeconds);
+            }
+
             SetEnabled(true);
-            SetTextWithoutNotify(content ?? string.Empty);
+            SetTextWithoutNotify(_activeUndoHistory.Current.Text);
 
             // Enabling the first document changes the internal TextField layout.
             // Recalculate on the next layout pass instead of trusting the geometry
             // that existed while the editor was disabled.
             SchedulePostLayoutRefresh();
+            ScheduleSelectionRestore(_activeUndoHistory.Current);
 
             _textField.Focus();
         }
 
         public void ClearDocument()
         {
+            CaptureActiveHistorySelection();
+            _activeUndoHistory = null;
             DocumentPath = string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -236,6 +301,67 @@ namespace Directiva.CodeUI
             RebuildGutter();
             RebuildIndentGuides();
             SetEnabled(false);
+        }
+
+        public void RemapDocumentHistory(string oldPath, string newPath)
+        {
+            oldPath = oldPath ?? string.Empty;
+            newPath = newPath ?? string.Empty;
+
+            var exact = _undoHistories.Keys
+                .Where(key => string.Equals(key, oldPath, StringComparison.OrdinalIgnoreCase) ||
+                              key.StartsWith(oldPath.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            foreach (var key in exact)
+            {
+                var history = _undoHistories[key];
+                _undoHistories.Remove(key);
+
+                var mapped = string.Equals(key, oldPath, StringComparison.OrdinalIgnoreCase)
+                    ? newPath
+                    : newPath.TrimEnd('/') + key.Substring(oldPath.TrimEnd('/').Length);
+
+                _undoHistories[mapped] = history;
+            }
+
+            if (!string.IsNullOrEmpty(DocumentPath) &&
+                (string.Equals(DocumentPath, oldPath, StringComparison.OrdinalIgnoreCase) ||
+                 DocumentPath.StartsWith(oldPath.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase)))
+            {
+                DocumentPath = string.Equals(DocumentPath, oldPath, StringComparison.OrdinalIgnoreCase)
+                    ? newPath
+                    : newPath.TrimEnd('/') + DocumentPath.Substring(oldPath.TrimEnd('/').Length);
+            }
+        }
+
+        public void ForgetDocumentHistory(string path, bool includeChildren)
+        {
+            path = path ?? string.Empty;
+            var prefix = path.TrimEnd('/') + "/";
+
+            foreach (var key in _undoHistories.Keys
+                         .Where(key => string.Equals(key, path, StringComparison.OrdinalIgnoreCase) ||
+                                       (includeChildren && key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                         .ToArray())
+            {
+                if (ReferenceEquals(_activeUndoHistory, _undoHistories[key]))
+                    _activeUndoHistory = null;
+
+                _undoHistories.Remove(key);
+            }
+        }
+
+        internal EditorUndoHistoryData ExportDocumentHistory(string path)
+        {
+            path ??= string.Empty;
+
+            if (string.Equals(DocumentPath, path, StringComparison.OrdinalIgnoreCase))
+                CaptureActiveHistorySelection();
+
+            return _undoHistories.TryGetValue(path, out var history)
+                ? history.Export()
+                : null;
         }
 
         public void SetTextWithoutNotify(string text)
@@ -328,6 +454,77 @@ namespace Directiva.CodeUI
             _executionLineHighlight.style.height = _lineHeight;
         }
 
+        public bool Undo()
+        {
+            if (_activeUndoHistory == null)
+                return false;
+
+            var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, Text.Length);
+            var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, Text.Length);
+            if (!_activeUndoHistory.TryUndo(cursor, select, out var snapshot))
+                return false;
+
+            ApplyHistorySnapshot(snapshot);
+            return true;
+        }
+
+        public bool Redo()
+        {
+            if (_activeUndoHistory == null)
+                return false;
+
+            var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, Text.Length);
+            var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, Text.Length);
+            if (!_activeUndoHistory.TryRedo(cursor, select, out var snapshot))
+                return false;
+
+            ApplyHistorySnapshot(snapshot);
+            return true;
+        }
+
+        private void ApplyHistorySnapshot(EditorUndoHistory.Snapshot snapshot)
+        {
+            _forceHistoryBoundaryNextChange = false;
+            _historyApplying = true;
+            _textField.value = snapshot.Text;
+            _historyApplying = false;
+            ScheduleSelectionRestore(snapshot);
+        }
+
+        private void CaptureActiveHistorySelection()
+        {
+            if (_activeUndoHistory == null)
+                return;
+
+            var length = Text.Length;
+            _activeUndoHistory.UpdateCurrentSelection(
+                Mathf.Clamp(_textField.textSelection.cursorIndex, 0, length),
+                Mathf.Clamp(_textField.textSelection.selectIndex, 0, length));
+        }
+
+        private void ScheduleHistorySelectionRefresh()
+        {
+            if (panel == null)
+                return;
+
+            schedule.Execute(CaptureActiveHistorySelection).ExecuteLater(1);
+        }
+
+        private void ScheduleSelectionRestore(EditorUndoHistory.Snapshot snapshot)
+        {
+            if (panel == null)
+                return;
+
+            schedule.Execute(() =>
+            {
+                var len = Text.Length;
+                _textField.textSelection.SelectRange(
+                    Mathf.Clamp(snapshot.Cursor, 0, len),
+                    Mathf.Clamp(snapshot.Select, 0, len));
+                _textField.Focus();
+            }).ExecuteLater(1);
+        }
+
         private void SchedulePostLayoutRefresh()
         {
             if (panel == null)
@@ -378,6 +575,8 @@ namespace Directiva.CodeUI
             // This keeps our manual indentation logic tied to the same selection state
             // that UI Toolkit uses to draw and edit the caret.
             input.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+            input.RegisterCallback<KeyUpEvent>(_ => CaptureActiveHistorySelection());
+            input.RegisterCallback<PointerUpEvent>(_ => CaptureActiveHistorySelection());
             _textInputKeyHooked = true;
         }
 
@@ -843,10 +1042,37 @@ namespace Directiva.CodeUI
 
         private void OnKeyDown(KeyDownEvent evt)
         {
+            var actionKey = evt.ctrlKey || evt.commandKey;
+
+            if (actionKey && evt.keyCode == KeyCode.Z)
+            {
+                evt.StopImmediatePropagation();
+                if (evt.shiftKey)
+                    Redo();
+                else
+                    Undo();
+                return;
+            }
+
+            if (actionKey && evt.keyCode == KeyCode.Y)
+            {
+                evt.StopImmediatePropagation();
+                Redo();
+                return;
+            }
+
+            // Paste/cut and line breaks should form their own undo action rather than
+            // merging into the surrounding run of normal typing.
+            if (actionKey && (evt.keyCode == KeyCode.V || evt.keyCode == KeyCode.X))
+                _forceHistoryBoundaryNextChange = true;
+            else if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
+                _forceHistoryBoundaryNextChange = true;
+
             if (evt.keyCode != KeyCode.Tab)
                 return;
 
             evt.StopImmediatePropagation();
+            _forceHistoryBoundaryNextChange = true;
 
             var text = NormalizeLineEndings(_textField.value);
             var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, text.Length);
@@ -942,6 +1168,7 @@ namespace Directiva.CodeUI
 
         private void ApplyEdit(string updated, int cursor, int select)
         {
+            _forceHistoryBoundaryNextChange = true;
             _textField.value = updated;
             schedule.Execute(() =>
             {

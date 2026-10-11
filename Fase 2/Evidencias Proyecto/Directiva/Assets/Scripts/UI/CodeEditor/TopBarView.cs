@@ -36,6 +36,7 @@ namespace Directiva.CodeUI
         public event Action StepClicked;
         public event Action BackClicked;
         public event Action OptionsClicked;
+        public event Action<string> EntryFunctionChanged;
 
         public string EntryFunctionName => (_entryFunction.value ?? string.Empty).Trim();
         public bool DebugDILEnabled => _debugDIL.value;
@@ -86,6 +87,8 @@ namespace Directiva.CodeUI
             _entryFunction.tooltip = "Nombre de la función DIL a ejecutar dentro del archivo seleccionado.";
             StyleEntryFunctionField();
             _entryFunction.RegisterCallback<AttachToPanelEvent>(_ => StyleEntryFunctionField());
+            _entryFunction.RegisterValueChangedCallback(evt =>
+                EntryFunctionChanged?.Invoke((evt.newValue ?? string.Empty).Trim()));
 
             _debugDIL = new Toggle("debug")
             {
@@ -231,6 +234,11 @@ namespace Directiva.CodeUI
             input.style.borderTopRightRadius = 2f;
             input.style.borderBottomLeftRadius = 2f;
             input.style.borderBottomRightRadius = 2f;
+        }
+
+        public void SetEntryFunctionName(string functionName)
+        {
+            _entryFunction.SetValueWithoutNotify(functionName ?? string.Empty);
         }
 
         public void RegisterTooltips(HoverTooltipController tooltips)
