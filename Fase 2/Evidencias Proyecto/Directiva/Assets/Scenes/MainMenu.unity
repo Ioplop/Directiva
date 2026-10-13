@@ -2288,9 +2288,10 @@ MonoBehaviour:
   gameTitle: DIRECTIVA
   levelsTitle: Niveles
   maxStars: 3
-  earnedStarSprite: {fileID: 0}
-  unearnedStarSprite: {fileID: 0}
+  earnedStarSprite: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
+  unearnedStarSprite: {fileID: 21300000, guid: df410db4b09efa347af780203cd59318, type: 3}
   lockedLevelSprite: {fileID: 0}
+  requiredStarsSprite: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
   appearance:
     screenOverlay: {r: 0, g: 0, b: 0, a: 0}
     frameBackground: {r: 0.105882354, g: 0.12941177, b: 0.1764706, a: 0.33333334}
@@ -2369,10 +2370,15 @@ MonoBehaviour:
   - 1920 x 1080
   - 2560 x 1440
   - 3840 x 2160
+  generalSectionTitle: 
+  controlsSectionTitle: 
+  audioSectionTitle: 
+  graphicsSectionTitle: 
   levels:
   - name: Funciones
     stars: 3
     locked: 0
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_01
     onBeforeLoad:
@@ -2381,6 +2387,7 @@ MonoBehaviour:
   - name: Operaciones
     stars: 3
     locked: 0
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_02
     onBeforeLoad:
@@ -2389,6 +2396,7 @@ MonoBehaviour:
   - name: MultiThreading
     stars: 2
     locked: 0
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_03
     onBeforeLoad:
@@ -2397,6 +2405,7 @@ MonoBehaviour:
   - name: Nivel 4
     stars: 0
     locked: 1
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_04
     onBeforeLoad:
@@ -2405,6 +2414,7 @@ MonoBehaviour:
   - name: Nivel 5
     stars: 0
     locked: 1
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_05
     onBeforeLoad:
@@ -2413,6 +2423,7 @@ MonoBehaviour:
   - name: Nivel 6
     stars: 0
     locked: 1
+    requiredStars: 0
     sceneName: BasicCoding
     launchId: level_06
     onBeforeLoad:
