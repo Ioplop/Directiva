@@ -1,0 +1,61 @@
+.dm-root { flex-grow: 1; background-color: rgba(0, 0, 0, 0); color: rgb(231, 236, 244); }
+.dm-page { flex-grow: 1; padding-top: 26px; padding-bottom: 26px; padding-left: 45px; padding-right: 45px; }
+.dm-frame { flex-grow: 1; border-top-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-right-width: 1px; border-top-color: rgb(67, 80, 106); border-bottom-color: rgb(67, 80, 106); border-left-color: rgb(67, 80, 106); border-right-color: rgb(67, 80, 106); border-top-left-radius: 20px; border-top-right-radius: 20px; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; background-color: rgba(27, 33, 45, 0.33); padding: 30px; }
+.dm-home { align-items: center; justify-content: center; }
+.dm-title { font-size: 67px; -unity-font-style: bold; color: rgb(233, 243, 255); margin-bottom: 54px; -unity-text-align: middle-center; }
+.dm-home-actions { width: 46%; min-width: 260px; max-width: 450px; }
+.dm-big-button { height: 57px; margin-bottom: 13px; font-size: 21px; }
+.dm-root Button { background-color: rgb(49, 61, 83); color: rgb(232, 240, 252); border-top-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-right-width: 1px; border-top-color: rgb(91, 109, 143); border-bottom-color: rgb(91, 109, 143); border-left-color: rgb(91, 109, 143); border-right-color: rgb(91, 109, 143); border-top-left-radius: 9px; border-top-right-radius: 9px; border-bottom-left-radius: 9px; border-bottom-right-radius: 9px; }
+.dm-root Button:hover { background-color: rgb(70, 91, 124); }
+.dm-root Button:active { background-color: rgb(43, 110, 171); }
+/* Options: fixed Back button and one vertically scrolling column of sections. */
+.dm-options { flex-direction: column; }
+.dm-options-header { flex-direction: row; align-items: center; flex-shrink: 0; margin-bottom: 14px; }
+.dm-back-button { height: 44px; min-width: 100px; margin-right: 22px; font-size: 17px; }
+.dm-options-scroll { flex-grow: 1; flex-shrink: 1; min-height: 0; }
+.dm-options-content { flex-direction: column; padding-left: 22px; padding-right: 22px; padding-top: 5px; padding-bottom: 25px; }
+.dm-options-section { margin-bottom: 28px; padding-bottom: 22px; border-bottom-width: 1px; border-bottom-color: rgba(106, 127, 152, 0.38); }
+.dm-options-section .dm-section-title { margin-top: 2px; }
+/* Thin scroll rail consistent with the code editor's 8px scrollbar. */
+.dm-options-scroll .unity-scroller--vertical { width: 8px; min-width: 8px; max-width: 8px; background-color: rgba(24, 27, 32, 0.6); padding-left: 1px; padding-right: 1px; padding-top: 2px; padding-bottom: 2px; }
+.dm-options-scroll .unity-scroller__low-button,
+.dm-options-scroll .unity-scroller__high-button { display: none; }
+.dm-options-scroll .unity-scroller__slider { background-color: rgba(0, 0, 0, 0); border-top-width: 0; border-bottom-width: 0; border-left-width: 0; border-right-width: 0; margin-top: 0; margin-bottom: 0; margin-left: 0; margin-right: 0; padding-top: 0; padding-bottom: 0; padding-left: 0; padding-right: 0; }
+.dm-options-scroll .unity-base-slider__tracker { background-color: rgba(31, 35, 41, 0.7); border-top-width: 0; border-bottom-width: 0; border-left-width: 0; border-right-width: 0; border-top-left-radius: 3px; border-top-right-radius: 3px; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+.dm-options-scroll .unity-base-slider__dragger { background-color: rgb(91, 98, 110); border-top-width: 0; border-bottom-width: 0; border-left-width: 0; border-right-width: 0; border-top-left-radius: 3px; border-top-right-radius: 3px; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+.dm-options-scroll .unity-base-slider__dragger:hover,
+.dm-options-scroll .unity-base-slider__dragger:active { background-color: rgb(126, 139, 157); }
+.dm-options-scroll .unity-scroller--vertical .unity-base-slider__tracker,
+.dm-options-scroll .unity-scroller--vertical .unity-base-slider__dragger { width: 5px; min-width: 5px; }
+.dm-volume-row { flex-direction: row; align-items: center; min-height: 66px; }
+.dm-volume-name { width: 42%; font-size: 19px; }
+.dm-value { width: 62px; font-size: 17px; -unity-text-align: middle-center; background-color: rgb(38, 44, 58); border-top-left-radius: 5px; border-top-right-radius: 5px; border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; padding: 8px; }
+.dm-slider { flex-grow: 1; margin-left: 17px; }
+.dm-section-title { font-size: 28px; -unity-font-style: bold; margin-bottom: 18px; }
+.dm-muted { color: rgb(147, 157, 177); font-size: 16px; }
+.dm-option-row { flex-direction: row; align-items: center; min-height: 67px; }
+.dm-option-name { width: 42%; font-size: 19px; }
+.dm-dropdown { flex-grow: 1; min-height: 39px; font-size: 17px; }
+.dm-dropdown .unity-base-popup-field__input { min-height: 38px; background-color: rgb(49, 61, 83); color: rgb(232, 240, 252); border-top-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-right-width: 1px; border-top-color: rgb(91, 109, 143); border-bottom-color: rgb(91, 109, 143); border-left-color: rgb(91, 109, 143); border-right-color: rgb(91, 109, 143); border-top-left-radius: 7px; border-top-right-radius: 7px; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px; }
+.dm-option-toggle-button { min-width: 220px; height: 44px; font-size: 17px; }
+/* Absolute children keep "Niveles" mathematically centered in the frame, regardless of back button width. */
+.dm-level-header { position: relative; height: 66px; flex-shrink: 0; margin-bottom: 25px; }
+.dm-level-title { position: absolute; left: 0; right: 0; top: 0; bottom: 0; font-size: 37px; -unity-font-style: bold; -unity-text-align: middle-center; }
+.dm-level-back-button { position: absolute; left: 0; top: 10px; margin-right: 0; }
+.dm-total-stars-with-icon { flex-direction: row; align-items: center; }
+.dm-total-star-icon { width: 27px; height: 27px; margin-right: 6px; flex-shrink: 0; }
+.dm-total-star-count { font-size: 27px; color: rgb(255, 206, 84); -unity-font-style: bold; }
+.dm-total-stars { position: absolute; right: 0; top: 15px; font-size: 27px; color: rgb(255, 206, 84); -unity-font-style: bold; }
+.dm-level-scroll { flex-grow: 1; }
+.dm-level-grid { flex-direction: row; flex-wrap: wrap; justify-content: space-around; align-content: flex-start; padding-top: 18px; }
+.dm-level-button { width: 43%; min-width: 210px; height: 78px; margin-bottom: 21px; flex-direction: row; align-items: center; justify-content: space-between; padding-left: 17px; padding-right: 17px; }
+.dm-level-name { font-size: 20px; }
+.dm-score { flex-direction: row; align-items: center; }
+.dm-score-sprite { width: 24px; height: 24px; margin-right: 1px; flex-shrink: 0; }
+.dm-stars { font-size: 24px; color: rgb(255, 199, 63); }
+.dm-lock { font-size: 21px; }
+.dm-root Button.dm-locked { background-color: rgb(37, 42, 52); opacity: 0.55; }
+
+/* Locked levels show a numeric requirement and an independently configurable icon. */
+.dm-required-stars-count { font-size: 21px; color: rgb(255, 199, 63); margin-right: 6px; }
+.dm-required-star-glyph { font-size: 24px; color: rgb(255, 199, 63); }
