@@ -112,7 +112,7 @@ namespace Directiva.MainMenu
         [SerializeField] private string mouseCaptureSettingLabel = "Atrapar el mouse";
 
         [Header("Resolution confirmation")]
-        [Tooltip("Time to confirm a selected resolution before returning to the saved value. Nothing is applied to Screen yet.")]
+        [Tooltip("Time to confirm a temporary screen resolution before automatically restoring the saved one.")]
         [SerializeField, Range(5, 30)] private int resolutionConfirmSeconds = 15;
 
         // Kept only so existing Unity scene data is not discarded by this upgrade.
@@ -150,7 +150,6 @@ namespace Directiva.MainMenu
         private Label resolutionCountdownLabel;
         private IVisualElementScheduledItem resolutionTimer;
         private Vector2Int? pendingResolution;
-        private float resolutionDeadline;
 
         private static Label Label(string text, string className = null)
         {
@@ -262,9 +261,15 @@ namespace Directiva.MainMenu
             resolutionTimer?.Pause();
             resolutionTimer = null;
             pendingResolution = null;
+            SettingsRuntimeApplier.CancelResolutionPreview();
         }
 
-        private void OnSettingsChanged(GameSettings _) => RefreshOptionValues();
+        private void OnSettingsChanged(GameSettings _)
+        {
+            if (pendingResolution.HasValue && !SettingsRuntimeApplier.IsResolutionPreviewActive)
+                CloseResolutionConfirmation();
+            RefreshOptionValues();
+        }
 
         private VisualElement BuildPage()
         {
@@ -326,6 +331,7 @@ namespace Directiva.MainMenu
         private void ShowScreen(VisualElement screen)
         {
             if (home == null || options == null || levelSelection == null || screen == null) return;
+            if (screen != options && pendingResolution.HasValue) CancelResolution();
             Show(screen);
         }
 
@@ -560,9 +566,16 @@ namespace Directiva.MainMenu
             if (selected.x == values.graphics.resolutionWidth && selected.y == values.graphics.resolutionHeight)
                 return;
 
+            if (!SettingsRuntimeApplier.TryPreviewResolution(selected.x, selected.y,
+                    Mathf.Max(5, resolutionConfirmSeconds)))
+            {
+                Debug.LogWarning("[Directiva Settings] Unable to preview selected resolution.");
+                RefreshResolutionChoices();
+                return;
+            }
+
             resolutionTimer?.Pause();
             pendingResolution = selected;
-            resolutionDeadline = Time.realtimeSinceStartup + Mathf.Max(5, resolutionConfirmSeconds);
             resolutionConfirmation.style.display = DisplayStyle.Flex;
             UpdateResolutionCountdown();
             resolutionTimer = resolutionConfirmation.schedule.Execute(UpdateResolutionCountdown).Every(100);
@@ -571,19 +584,20 @@ namespace Directiva.MainMenu
         private void UpdateResolutionCountdown()
         {
             if (!pendingResolution.HasValue) return;
-            int remaining = Mathf.CeilToInt(Mathf.Max(0, resolutionDeadline - Time.realtimeSinceStartup));
+            int remaining = Mathf.CeilToInt(SettingsRuntimeApplier.ResolutionPreviewSecondsRemaining);
             resolutionCountdownLabel.text = "Tiempo restante: " + remaining + " s";
-            if (remaining == 0) CancelResolution();
+            if (!SettingsRuntimeApplier.IsResolutionPreviewActive || remaining == 0)
+                CancelResolution();
         }
 
         private void ConfirmResolution()
         {
             if (!pendingResolution.HasValue) return;
-            Vector2Int selected = pendingResolution.Value;
+            bool confirmed = SettingsRuntimeApplier.ConfirmResolutionPreview();
             CloseResolutionConfirmation();
-            if (!SettingsManager.TrySetResolution(selected.x, selected.y))
+            if (!confirmed)
             {
-                Debug.LogWarning("[Directiva Settings] Selected display mode is no longer available.");
+                Debug.LogWarning("[Directiva Settings] Resolution preview expired or display mode became unavailable.");
                 SettingsManager.RefreshDisplayModes();
             }
             RefreshResolutionChoices();
@@ -592,6 +606,7 @@ namespace Directiva.MainMenu
 
         private void CancelResolution()
         {
+            SettingsRuntimeApplier.CancelResolutionPreview();
             CloseResolutionConfirmation();
             RefreshOptionValues();
         }

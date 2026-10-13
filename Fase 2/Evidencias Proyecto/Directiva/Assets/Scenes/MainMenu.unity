@@ -1827,14 +1827,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 839839094}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.35355338, y: 0.35355338, z: -0.1464466, w: 0.8535535}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1894798577}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 45, y: 45, z: 0}
 --- !u!4 &861642016 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3100465587175030614, guid: 5f4eaf791aebf8149baca8413acefd3e, type: 3}
@@ -2362,8 +2362,32 @@ MonoBehaviour:
       onClick:
         m_PersistentCalls:
           m_Calls: []
+    simulateWhenInactive:
+      label: Simular en ventana inactiva
+      executeDefaultAction: 1
+      onClick:
+        m_PersistentCalls:
+          m_Calls: []
+    confirmResolution:
+      label: "Conservar resoluci\xF3n"
+      executeDefaultAction: 1
+      onClick:
+        m_PersistentCalls:
+          m_Calls: []
+    revertResolution:
+      label: Revertir
+      executeDefaultAction: 1
+      onClick:
+        m_PersistentCalls:
+          m_Calls: []
   languageSettingLabel: Idioma
+  masterVolumeSettingLabel: Volumen general
+  musicVolumeSettingLabel: "Volumen de la m\xFAsica"
+  uiVolumeSettingLabel: Volumen de la interfaz
+  simulationVolumeSettingLabel: "Volumen de la partida / simulaci\xF3n"
   resolutionSettingLabel: "Resoluci\xF3n"
+  mouseCaptureSettingLabel: Atrapar el mouse
+  resolutionConfirmSeconds: 15
   resolutionChoices:
   - 1280 x 720
   - 1600 x 900
@@ -3542,13 +3566,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1894798576}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.35355338, y: 0.35355338, z: -0.1464466, w: 0.8535535}
-  m_LocalPosition: {x: -6.6, y: 9.58, z: -6.37}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 839839096}
-  m_LocalEulerAnglesHint: {x: 45, y: 45, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1894798578
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3635,7 +3659,7 @@ Camera:
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
-  orthographic: 1
+  orthographic: 0
   orthographic size: 10.78
   m_Depth: 0
   m_CullingMask:
