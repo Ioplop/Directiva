@@ -59,3 +59,12 @@
 /* Locked levels show a numeric requirement and an independently configurable icon. */
 .dm-required-stars-count { font-size: 21px; color: rgb(255, 199, 63); margin-right: 6px; }
 .dm-required-star-glyph { font-size: 24px; color: rgb(255, 199, 63); }
+
+/* Resolution confirmation is a UI-only staging dialog until graphics application is implemented. */
+.dm-options { position: relative; }
+.dm-resolution-overlay { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(11, 17, 26, 0.83); align-items: center; justify-content: center; }
+.dm-resolution-dialog { width: 72%; max-width: 620px; min-width: 300px; padding: 30px; align-items: center; background-color: rgb(32, 41, 55); border-top-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-right-width: 1px; border-top-color: rgb(91, 109, 143); border-bottom-color: rgb(91, 109, 143); border-left-color: rgb(91, 109, 143); border-right-color: rgb(91, 109, 143); border-top-left-radius: 14px; border-top-right-radius: 14px; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+.dm-resolution-question { font-size: 24px; -unity-font-style: bold; -unity-text-align: middle-center; margin-bottom: 12px; }
+.dm-resolution-countdown { margin-top: 20px; margin-bottom: 20px; font-size: 20px; color: rgb(250, 213, 116); }
+.dm-resolution-actions { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+.dm-resolution-button { min-width: 170px; height: 44px; margin-left: 8px; margin-right: 8px; margin-top: 5px; font-size: 16px; }

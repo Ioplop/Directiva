@@ -1,3 +1,5 @@
+> **Current settings implementation:** see [SETTINGS.md](SETTINGS.md). The notes below document earlier menu patches and some older sections describing visual-only options are superseded by SETTINGS.md.
+
 # Main Menu - primera implementacion
 
 ## Instalacion
