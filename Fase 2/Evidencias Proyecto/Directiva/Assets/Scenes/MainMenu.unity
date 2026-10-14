@@ -2284,6 +2284,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9d558405fd0843d6b6f1e7e9bf490588, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.MainMenu.MainMenuController
+  uiTheme: {fileID: 11400000, guid: 93251ec67b834b6287c7083839e23d73, type: 2}
   styleSheet: {fileID: 7433441132597879392, guid: 0e2d7cfafc694eba8961903876acfd67, type: 3}
   gameTitle: DIRECTIVA
   levelsTitle: Niveles
@@ -2403,7 +2404,7 @@ MonoBehaviour:
     stars: 3
     locked: 0
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_01
     onBeforeLoad:
       m_PersistentCalls:
@@ -2412,7 +2413,7 @@ MonoBehaviour:
     stars: 3
     locked: 0
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_02
     onBeforeLoad:
       m_PersistentCalls:
@@ -2421,7 +2422,7 @@ MonoBehaviour:
     stars: 2
     locked: 0
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_03
     onBeforeLoad:
       m_PersistentCalls:
@@ -2430,7 +2431,7 @@ MonoBehaviour:
     stars: 0
     locked: 1
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_04
     onBeforeLoad:
       m_PersistentCalls:
@@ -2439,7 +2440,7 @@ MonoBehaviour:
     stars: 0
     locked: 1
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_05
     onBeforeLoad:
       m_PersistentCalls:
@@ -2448,7 +2449,7 @@ MonoBehaviour:
     stars: 0
     locked: 1
     requiredStars: 0
-    sceneName: BasicCoding
+    sceneName: BaseSimulation
     launchId: level_06
     onBeforeLoad:
       m_PersistentCalls:

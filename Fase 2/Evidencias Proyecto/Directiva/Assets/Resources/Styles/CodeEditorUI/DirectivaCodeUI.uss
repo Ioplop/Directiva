@@ -581,9 +581,14 @@ Toggle {
 }
 
 .output-filter-toggle {
-    width: 20px;
-    min-width: 20px;
-    margin-right: 5px;
+    /* Give the 24px transparent Toggle input its full width, so no icon is
+       clipped on the right even with Unity's default field geometry. */
+    width: 26px;
+    min-width: 26px;
+    flex-shrink: 0;
+    margin-right: 6px;
+    padding-left: 0;
+    padding-right: 0;
 }
 
 .output-filter-label {
@@ -1057,4 +1062,34 @@ Toggle {
 .directiva-scroll-view .unity-scroller--horizontal .unity-base-slider__dragger {
     height: 5px;
     min-height: 5px;
+}
+
+/* v1.17: editor as a reusable, collapsible view inside a simulation host. */
+.explorer-collapse-toggle {
+    width: 25px;
+    min-width: 25px;
+    flex-shrink: 0;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+    background-color: rgb(37, 43, 54);
+    border-left-width: 1px;
+    border-left-color: rgb(74, 83, 101);
+}
+
+.explorer-collapse-toggle:hover {
+    background-color: rgb(55, 76, 102);
+}
+
+/* A narrow editor must not force its parent to expand horizontally. */
+.directiva-code-ui-root,
+.app-shell,
+.main-area {
+    min-width: 0;
+    min-height: 0;
+}
+
+.toolbar-row {
+    flex-wrap: wrap;
 }

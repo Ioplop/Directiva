@@ -1,12 +1,14 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Directiva.UI;
 
 namespace Directiva.CodeUI
 {
     public sealed class TopBarView : VisualElement
     {
         private readonly LocalizationService _locale;
+        private readonly DirectivaUIIcons _icons;
         private readonly IScriptExecutionStateProvider _executionState;
         private bool _hasDocument;
 
@@ -27,6 +29,8 @@ namespace Directiva.CodeUI
 
         private readonly Button _back;
         private readonly Button _options;
+        private readonly VisualElement _executionGroup;
+        private readonly VisualElement _navigationGroup;
 
         public event Action SaveClicked;
         public event Action RevertClicked;
@@ -43,9 +47,11 @@ namespace Directiva.CodeUI
 
         public TopBarView(
             LocalizationService locale,
-            IScriptExecutionStateProvider executionState)
+            IScriptExecutionStateProvider executionState,
+            DirectivaUITheme theme = null)
         {
             _locale = locale;
+            _icons = theme?.icons;
             _executionState = executionState;
             AddToClassList("top-area");
 
@@ -70,6 +76,7 @@ namespace Directiva.CodeUI
 
             var execution = new VisualElement();
             execution.AddToClassList("toolbar-group");
+            _executionGroup = execution;
 
             var entryLabel = new Label("fn:");
             entryLabel.style.unityTextAlign = UnityEngine.TextAnchor.MiddleCenter;
@@ -103,6 +110,7 @@ namespace Directiva.CodeUI
             _debugDIL.tooltip =
                 "Inyecta metadata DEBUG_* al parsear DIL para mostrar la línea que ejecuta la VM. " +
                 "No modifica el archivo.";
+            UIIconView.SetToggle(_debugDIL, _icons?.checkedBox, _icons?.uncheckedBox);
 
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
@@ -158,6 +166,7 @@ namespace Directiva.CodeUI
 
             var navigation = new VisualElement();
             navigation.AddToClassList("toolbar-group");
+            _navigationGroup = navigation;
             _back = new Button(() => BackClicked?.Invoke());
             _options = new Button(() => OptionsClicked?.Invoke());
 
@@ -184,6 +193,18 @@ namespace Directiva.CodeUI
 
             RefreshLocale();
             SetDocument(null, false);
+        }
+
+        /// <summary>Only changes toolbar presentation; VM state remains untouched.</summary>
+        public void SetCompactLayout(bool compact)
+        {
+            _executionGroup.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
+        /// <summary>Hide duplicate navigation when the outer host owns scene navigation.</summary>
+        public void SetHosted(bool hosted)
+        {
+            _navigationGroup.style.display = hosted ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private void StyleEntryFunctionField()
@@ -327,20 +348,20 @@ namespace Directiva.CodeUI
 
         private void RefreshLocale()
         {
-            _save.text = "✓";
-            _revert.text = "↶";
+            UIIconView.SetButton(_save, _icons?.save);
+            UIIconView.SetButton(_revert, _icons?.revert);
 
             _save.tooltip = _locale.Get("Common", "save");
             _revert.tooltip = _locale.Get("Common", "revert");
 
-            _stop.text = "■";
-            _pause.text = "Ⅱ";
-            _continue.text = "▶";
+            UIIconView.SetButton(_stop, _icons?.stop);
+            UIIconView.SetButton(_pause, _icons?.pause);
+            UIIconView.SetButton(_continue, _icons?.play);
 
             // DIL currently supports simple single-step; Step In / Step Out remain reserved for DScript.
-            _step.text = "↷";
-            _stepIn.text = "↓";
-            _stepOut.text = "↑";
+            UIIconView.SetButton(_step, _icons?.step);
+            UIIconView.SetButton(_stepIn, _icons?.stepIn);
+            UIIconView.SetButton(_stepOut, _icons?.stepOut);
 
             _stop.tooltip = _locale.Get("Common", "stop");
             _pause.tooltip = _locale.Get("Common", "pause");
@@ -349,10 +370,8 @@ namespace Directiva.CodeUI
             _stepIn.tooltip = _locale.Get("Common", "step_in");
             _stepOut.tooltip = _locale.Get("Common", "step_out");
 
-            _back.text = "←";
-
-            // U+FE0E asks for text presentation instead of a colored emoji glyph where supported.
-            _options.text = "⚙︎";
+            UIIconView.SetButton(_back, _icons?.back);
+            UIIconView.SetButton(_options, _icons?.options);
 
             _back.tooltip = _locale.Get("Common", "back");
             _options.tooltip = _locale.Get("Common", "options");

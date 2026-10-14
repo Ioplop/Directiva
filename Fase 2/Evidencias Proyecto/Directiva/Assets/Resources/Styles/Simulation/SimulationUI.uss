@@ -1,0 +1,174 @@
+/* One transparent UI Toolkit panel in front of the 3D camera. */
+.sim-ui-root {
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(238, 242, 248);
+}
+.sim-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+.sim-hud {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    right: 18px;
+    min-height: 45px;
+    flex-direction: row;
+    align-items: center;
+}
+.sim-controls {
+    flex-direction: row;
+    align-items: center;
+    min-height: 43px;
+    padding-left: 7px;
+    padding-right: 7px;
+    margin-left: 12px;
+    background-color: rgba(23, 30, 43, 0.90);
+    border-width: 1px;
+    border-color: rgb(85, 107, 136);
+    border-radius: 8px;
+}
+.sim-control-button {
+    min-width: 44px;
+    height: 30px;
+    margin-left: 2px;
+    margin-right: 2px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-width: 1px;
+    border-color: rgb(81, 101, 128);
+    border-radius: 5px;
+    background-color: rgb(46, 58, 77);
+    color: rgb(246, 248, 253);
+    -unity-text-align: middle-center;
+    font-size: 13px;
+}
+.sim-control-button:hover, .sim-menu-button:hover, .sim-editor-header-button:hover,
+.sim-editor-tab:hover {
+    background-color: rgb(67, 100, 142);
+}
+.sim-control-button.sim-selected {
+    background-color: rgb(36, 105, 157);
+    border-color: rgb(105, 173, 234);
+}
+.sim-control-separator {
+    width: 1px;
+    height: 24px;
+    margin-left: 8px;
+    margin-right: 8px;
+    background-color: rgb(81, 101, 128);
+}
+.sim-status {
+    margin-left: 14px;
+    color: rgb(188, 201, 219);
+    -unity-text-align: middle-left;
+}
+.sim-menu-button {
+    height: 43px;
+    min-width: 94px;
+    margin-left: auto;
+    border-width: 1px;
+    border-color: rgb(85, 107, 136);
+    border-radius: 8px;
+    background-color: rgba(23, 30, 43, 0.90);
+    color: rgb(245, 246, 250);
+}
+/* Editor toggle occupies the former level-title slot in the global HUD.
+   It stays in flow in all three editor modes; no floating side tab. */
+.sim-editor-tab {
+    width: 160px;
+    min-width: 160px;
+    height: 43px;
+    flex-shrink: 0;
+    padding: 4px;
+    background-color: rgba(23, 30, 43, 0.90);
+    border-width: 1px;
+    border-color: rgb(85, 107, 136);
+    border-radius: 8px;
+    color: rgb(244, 247, 253);
+    -unity-text-align: middle-center;
+}
+.sim-editor-tab.sim-editor-tab-active {
+    border-color: rgb(105, 173, 234);
+    background-color: rgba(36, 74, 106, 0.96);
+}
+.sim-editor-pane {
+    position: absolute;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    background-color: rgba(18, 22, 29, 0.97);
+    border-width: 1px;
+    border-color: rgb(83, 110, 145);
+    border-radius: 8px;
+}
+.sim-editor-pane.sim-editor-fullscreen {
+    border-width: 0;
+    border-radius: 0;
+    background-color: rgba(18, 22, 29, 0.98);
+}
+.sim-editor-header {
+    min-height: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: rgb(32, 41, 55);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(90, 106, 128);
+}
+.sim-editor-header-button {
+    height: 27px;
+    margin-left: 5px;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: rgb(47, 60, 81);
+    border-width: 1px;
+    border-color: rgb(91, 112, 144);
+    border-radius: 5px;
+    color: rgb(245, 248, 251);
+}
+.sim-editor-header-button {
+    width: 34px;
+    padding-left: 0;
+    padding-right: 0;
+    -unity-text-align: middle-center;
+}
+.sim-editor-mount {
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
+}
+.sim-editor-resize {
+    position: absolute;
+    width: 8px;
+    right: 0;
+    top: 40px;
+    bottom: 0;
+    background-color: rgba(83, 101, 126, 0.70);
+}
+.sim-editor-resize:hover, .sim-editor-resize.sim-resizing {
+    background-color: rgb(102, 169, 239);
+}
+
+/* Global HUD and navigation remain visible above the fullscreen editor. */
+.sim-menu-button {
+    position: absolute;
+    right: 18px;
+    top: 14px;
+    margin-left: 0;
+    height: 42px;
+    min-width: 112px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+.sim-hud { right: 150px; }

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Directiva.UI;
 
 namespace Directiva.CodeUI
 {
@@ -19,6 +20,7 @@ namespace Directiva.CodeUI
         private readonly IScriptStorage _storage;
         private readonly ScriptWorkspace _workspace;
         private readonly LocalizationService _locale;
+        private readonly DirectivaUIIcons _icons;
 
         private readonly VisualElement _toolbar;
         private readonly Button _newScript;
@@ -60,11 +62,13 @@ namespace Directiva.CodeUI
             ScriptWorkspace workspace,
             LocalizationService locale,
             VisualElement popupLayer,
-            float fontSize)
+            float fontSize,
+            DirectivaUITheme theme = null)
         {
             _storage = storage;
             _workspace = workspace;
             _locale = locale;
+            _icons = theme?.icons;
             _popupLayer = popupLayer;
             _fontSize = Mathf.Clamp(fontSize, MinimumFontSize, MaximumFontSize);
 
@@ -216,10 +220,8 @@ namespace Directiva.CodeUI
 
         private void RefreshLocale()
         {
-            // Reuse the same visual vocabulary used by the tree:
-            // "≡" means script and "▰" means folder.
-            _newScript.text = "＋≡";
-            _newFolder.text = "＋▰";
+            UIIconView.SetButton(_newScript, _icons?.addScript);
+            UIIconView.SetButton(_newFolder, _icons?.addFolder);
 
             _newScript.tooltip = _locale.Get("ScriptExplorer", "new_script");
             _newFolder.tooltip = _locale.Get("ScriptExplorer", "new_folder");
@@ -265,7 +267,7 @@ namespace Directiva.CodeUI
             if (hasError && dirty)
                 state.AddToClassList("state-dirty-dot");
 
-            var typeIcon = new Label("▰");
+            var typeIcon = UIIconView.Create(_icons?.folder);
             typeIcon.AddToClassList("tree-type-icon");
             typeIcon.style.fontSize = _fontSize;
             typeIcon.AddToClassList("folder-icon");
@@ -328,7 +330,8 @@ namespace Directiva.CodeUI
             });
 
             toggle.AddToClassList("tree-toggle");
-            toggle.text = _expanded.Contains(path) ? "▼" : "▶";
+            UIIconView.SetButton(toggle,
+                _expanded.Contains(path) ? _icons?.arrowDown : _icons?.arrowRight, 13f);
 
             _tooltips?.Register(
                 toggle,
@@ -358,10 +361,12 @@ namespace Directiva.CodeUI
 
             if (_workspace.IsDirty(path))
             {
-                var save = new Button(() => SaveQuickRequested?.Invoke(path)) { text = "✓" };
+                var save = new Button(() => SaveQuickRequested?.Invoke(path));
+                UIIconView.SetButton(save, _icons?.save, 15f);
                 save.AddToClassList("tree-mini-button");
 
-                var revert = new Button(() => RevertQuickRequested?.Invoke(path)) { text = "↶" };
+                var revert = new Button(() => RevertQuickRequested?.Invoke(path));
+                UIIconView.SetButton(revert, _icons?.revert, 15f);
                 revert.AddToClassList("tree-mini-button");
 
                 _tooltips?.Register(
@@ -401,7 +406,7 @@ namespace Directiva.CodeUI
             if (hasError && dirty)
                 state.AddToClassList("state-dirty-dot");
 
-            var typeIcon = new Label(isFolder ? "▰" : "≡");
+            var typeIcon = UIIconView.Create(isFolder ? _icons?.folder : _icons?.script);
             typeIcon.AddToClassList("tree-type-icon");
             typeIcon.style.fontSize = _fontSize;
             typeIcon.AddToClassList(isFolder ? "folder-icon" : "script-icon");
@@ -568,10 +573,17 @@ namespace Directiva.CodeUI
         {
             HideContextMenu();
 
+            // PointerDownEvent.position is in panel coordinates. The popup layer is
+            // local to the editor container, which may be docked beneath a HUD,
+            // resized, or hosted in a standalone scene. Convert between spaces
+            // instead of assuming that the editor starts at the panel origin.
+            var localPosition = _popupLayer.WorldToLocal(new Vector2(position.x, position.y));
+
             _contextMenu = new VisualElement();
             _contextMenu.AddToClassList("context-menu");
-            _contextMenu.style.left = position.x;
-            _contextMenu.style.top = position.y;
+            _contextMenu.style.left = localPosition.x;
+            _contextMenu.style.top = localPosition.y;
+            _contextMenu.style.visibility = Visibility.Hidden;
 
             var rename = new Button(() =>
             {
@@ -595,7 +607,23 @@ namespace Directiva.CodeUI
             _contextMenu.Add(duplicate);
             _contextMenu.Add(delete);
 
-            _popupLayer.Add(_contextMenu);
+            var menu = _contextMenu;
+            _popupLayer.Add(menu);
+
+            // The menu's final size is only known after layout. Place it within
+            // the available editor area before showing it, so menus opened near
+            // the right/bottom edges remain fully visible without flashing.
+            menu.schedule.Execute(() =>
+            {
+                if (!ReferenceEquals(_contextMenu, menu))
+                    return;
+
+                var maxX = Mathf.Max(0f, _popupLayer.contentRect.width - menu.resolvedStyle.width);
+                var maxY = Mathf.Max(0f, _popupLayer.contentRect.height - menu.resolvedStyle.height);
+                menu.style.left = Mathf.Clamp(localPosition.x, 0f, maxX);
+                menu.style.top = Mathf.Clamp(localPosition.y, 0f, maxY);
+                menu.style.visibility = Visibility.Visible;
+            }).ExecuteLater(1);
         }
 
         private void PromptRename(string path, bool isFolder)

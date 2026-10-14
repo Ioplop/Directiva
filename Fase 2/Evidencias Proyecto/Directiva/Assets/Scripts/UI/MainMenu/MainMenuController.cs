@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Events;
 using UnityEngine.UIElements;
 using Directiva.Settings;
+using Directiva.UI;
 
 namespace Directiva.MainMenu
 {
@@ -76,25 +77,25 @@ namespace Directiva.MainMenu
     [RequireComponent(typeof(UIDocument))]
     public sealed class MainMenuController : MonoBehaviour
     {
+        [Header("Shared UI Theme")]
+        [SerializeField] private DirectivaUITheme uiTheme;
+
         [Header("Presentation")]
         [SerializeField] private StyleSheet styleSheet;
         [SerializeField] private string gameTitle = "DIRECTIVA";
         [SerializeField] private string levelsTitle = "Niveles";
         [SerializeField] private int maxStars = 3;
 
-        [Header("Level icons (optional sprites)")]
-        [Tooltip("Image for earned stars, including the total counter. None uses the original filled-star glyph.")]
-        [SerializeField] private Sprite earnedStarSprite;
-
-        [Tooltip("Image for unearned stars. None uses the original empty-star glyph.")]
-        [SerializeField] private Sprite unearnedStarSprite;
+        // Legacy serialized values remain hidden for non-destructive migration.
+        // Assign new icons in DirectivaUITheme instead. No character fallback is used.
+        [HideInInspector, SerializeField] private Sprite earnedStarSprite;
+        [HideInInspector, SerializeField] private Sprite unearnedStarSprite;
 
         // Keep the old reference serialized so a project update does not discard assigned assets.
         // The lock itself is no longer displayed; users can assign the new sprite independently.
         [HideInInspector, SerializeField] private Sprite lockedLevelSprite;
 
-        [Tooltip("Sprite displayed beside the star requirement on locked levels. None uses the filled star glyph (★). Independent of Earned Star Sprite.")]
-        [SerializeField] private Sprite requiredStarsSprite;
+        [HideInInspector, SerializeField] private Sprite requiredStarsSprite;
 
         [Header("3D backdrop / tint colors (alpha supported)")]
         [SerializeField] private MainMenuAppearance appearance = new MainMenuAppearance();
@@ -129,6 +130,7 @@ namespace Directiva.MainMenu
         [Header("Levels (editable from the Inspector)")]
         [SerializeField] private List<LevelMenuEntry> levels = new List<LevelMenuEntry>();
 
+        private DirectivaUITheme _theme;
         private UIDocument document;
         private VisualElement root;
         private VisualElement home;
@@ -217,19 +219,33 @@ namespace Directiva.MainMenu
         }
 
         /// <summary>Uses a UI Toolkit Image when a sprite is provided; otherwise keeps the original glyph.</summary>
-        private static VisualElement CreateLevelIcon(Sprite sprite, string fallbackGlyph,
-            string fallbackClass, string spriteClass)
+        private Sprite GetIcon(Sprite fromTheme, Sprite previouslyAssigned)
         {
-            if (sprite == null) return Label(fallbackGlyph, fallbackClass);
+            // Preserve sprites already stored in users' existing scenes. With no
+            // theme icon AND no previous sprite, the slot is deliberately blank.
+            return fromTheme != null ? fromTheme : previouslyAssigned;
+        }
 
-            var icon = new Image { sprite = sprite, scaleMode = ScaleMode.ScaleToFit };
-            icon.AddToClassList(spriteClass);
-            icon.pickingMode = PickingMode.Ignore;
-            return icon;
+        private Button CreateBackButton(MainMenuButtonAction action, Action onBack)
+        {
+            string caption = ButtonText(action, "Atrás").TrimStart('‹', ' ');
+            var button = CreateButton(caption,
+                () => TriggerButton(action, onBack), "dm-back-button");
+            Sprite sprite = _theme?.icons?.back;
+            if (sprite != null)
+            {
+                var icon = UIIconView.Create(sprite, "dm-back-icon");
+                button.Insert(0, icon);
+                button.style.flexDirection = FlexDirection.Row;
+                button.style.alignItems = Align.Center;
+                button.style.justifyContent = Justify.Center;
+            }
+            return button;
         }
 
         private void OnEnable()
         {
+            _theme = DirectivaUITheme.Resolve(uiTheme);
             if (appearance == null) appearance = new MainMenuAppearance();
             if (buttons == null) buttons = new MainMenuButtonActions();
             if (buttons.fullScreen == null) buttons.fullScreen = new MainMenuButtonAction("Pantalla completa");
@@ -247,6 +263,7 @@ namespace Directiva.MainMenu
             root.Clear();
             if (styleSheet != null && !root.styleSheets.Contains(styleSheet)) root.styleSheets.Add(styleSheet);
             root.AddToClassList("dm-root");
+            _theme?.ApplyInterfaceFont(root);
             root.style.backgroundColor = appearance != null ? appearance.screenOverlay : Color.clear;
             BuildHome();
             BuildOptions();
@@ -300,7 +317,22 @@ namespace Directiva.MainMenu
         {
             home = BuildPage();
             home.AddToClassList("dm-home");
-            home.Add(Label(gameTitle, "dm-title"));
+            // Prefer the shared-theme logo, but keep the existing text if none is assigned.
+            // ScaleToFit ensures that even very wide logos are never distorted.
+            Sprite logoSprite = _theme != null ? _theme.mainMenuLogo : null;
+            if (logoSprite != null)
+            {
+                var logo = UIIconView.Create(logoSprite, "dm-main-logo");
+                if (_theme.mainMenuLogoHeight > 0f)
+                    logo.style.height = _theme.mainMenuLogoHeight;
+                if (_theme.mainMenuLogoMaxWidth > 0f)
+                    logo.style.maxWidth = _theme.mainMenuLogoMaxWidth;
+                home.Add(logo);
+            }
+            else
+            {
+                home.Add(Label(gameTitle, "dm-title"));
+            }
             var actions = Container("dm-home-actions");
             actions.Add(CreateButton(ButtonText(buttons?.play, "Jugar"), () => TriggerButton(buttons?.play, ShowLevelsScreen), "dm-big-button"));
             actions.Add(CreateButton(ButtonText(buttons?.options, "Opciones"), () => TriggerButton(buttons?.options, ShowOptionsScreen), "dm-big-button"));
@@ -352,8 +384,7 @@ namespace Directiva.MainMenu
 
             // Only the content scrolls; Back stays fixed at the top.
             var header = Container("dm-options-header");
-            header.Add(CreateButton(ButtonText(buttons?.backFromOptions, "‹ Atrás"),
-                () => TriggerButton(buttons?.backFromOptions, ShowHomeScreen), "dm-back-button"));
+            header.Add(CreateBackButton(buttons?.backFromOptions, ShowHomeScreen));
             options.Add(header);
 
             optionsScroll = new ScrollView(ScrollViewMode.Vertical)
@@ -628,27 +659,18 @@ namespace Directiva.MainMenu
             var title = Label(TextOrDefault(levelsTitle, "Niveles"), "dm-level-title");
             title.pickingMode = PickingMode.Ignore;
             header.Add(title);
-            var back = CreateButton(ButtonText(buttons?.backFromLevels, "‹ Atrás"),
-                () => TriggerButton(buttons?.backFromLevels, ShowHomeScreen), "dm-back-button");
+            var back = CreateBackButton(buttons?.backFromLevels, ShowHomeScreen);
             back.AddToClassList("dm-level-back-button");
             header.Add(back);
-            if (earnedStarSprite == null)
-            {
-                // Keep the original single-label appearance when no custom sprite is supplied.
-                starTotal = Label("\u2605 0", "dm-total-stars");
-                header.Add(starTotal);
-            }
-            else
-            {
-                // A separate icon allows the badge to use exactly the same sprite as earned stars.
-                var totalBadge = Container("dm-total-stars");
-                totalBadge.AddToClassList("dm-total-stars-with-icon");
-                totalBadge.pickingMode = PickingMode.Ignore;
-                totalBadge.Add(CreateLevelIcon(earnedStarSprite, "\u2605", "dm-total-stars", "dm-total-star-icon"));
-                starTotal = Label("0", "dm-total-star-count");
-                totalBadge.Add(starTotal);
-                header.Add(totalBadge);
-            }
+            // The counter retains its number even when the sprite is not assigned.
+            var totalBadge = Container("dm-total-stars");
+            totalBadge.AddToClassList("dm-total-stars-with-icon");
+            totalBadge.pickingMode = PickingMode.Ignore;
+            totalBadge.Add(UIIconView.Create(
+                GetIcon(_theme?.icons?.earnedStar, earnedStarSprite), "dm-total-star-icon"));
+            starTotal = Label("0", "dm-total-star-count");
+            totalBadge.Add(starTotal);
+            header.Add(totalBadge);
             starTotal.pickingMode = PickingMode.Ignore;
             levelSelection.Add(header);
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -672,8 +694,8 @@ namespace Directiva.MainMenu
                         ? entry.requiredStars
                         : i * Mathf.Max(0, maxStars);
                     score.Add(Label(required.ToString(), "dm-required-stars-count"));
-                    score.Add(CreateLevelIcon(requiredStarsSprite, "\u2605",
-                        "dm-required-star-glyph", "dm-score-sprite"));
+                    score.Add(UIIconView.Create(
+                        GetIcon(_theme?.icons?.requiredStar, requiredStarsSprite), "dm-score-sprite"));
                 }
                 else
                 {
@@ -687,38 +709,27 @@ namespace Directiva.MainMenu
             UpdateStars();
         }
 
-        /// <summary>Displays earned and unearned stars, independently falling back to the original glyphs.</summary>
+        /// <summary>Displays icon slots using assigned sprites only, never Unicode glyphs.</summary>
         private void AddScoreStars(VisualElement score, int count)
         {
-            // No overrides: preserve the existing compact text rendering exactly.
-            if (earnedStarSprite == null && unearnedStarSprite == null)
-            {
-                score.Add(Label(Stars(count), "dm-stars"));
-                return;
-            }
-
             int slots = Mathf.Max(0, maxStars);
             int earned = Mathf.Clamp(count, 0, slots);
             for (int i = 0; i < slots; i++)
             {
-                bool isEarned = i < earned;
-                score.Add(CreateLevelIcon(isEarned ? earnedStarSprite : unearnedStarSprite,
-                    isEarned ? "\u2605" : "\u2606", "dm-stars", "dm-score-sprite"));
+                Sprite icon = i < earned
+                    ? GetIcon(_theme?.icons?.earnedStar, earnedStarSprite)
+                    : GetIcon(_theme?.icons?.unearnedStar, unearnedStarSprite);
+                score.Add(UIIconView.Create(icon, "dm-score-sprite"));
             }
-        }
-
-        private string Stars(int count)
-        {
-            return new string('\u2605', Mathf.Clamp(count, 0, Mathf.Max(0, maxStars))) +
-                   new string('\u2606', Mathf.Max(0, maxStars - Mathf.Clamp(count, 0, Mathf.Max(0, maxStars))));
         }
 
         private void UpdateStars()
         {
             if (starTotal == null) return;
             int total = 0;
-            foreach (var entry in levels) if (entry != null && !entry.locked) total += Mathf.Max(0, entry.stars);
-            starTotal.text = earnedStarSprite == null ? "\u2605 " + total : total.ToString();
+            foreach (var entry in levels)
+                if (entry != null && !entry.locked) total += Mathf.Max(0, entry.stars);
+            starTotal.text = total.ToString();
         }
 
         private void Load(LevelMenuEntry entry)
@@ -738,7 +749,7 @@ namespace Directiva.MainMenu
             try
             {
                 entry.onBeforeLoad?.Invoke();
-                LevelLaunchContext.SetPending(entry.launchId);
+                LevelLaunchContext.SetPending(entry.launchId, entry.name);
                 SceneManager.LoadScene(entry.sceneName);
             }
             catch (Exception exception)

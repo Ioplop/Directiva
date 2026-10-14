@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
+using Directiva.UI;
 
 namespace Directiva.CodeUI
 {
@@ -26,6 +27,7 @@ namespace Directiva.CodeUI
 
         private readonly FontAsset _normalFont;
         private readonly FontAsset _boldFont;
+        private readonly Sprite _breakpointSprite;
 
         private float _fontSize;
         private float _paddingLeftPx;
@@ -77,10 +79,12 @@ namespace Directiva.CodeUI
             float paddingTopPx,
             float paddingRightPx,
             float paddingBottomPx,
-            float indentGuideFineOffsetPx)
+            float indentGuideFineOffsetPx,
+            Sprite breakpointSprite = null)
         {
             _normalFont = normalFont;
             _boldFont = boldFont;
+            _breakpointSprite = breakpointSprite;
             _fontSize = Mathf.Clamp(fontSize, MinimumFontSize, MaximumFontSize);
             _paddingLeftPx = Mathf.Max(0f, paddingLeftPx);
             _paddingTopPx = Mathf.Max(0f, paddingTopPx);
@@ -1003,7 +1007,9 @@ namespace Directiva.CodeUI
                 breakpoint.style.height = _lineHeight;
                 breakpoint.style.minHeight = _lineHeight;
                 breakpoint.style.fontSize = _fontSize;
-                breakpoint.text = _breakpoints.Contains(lineNumber) ? "●" : string.Empty;
+                UIIconView.SetButton(breakpoint,
+                    _breakpoints.Contains(lineNumber) ? _breakpointSprite : null,
+                    Mathf.Max(8f, Mathf.Min(14f, _fontSize)));
                 breakpoint.tooltip = "Breakpoint";
 
                 var number = new Label(lineNumber.ToString());

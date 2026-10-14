@@ -10,15 +10,22 @@ using DSExecution.VirtualMachine;
 using UnityEngine;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
+using UnityEngine.SceneManagement;
+using Directiva.UI;
 
 namespace Directiva.CodeUI
 {
-    [RequireComponent(typeof(UIDocument))]
     public sealed class DirectivaCodeUIController : MonoBehaviour
     {
         [Header("Localization")]
         [SerializeField] private string defaultLocale = "es";
         [SerializeField] private string initialLocale = "es";
+
+        [Header("Shared UI Theme")]
+        [SerializeField] private DirectivaUITheme uiTheme;
+
+        [Header("Standalone navigation")]
+        [SerializeField] private string menuSceneName = "MainMenu";
 
         [Header("Fonts")]
         [SerializeField] private FontAsset normalFont;
@@ -71,7 +78,12 @@ namespace Directiva.CodeUI
         public IRefactorer Refactorer { get; set; }
         public IScriptExecutionStateProvider ExecutionState { get; set; }
 
+        private DirectivaUITheme _theme;
         private UIDocument _document;
+        private bool _mounted;
+        private VisualElement _explorerResizeHandle;
+        private Button _explorerToggle;
+        private bool _explorerCollapsed;
         private IScriptStorage _storage;
         private ScriptWorkspace _workspace;
         private EditorDocumentMetadataStore _editorMetadataStore;
@@ -133,6 +145,7 @@ namespace Directiva.CodeUI
 
         private void Awake()
         {
+            _theme = DirectivaUITheme.Resolve(uiTheme);
             _document = GetComponent<UIDocument>();
 
             Events = new DirectivaUIEventHub();
@@ -162,11 +175,18 @@ namespace Directiva.CodeUI
 
             Localization.LocalizationWarning += message => Output.WriteWarning(message);
 
-            BuildUI();
-            WireEvents();
-
-            Localization.SetLocale(initialLocale);
-            RefreshCodebase();
+            // Old standalone editor scenes still mount themselves automatically.
+            // Simulation scenes deliberately have no UIDocument on this component:
+            // their host calls Mount(...) with a child VisualElement later in Start().
+            if (_document != null)
+            {
+                // Standalone has an outer shell too, so the editor never owns
+                // the navigation button. No changes to existing scene objects.
+                var host = StandaloneEditorShell.Create(
+                    _document.rootVisualElement, _theme, ReturnToMainMenu);
+                Mount(host);
+                SetHosted(true);
+            }
         }
 
         private void Update()
@@ -202,11 +222,81 @@ namespace Directiva.CodeUI
 
         public void SetLocale(string locale) => Localization.SetLocale(locale);
 
-        private void BuildUI()
+        /// <summary>Allows a simulation host to supply the same theme before mounting.</summary>
+        public void SetTheme(DirectivaUITheme theme)
         {
-            var root = _document.rootVisualElement;
+            if (_mounted)
+                throw new InvalidOperationException("Choose the editor theme before mounting it.");
+            _theme = DirectivaUITheme.Resolve(theme);
+        }
+
+        private void ReturnToMainMenu()
+        {
+            if (!Application.CanStreamedLevelBeLoaded(menuSceneName))
+            {
+                Debug.LogError($"[Directiva] Menu scene '{menuSceneName}' is not in Build Profiles.", this);
+                return;
+            }
+            SceneManager.LoadScene(menuSceneName);
+        }
+
+        /// <summary>
+        /// Builds the one editor instance in an arbitrary UI Toolkit container.
+        /// Standalone scenes mount automatically; the simulation host passes a child
+        /// VisualElement. Never disable this component merely to hide the editor.
+        /// </summary>
+        public void Mount(VisualElement container)
+        {
+            if (_mounted)
+                throw new InvalidOperationException("This editor is already mounted.");
+            if (container == null)
+                throw new ArgumentNullException(nameof(container));
+
+            BuildUI(container);
+            WireEvents();
+            Localization.SetLocale(initialLocale);
+            RefreshCodebase();
+            _mounted = true;
+        }
+
+        /// <summary>Hides the explorer without destroying its tree or workspace state.</summary>
+        public void SetExplorerCollapsed(bool collapsed)
+        {
+            _explorerCollapsed = collapsed;
+            if (_explorer == null)
+                return;
+            _explorer.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
+            if (_explorerResizeHandle != null)
+                _explorerResizeHandle.style.display = collapsed ? DisplayStyle.None : DisplayStyle.Flex;
+            if (_explorerToggle != null)
+            {
+                UIIconView.SetButton(_explorerToggle,
+                    collapsed ? _theme?.icons?.arrowRight : _theme?.icons?.arrowLeft, 14f);
+                _explorerToggle.tooltip = collapsed ? "Mostrar solución" : "Ocultar solución";
+            }
+        }
+
+        /// <summary>Adapts the toolbar for a narrow docked editor, without replacing its views.</summary>
+        public void SetCompactLayout(bool compact)
+        {
+            _topBar?.SetCompactLayout(compact);
+        }
+
+        /// <summary>In a simulation host, navigation belongs to the outer shell.</summary>
+        public void SetHosted(bool hosted)
+        {
+            _topBar?.SetHosted(hosted);
+        }
+
+        private void BuildUI(VisualElement root)
+        {
+            // Clear only the container we own; never clear the simulation UI root.
             root.Clear();
             root.AddToClassList("directiva-code-ui-root");
+            root.style.flexGrow = 1f;
+            root.style.minHeight = 0f;
+            root.style.minWidth = 0f;
+            _theme?.ApplyInterfaceFont(root);
 
             var style = Resources.Load<StyleSheet>("Styles/CodeEditorUI/DirectivaCodeUI");
             if (style != null)
@@ -239,21 +329,23 @@ namespace Directiva.CodeUI
                 _workspace,
                 Localization,
                 _popupLayer,
-                explorerFontSize);
+                explorerFontSize,
+                _theme);
 
             var right = new VisualElement();
             right.AddToClassList("right-area");
 
-            _topBar = new TopBarView(Localization, ExecutionState);
+            _topBar = new TopBarView(Localization, ExecutionState, _theme);
             _editor = new CodeEditorView(
-                normalFont,
-                boldFont,
+                _theme != null && _theme.codeFont != null ? _theme.codeFont : normalFont,
+                _theme != null && _theme.codeBoldFont != null ? _theme.codeBoldFont : boldFont,
                 editorFontSize,
                 editorPaddingLeftPx,
                 editorPaddingTopPx,
                 editorPaddingRightPx,
                 editorPaddingBottomPx,
-                indentGuideFineOffsetPx);
+                indentGuideFineOffsetPx,
+                _theme?.icons?.breakpoint);
 
             right.Add(_topBar);
             right.Add(_editor);
@@ -263,14 +355,22 @@ namespace Directiva.CodeUI
                 minWidth: 180f,
                 maxWidth: 520f);
 
+            _explorerResizeHandle = explorerResizeHandle;
+            _explorerToggle = new Button(() => SetExplorerCollapsed(!_explorerCollapsed));
+            _explorerToggle.AddToClassList("explorer-collapse-toggle");
+            _explorerToggle.focusable = true;
+
             main.Add(_explorer);
             main.Add(explorerResizeHandle);
+            main.Add(_explorerToggle);
             main.Add(right);
+            SetExplorerCollapsed(_explorerCollapsed);
 
             _outputPanel = new OutputPanel(
                 Output,
                 Localization,
-                outputFontSize);
+                outputFontSize,
+                _theme);
             _modal = new ModalLayer(Localization);
 
             app.Add(main);

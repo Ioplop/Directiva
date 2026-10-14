@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7cb5dcb06a8b452eba5d797af6623510, type: 3}
+  m_Name: DirectivaUITheme
+  m_EditorClassIdentifier: Assembly-CSharp::Directiva.UI.DirectivaUITheme
+  interfaceFont: {fileID: 11400000, guid: aa6721b0de8afe1449c57f6d3a195d46, type: 2}
+  codeFont: {fileID: 11400000, guid: f4b366fb6be080948920b12b52d9a1f7, type: 2}
+  codeBoldFont: {fileID: 11400000, guid: b60bf10205cf38248ac02089b9a2cf6c, type: 2}
+  mainMenuLogo: {fileID: 21300000, guid: bd9f5f0542069fc4981a70c259cb7646, type: 3}
+  mainMenuLogoHeight: 140
+  mainMenuLogoMaxWidth: 720
+  icons:
+    play: {fileID: 21300000, guid: c1da2773ec4b5c74c83309188c9c2efe, type: 3}
+    stop: {fileID: 21300000, guid: 79a610169c338f44c88e6f1891827adf, type: 3}
+    pause: {fileID: 21300000, guid: 9817def622e8f8c4b976ad13fe6e55d5, type: 3}
+    slowMotion: {fileID: 21300000, guid: 5d55020a82c137e4191ddc98392b9008, type: 3}
+    doubleSpeed: {fileID: 21300000, guid: 98b7fceadbfbba949938abe96def9adb, type: 3}
+    quintupleSpeed: {fileID: 21300000, guid: 468889ca059ba3f48a9660c5885eaad8, type: 3}
+    openEditor: {fileID: 21300000, guid: 7f22e9e685d8e864abbdff44fe6a0674, type: 3}
+    minimize: {fileID: 21300000, guid: 4d8a4118ae521dc42b7029ff0554dce1, type: 3}
+    maximize: {fileID: 21300000, guid: 7ecf19e1a3625cb448454db491de868f, type: 3}
+    restore: {fileID: 21300000, guid: d142ae97fcfddb4448d48b3c2e059a1d, type: 3}
+    arrowUp: {fileID: 21300000, guid: 54ae244ba4b744b4c90e19c9dcaef27e, type: 3}
+    arrowDown: {fileID: 21300000, guid: ab70b57e820467b4ead944d88ed11fc7, type: 3}
+    arrowLeft: {fileID: 21300000, guid: 128ad8b4059eb5d48b2c2f7f79c9c691, type: 3}
+    arrowRight: {fileID: 21300000, guid: b7489000f5c368a499fd67d5210a0f05, type: 3}
+    save: {fileID: 21300000, guid: 821293db18c6cf44ebd96ea8c8247814, type: 3}
+    revert: {fileID: 21300000, guid: 094f82ea32bb24248a32cbaf93168c41, type: 3}
+    addScript: {fileID: 21300000, guid: 6f3b0c4b36220c946981af9f1f3eef0c, type: 3}
+    addFolder: {fileID: 21300000, guid: 64a8257df3d93804a9e06d7f45521859, type: 3}
+    script: {fileID: 21300000, guid: 3b0a9b9bf47a1974698e5971c7df6643, type: 3}
+    folder: {fileID: 21300000, guid: cb6af3045c07b504094218e2f4d17e2a, type: 3}
+    step: {fileID: 21300000, guid: 30c058a0c2347c744bafd4e6af07a3bc, type: 3}
+    stepIn: {fileID: 21300000, guid: 5219da18b06eb684ca79754546b834e3, type: 3}
+    stepOut: {fileID: 21300000, guid: ec48340fb755b814683c6a9abb0eae75, type: 3}
+    breakpoint: {fileID: 21300000, guid: ba3de0d383bb4e24eba0052823fb79e0, type: 3}
+    options: {fileID: 21300000, guid: 20a9681efb01c8545b67d13493809a20, type: 3}
+    back: {fileID: 0}
+    checkedBox: {fileID: 21300000, guid: 2055461b1022bff4ea7fd20b19d1c7c1, type: 3}
+    uncheckedBox: {fileID: 21300000, guid: 03b8bdae76111d74cb673755495b6fae, type: 3}
+    earnedStar: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
+    unearnedStar: {fileID: 21300000, guid: df410db4b09efa347af780203cd59318, type: 3}
+    requiredStar: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
+    lockedLevel: {fileID: 0}

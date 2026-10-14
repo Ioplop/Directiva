@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Directiva.UI;
 
 namespace Directiva.CodeUI
 {
@@ -9,6 +10,7 @@ namespace Directiva.CodeUI
     {
         private readonly OutputService _output;
         private readonly LocalizationService _locale;
+        private readonly DirectivaUIIcons _icons;
 
         private readonly Button _collapseButton;
         private readonly Label _title;
@@ -44,10 +46,12 @@ namespace Directiva.CodeUI
         public OutputPanel(
             OutputService output,
             LocalizationService locale,
-            float fontSize)
+            float fontSize,
+            DirectivaUITheme theme = null)
         {
             _output = output;
             _locale = locale;
+            _icons = theme?.icons;
             _fontSize = UnityEngine.Mathf.Clamp(fontSize, MinimumFontSize, MaximumFontSize);
 
             AddToClassList("output-panel");
@@ -71,6 +75,9 @@ namespace Directiva.CodeUI
             _messagesToggle = new Toggle { value = true };
             _warningsToggle = new Toggle { value = true };
             _errorsToggle = new Toggle { value = true };
+            UIIconView.SetToggle(_messagesToggle, _icons?.checkedBox, _icons?.uncheckedBox);
+            UIIconView.SetToggle(_warningsToggle, _icons?.checkedBox, _icons?.uncheckedBox);
+            UIIconView.SetToggle(_errorsToggle, _icons?.checkedBox, _icons?.uncheckedBox);
 
             _messagesToggle.AddToClassList("output-filter-toggle");
             _warningsToggle.AddToClassList("output-filter-toggle");
@@ -243,7 +250,8 @@ namespace Directiva.CodeUI
             _warningsLabel.text = _locale.Get("Output", "warnings");
             _errorsLabel.text = _locale.Get("Output", "errors");
             _clearButton.text = _locale.Get("Output", "clear");
-            _collapseButton.text = _collapsed ? "▲" : "▼";
+            UIIconView.SetButton(_collapseButton,
+                _collapsed ? _icons?.arrowUp : _icons?.arrowDown, 16f);
         }
 
         private void OnEntryAdded(OutputEntry entry)
