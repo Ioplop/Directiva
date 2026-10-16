@@ -1,0 +1,47 @@
+# Directiva — suite de pruebas automatizadas (Unity Editor)
+
+## Ejecucion
+
+1. Esperar a que Unity termine de compilar los scripts de `Assets/Editor/`.
+2. Abrir **Directiva > Tests > Open Test Runner and Reports...**.
+3. En **Reports folder**, pulsar **Browse...** y seleccionar una carpeta externa al proyecto **y al repositorio Git** (por ejemplo `Documentos/DirectivaTestReports`). La seleccion se guarda mediante `EditorPrefs`, no en el repositorio.
+4. Pulsar **TestAll**, **DIL / TestEverything**, **Run selected** o utilizar el menu **Directiva > Tests > DIL > [grupo] > TestEverything**.
+5. Consultar la consola y los archivos en el directorio `run_YYYYMMDD_HHMMSS_fff_xxxxxx/` generado automaticamente para cada ejecucion:
+   - `SUMMARY.md`: indice por test y PASS/FAIL/ERROR, duracion y numero de aserciones.
+   - `SUMMARY.json`: indice equivalente legible por agentes/scripts.
+   - `tests/DIL.Grupo.Caso.md`: informe por **cada** prueba, incluso las que pasan; contiene objetivo, evidencia, DIL/fixture, ultima traza VM, estados, uso del heap, GC, eventos PRINT, resultado, mensaje y stack de excepcion si corresponde.
+
+**No requiere Play Mode**, escenas ni crear proyectos de prueba. Las pruebas corren de a una por `EditorApplication.update`, con budgets finitos cuando usan VM. Puedes detener una bateria con **Cancel**; se conservan los reportes de las pruebas ya ejecutadas. Unity puede no permitir cancelar una prueba individual hasta que esa prueba termine.
+
+**Importante:** un fallo deliberadamente provocado (ej. division por cero, OutOfMemory) se muestra como **PASS** si el `RuntimeErrorId` coincide con el esperado. FAIL indica una asercion incumplida; ERROR indica una excepcion inesperada del propio test. Las pruebas no escriben archivos de usuario `DirectivaScripts` ni alteran escenas; el test del provider DIL usa un directorio temporal del sistema y lo elimina.
+
+## Grupos actuales
+
+| Menu `Directiva/Tests/DIL/` | Alcance |
+|---|---|
+| `Parser/TestEverything` | Sintaxis DIL, constantes, etiquetas, modulos e imports, debug metadata, validaciones, provider filesystem y errores de parseo |
+| `VM/TestEverything` | Stack, locals/globals, funciones, scopes, saltos, presupuestos, PRINT, debug y estados terminales |
+| `Controller/TestEverything` | Controlador de ejecucion del editor: Start/Stop, Pause/Continue, Step, metadata, breakpoints y eventos |
+| `Numeric/TestEverything` | Int, Decimal, Bool, None; operadores, casts actualmente soportados, comparaciones, hashes y continuaciones |
+| `References/TestEverything` | String y Tuple, construccion/indexacion, Unicode, igualdad, identidad, hashing, impresion y casts |
+| `Memory/TestEverything` | Heap, limites, mark-and-sweep lazy, OOM, GC anidado/ciclos y raices en stacks, locals, globals y cast |
+| `Concurrency/TestEverything` | Multiples VMs con memoria compartida, round-robin determinista, interleavings, carreras reproducibles y aislamiento |
+| `Errors/TestEverything` | IDs de RuntimeError: casos DIL alcanzables y fixtures VM directos para instrucciones invalidas |
+| `Robustness/TestEverything` | Stress reproducible, cientos de operaciones muestreadas, carga GC y tuplas profundamente anidadas |
+| `Regression/TestEverything` | Las dos suites de Tuple preexistentes, ahora integradas en el catalogo y con un reporte por caso |
+
+**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `List/Dict/Set`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
+
+## Agregar mas pruebas
+
+- Crear un archivo `Assets/Editor/DirectivaTests/DIL/DILAlgoTests.cs` con `internal static void Register(List<DirectivaTestCase> tests)` y utilizar `DirectivaTestCatalog.Add(tests, "Grupo", "IdCaso", "descripcion", t => { ... });`.
+- Registrar la clase en `DirectivaTestCatalog.GetAll()` de `Core/DirectivaTestModel.cs`. Para un nuevo grupo, sumar el `MenuItem` en `Core/DirectivaTestMenu.cs`.
+- Usar `DirectivaTestContext` para `Check`, `Equal`, `Contains`, `Note` y `Attach`; `DILTestHarness` para adjuntar fuente, ejecutar VM con presupuesto, recoger `PRINT` y registrar estado/errores/traza. Los IDs deben ser unicos (`DIL.Grupo.IdCaso`).
+- Para DScript o Simulation, crear nuevas carpetas/suites y registrar instancias de `DirectivaTestCase("DScript", ...)` o `DirectivaTestCase("Simulation", ...)`, ademas de su menu `Directiva/Tests/<categoria>/TestEverything`. **`Directiva/Tests/TestAll` ya ejecuta automaticamente todos los tests registrados, sin cambios al ejecutor ni al formato de reportes.**
+- Al agregar pruebas de regresion por un bug descubierto, usar una muestra minima reproducible y dejar el motivo del test en la descripcion/`Note`.
+
+## Diagnosticos y desarrollo
+
+Los scripts de test y sus utilidades son **Editor-only**. El runtime `Assets/Scripts/` no fue modificado por esta entrega. Hay dos niveles de prueba: de texto DIL real (parser + VM) y de `CodeContext`/VM creados directamente (para ejercitar errores que el parser impide). Los tests de concurrencia hacen interleaving secuencial de varias VMs; no simulan hilos OS.
+
+Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP, **pero requiere compilacion y ejecucion en Unity antes de poder afirmar que todos los casos pasan**. Si alguno falla, compartir `SUMMARY.md`, `SUMMARY.json` y los reportes de `tests/` de los casos fallidos (evitar adjuntar datos personales de rutas en caso de compartir publicamente).

@@ -9,6 +9,7 @@ using DSExecution.Operations;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
 using UnityEditor;
+using Directiva.EditorTests;
 using UnityEngine;
 
 public static class Directiva_TupleCompletionSmokeTests
@@ -26,7 +27,27 @@ public static class Directiva_TupleCompletionSmokeTests
         }
     }
 
-    [MenuItem("Directiva/Tests/Run Tuple Completion Smoke Tests")]
+    // Previous completion checks are integrated into the reportable regression suite.
+    internal static void Register(List<DirectivaTestCase> tests)
+    {
+        void Add(string name, Action<DirectivaTestContext> body) =>
+            DirectivaTestCatalog.Add(tests, "Regression", "TupleCompletion" + name,
+                "Existing tuple completion regression: " + name, body);
+        Add("DILGet", t => TestDILGet());
+        Add("CopyAndEmpty", t => TestCopyAndEmpty());
+        Add("Length", t => TestLength());
+        Add("UnicodeLength", t => TestUnicodeLength());
+        Add("StringFormatting", t => TestStringFormatting());
+        Add("StringHash", t => TestStringHash());
+        Add("NumericTupleHash", t => TestNumericTupleHash());
+        Add("HashOrder", t => TestHashOrder());
+        Add("NoneHash", t => TestNoneHash());
+        Add("NestedUnhashable", t => TestNestedUnhashable());
+        Add("NegativeCount", t => TestNegativeCount());
+        Add("GCWhileCasting", t => TestGCWhileCasting());
+        Add("CastOutOfMemory", t => TestCastOutOfMemory());
+    }
+
     public static void Run()
     {
         int passed = 0;

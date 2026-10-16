@@ -2,7 +2,7 @@
 
 > **Documento de orientación para agentes de IA y colaboradores.** Es un mapa del proyecto, no una especificación exhaustiva ni un reemplazo del código fuente.
 >
-> **Última actualización:** 2026-10-15 22:39:05 -03:00 (America/Santiago)  
+> **Última actualización:** 2026-10-15 23:21:07 -03:00 (America/Santiago)  
 > **Base examinada:** `Assets15-10-2026-2222.zip` (copia de `Assets/` entregada el 15-10-2026).  
 > **Alcance:** exclusivamente el videojuego Unity **Directiva**. No cubre informes académicos, evidencias, gestión externa ni archivos que no vinieron en este paquete.  
 > **Criterio de verdad:** código, escenas y assets actuales > este resumen > documentación histórica > planes conversados. En caso de discrepancia, inspeccionar el repositorio y `git log`.
@@ -23,7 +23,7 @@
 | Opciones persistentes | JSON/PlayerPrefs y aplicación de resolución, fullscreen, cursor y ejecución en segundo plano; audio/idioma sin integración global | `Scripts/Settings/`, `Documentation/MainMenu/SETTINGS.md` |
 | Editor de scripts | Funcional para **`.dil`**; árbol de archivos, edición, backups, historial undo/redo, consola, breakpoints DIL | `Scripts/UI/CodeEditor/`, `Scripts/Code/{Storage,Workspace}/` |
 | Lenguaje DScript | Diseñado conceptualmente; **sin compilador ni parser funcional** | `Scripts/Code/Compilation/` (actualmente solo `DIL/`) |
-| DIL (texto intermedio) | Parser con múltiples módulos/imports, funciones, saltos, constantes y operaciones soportadas | `Scripts/Code/Compilation/DIL/` |
+| DIL (texto intermedio) | Parser con múltiples módulos/imports, funciones, saltos, constantes y operaciones soportadas; nueva suite automatizada extensa de Editor **pendiente de ejecutar en Unity** | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/` |
 | Máquina virtual | Ejecuta `CodeContext`: stack, llamadas, locals, globals, saltos, operaciones, casts, print y límites | `Scripts/Code/Execution/VirtualMachine/` |
 | Heap y GC | Heap con límites lógicos; **mark-and-sweep lazy** al fallar una reserva, referencias anidadas y compartidas | `Scripts/Code/Execution/VirtualMachine/Memory/` |
 | Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`; List/Set/Dict y entidades solo reservadas | `Scripts/Code/Execution/Types/` |
@@ -100,7 +100,7 @@ Rutas relativas a la raíz **`Assets/`**; los nombres indicados existen en el pa
 | `Documentation/MainMenu/` | README evolutivo del menú; **`SETTINGS.md`** detalla sistema persistente reciente y sus límites. |
 | `Documentation/Simulation/README.md` | HUD de simulación y editor integrado; **ojo:** documenta la generación de una escena llamada `Game`, mientras que en este snapshot existe `BaseSimulation`. |
 | `Documentation/UITheme/README.md` | Guía del tema compartido, sprites y fuentes. |
-| `Editor/` | Dos baterías manuales de pruebas de Tuple, invocables desde menú de Unity Editor. |
+| `Editor/` | Suite automatizada DIL por grupos (`DirectivaTests/`) y dos suites historicas de Tuple integradas como regresion; menus y reportes externos. |
 | `Scripts/Code/` | Almacenamiento/workspace, interfaces de análisis/refactor, parser DIL y ejecución/VM. |
 | `Scripts/UI/` | UI Toolkit de editor, menú, simulación y tema común. |
 | `Scripts/Settings/` | Preferencias, almacenamiento y aplicación a APIs de Unity. |
@@ -226,8 +226,10 @@ Esta sección pretende permitir localizar rápidamente **qué archivo tocar**; n
 
 ### 4.7 Pruebas y scripts de plantilla
 
-- `Assets/Editor/Directiva_TupleSmokeTests.cs`: primera batería de construcción, indexación, igualdad, GC anidado y errores por límites.
-- `Assets/Editor/Directiva_TupleCompletionSmokeTests.cs`: batería de parser DIL, hash, length, Unicode, casting/print y presión de memoria.
+- `Assets/Editor/DirectivaTests/README.md`: **guía operativa** de la suite DIL, menús, reportes, grupos y extensión futura a DScript/Simulation.
+- `Editor/DirectivaTests/Core/DirectivaTestModel.cs`: contrato y registro de casos; `DirectivaTestRunner.cs`: ejecución Editor main-thread con cancelación; `DirectivaTestReports.cs`: Markdown por caso y resumen Markdown/JSON externo al repo; `DirectivaTestWindow.cs`: elección de carpeta, selección/filtros y progreso; `DirectivaTestMenu.cs`: rutas `Directiva/Tests/TestAll` y `Directiva/Tests/DIL/.../TestEverything`.
+- `Editor/DirectivaTests/DIL/`: fixtures y tests separados por Parser, VM, Controller, Numeric, References, Memory, Concurrency, Errors, Robustness; `DILTestHarness.cs` centraliza parseo en memoria, recolección de eventos/errores/trazas, assertions y budget de VM.
+- `Assets/Editor/Directiva_TupleSmokeTests.cs` y `Directiva_TupleCompletionSmokeTests.cs`: 8 + 13 pruebas previas, **ahora incluidas en** `Directiva/Tests/DIL/Regression/TestEverything`. Se retiraron sus accesos de menú antiguos; el catálogo genera un informe por cada caso.
 - `Assets/TutorialInfo/Scripts/Readme.cs` y `TutorialInfo/Scripts/Editor/ReadmeEditor.cs`: scripts de plantilla/ejemplo de Unity; **no** están relacionados con las misiones tutoriales del juego.
 
 ## 5. Comportamiento implementado: detalle operativo útil
@@ -318,7 +320,8 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 
 ### Evidencia disponible
 
-- Dos suites manuales en `Assets/Editor`: ejecutar desde Unity **`Directiva > Tests > Run Tuple Smoke Tests`** y **`Directiva > Tests > Run Tuple Completion Smoke Tests`**. El responsable del proyecto **reportó ambas exitosas el 15-10-2026**; la segunda cubre 13 casos, y la primera incluye 8 pruebas base.
+- Las suites de Tuple originales (8 y 13 casos) fueron **ejecutadas exitosamente por el responsable el 15-10-2026** y ahora se registran bajo `Directiva > Tests > DIL > Regression > TestEverything`.
+- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. **Aún no compilada ni ejecutada en Unity en esta entrega; no asumir pruebas exitosas hasta verificar allí.** Leer `Assets/Editor/DirectivaTests/README.md`.
 - El responsable también probó la demo DIL real de tuplas desde el editor: representación anidada, `GET`, hash, `LENGTH` y retorno `None` mostraron resultados plausibles.
 - **Este documento se elaboró leyendo el paquete `Assets/`**; no ejecuta Unity ni reemplaza una compilación/CI. No extrapolar las pruebas de Tuple a los subsistemas todavía no construidos.
 
@@ -341,7 +344,7 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 4. **Mantener la frontera VM/simulación.** Evitar referencias Unity UI dentro del núcleo DSExecution; usar eventos/controladores/contratos para integración.
 5. **Revisar raíces del GC y presupuesto de memoria** al introducir contenedores o casts que asignen heap; el GC existe y funciona para referencias anidadas, pero los contenedores mutables son la siguiente dificultad.
 6. **Diferenciar implementado / parcial / previsto / no implementado** en los informes. No sustituir evidencia por nombres de clases o assets.
-7. **Pruebas:** comenzar por suites Unity Editor disponibles y `BasicCoding`; luego probar navegación `MainMenu → BaseSimulation` y cambios de UI/configuración. Añadir casos mínimos reproducibles al cambiar VM/parser.
+7. **Pruebas:** ejecutar primero `Directiva > Tests > TestAll` (seleccionar carpeta externa desde la ventana), analizar `SUMMARY.md` y los informes fallidos, luego probar `BasicCoding`, navegación `MainMenu → BaseSimulation` y cambios de UI/configuración. Añadir casos mínimos reproducibles al cambiar VM/parser.
 8. **Entregas de código:** usar diferencial `Assets/` con `.meta` preservados y declarar eliminaciones/renombres; actualizar este archivo cuando cambien arquitectura, estado de una función relevante, decisiones principales o prioridades.
 
 ## 9. Mantenimiento de este contexto

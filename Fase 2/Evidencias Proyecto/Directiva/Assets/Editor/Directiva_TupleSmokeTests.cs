@@ -1,10 +1,11 @@
 // Optional Unity Editor smoke tests for the Directiva tuple implementation.
-// Place this file anywhere under Assets/Editor/ and run:
-//     Directiva > Tests > Run Tuple Smoke Tests
-// This test file is deliberately separate from the runtime differential ZIP.
+// Runs through Directiva > Tests > DIL > Regression > TestEverything,
+// or is selectable in Directiva > Tests > Open Test Runner and Reports.
 #if UNITY_EDITOR
 using System;
 using System.Linq;
+using System.Collections.Generic;
+using Directiva.EditorTests;
 using DSExecution.DataTypes;
 using DSExecution.Errors;
 using DSExecution.Operations;
@@ -15,7 +16,22 @@ using UnityEngine;
 
 internal static class DirectivaTupleSmokeTests
 {
-    [MenuItem("Directiva/Tests/Run Tuple Smoke Tests")]
+    // Previous regression cases are now part of DIL/Regression and receive individual reports.
+    internal static void Register(List<DirectivaTestCase> tests)
+    {
+        void Add(string name, Action<DirectivaTestContext> body) =>
+            DirectivaTestCatalog.Add(tests, "Regression", "TupleOriginal" + name,
+                "Original tuple regression: " + name, body);
+        Add("BasicTuple", t => BasicTuple());
+        Add("EmptyTuple", t => EmptyTuple());
+        Add("TupleIndexing", t => TupleIndexing());
+        Add("StructuralEquality", t => StructuralEquality());
+        Add("NestedGarbageCollection", t => NestedGarbageCollection());
+        Add("GarbageCollectionDuringConstruction", t => GarbageCollectionDuringConstruction());
+        Add("OutOfMemory", t => OutOfMemory());
+        Add("UnderflowAndStackCapacity", t => UnderflowAndStackCapacity());
+    }
+
     private static void RunAll()
     {
         BasicTuple();
