@@ -42,5 +42,8 @@
 
         // Truthiness
         IsTruthy = 23,
+
+        // Logical number of elements (or Unicode scalar values for strings).
+        Length = 24,
     }
 }

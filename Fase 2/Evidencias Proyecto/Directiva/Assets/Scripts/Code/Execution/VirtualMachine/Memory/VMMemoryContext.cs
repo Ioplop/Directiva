@@ -118,7 +118,7 @@ namespace DSExecution.VirtualMachine
                 if (!heap.TryGet(memoryReference, out HeapObject heapObject))
                     continue;
 
-                foreach (uint childReference in heapObject.EnumerateHeapReferences())
+                foreach (uint childReference in heapObject.GetReferences())
                 {
                     if (childReference != 0 && !marked.Contains(childReference))
                         pending.Push(childReference);

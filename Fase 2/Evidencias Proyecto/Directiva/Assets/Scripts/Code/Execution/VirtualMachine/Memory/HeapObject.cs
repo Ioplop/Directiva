@@ -14,9 +14,14 @@ namespace DSExecution.VirtualMachine
         /// Enumerates heap references owned by this object for mark-and-sweep traversal.
         /// Leaf objects such as String expose none.
         /// </summary>
-        public virtual IEnumerable<uint> EnumerateHeapReferences()
+        public virtual IEnumerable<uint> GetReferences()
         {
             yield break;
         }
+
+        /// <summary>
+        /// Compatibility alias for older heap object callers. New GC code uses GetReferences().
+        /// </summary>
+        public IEnumerable<uint> EnumerateHeapReferences() => GetReferences();
     }
 }

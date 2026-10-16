@@ -10,7 +10,7 @@ namespace DSExecution.DataTypes
     /// Immutable heap-backed Directiva string. Value equality is ordinal and Add concatenates
     /// into a newly allocated StringHeapObject.
     /// </summary>
-    public sealed class DTString : DataType, IOpArithmetic, IOpReferenceEquality
+    public sealed class DTString : DataType, IOpArithmetic, IOpReferenceEquality, IOpHash, IOpLength
     {
         public static DTString Instance { get; } = new DTString();
 
@@ -45,14 +45,16 @@ namespace DSExecution.DataTypes
             stringObject = null;
             errorResult = default;
 
-            if (value.dataType != DataTypeId.String ||
-                value.value == 0 ||
-                value.value > uint.MaxValue)
+            if (value.dataType != DataTypeId.String)
+                return false;
+
+            if (!value.TryGetHeapReference(out uint memoryReference))
             {
+                errorResult = OperationResult.OpError(
+                    RuntimeError.InvalidOperation("String contains an invalid heap reference.")
+                );
                 return false;
             }
-
-            uint memoryReference = (uint)value.value;
             if (!opCall.Memory.TryGetHeap(memoryReference, out HeapObject heapObject) ||
                 !(heapObject is StringHeapObject resolved))
             {
@@ -90,6 +92,63 @@ namespace DSExecution.DataTypes
             return OperationResult.Success(
                 DataValue.FromStringReference(resultReference)
             );
+        }
+
+        /// <summary>
+        /// Stable FNV-1a over UTF-16 code units (in fixed little-endian byte order).
+        /// This matches ordinal string equality without relying on randomized .NET hashes.
+        /// </summary>
+        public OperationResult Hash(OperationCall opCall)
+        {
+            if (opCall.Arguments.Length != 1 ||
+                opCall.Arguments[0].dataType != DataTypeId.String)
+                return OperationResult.NotImplemented();
+
+            if (!TryResolve(opCall, opCall.Arguments[0], out var text, out var error))
+                return error.Status == OperationStatus.Error ? error : OperationResult.NotImplemented();
+
+            unchecked
+            {
+                const ulong offset = 14695981039346656037UL;
+                const ulong prime = 1099511628211UL;
+                ulong hash = offset;
+                foreach (char c in text.Value)
+                {
+                    hash ^= (byte)c;
+                    hash *= prime;
+                    hash ^= (byte)(c >> 8);
+                    hash *= prime;
+                }
+
+                return OperationResult.Success(DataValue.FromInt((long)hash));
+            }
+        }
+
+        /// <summary>
+        /// Counts Unicode code points rather than UTF-16 storage units.
+        /// The logical heap Size deliberately continues to use UTF-16 units.
+        /// </summary>
+        public OperationResult Length(OperationCall opCall)
+        {
+            if (opCall.Arguments.Length != 1 ||
+                opCall.Arguments[0].dataType != DataTypeId.String)
+                return OperationResult.NotImplemented();
+
+            if (!TryResolve(opCall, opCall.Arguments[0], out var text, out var error))
+                return error.Status == OperationStatus.Error ? error : OperationResult.NotImplemented();
+
+            string value = text.Value;
+            int length = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                // A valid surrogate pair is one Unicode code point.
+                if (char.IsHighSurrogate(value[i]) &&
+                    i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                    i++;
+                length++;
+            }
+
+            return OperationResult.Success(DataValue.FromInt(length));
         }
 
         public OperationResult Subtract(OperationCall opCall) => OperationResult.NotImplemented();

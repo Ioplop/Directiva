@@ -283,6 +283,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Pop => ExecutePop(frame),
                 InstructionId.Cast => ExecuteCast(frame, instruction.DataTypeOperand),
                 InstructionId.Print => ExecutePrint(frame),
+                InstructionId.Tuple => ExecuteTuple(frame, instruction.OperandA),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -325,6 +326,44 @@ namespace DSExecution.VirtualMachine
 
             if (!evaluationStack.TryPush(DataValue.FromStringReference(memoryReference)))
                 return Fault(RuntimeError.StackOverflow());
+
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Builds a tuple from the top count stack values. All inputs remain GC roots
+        /// until the new heap allocation succeeds; only then is the stack replaced.
+        /// </summary>
+        private VMAdvanceResult ExecuteTuple(CallFrame frame, int count)
+        {
+            if (count < 0)
+                return Fault(RuntimeError.InvalidInstruction($"TUPLE requires a non-negative count ({count})."));
+
+            if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackUnderflow());
+
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackOverflow());
+
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] elements))
+                return Fault(RuntimeError.InternalVmError("TUPLE failed to peek validated stack values."));
+
+            foreach (DataValue element in elements)
+            {
+                if (element.dataType == DataTypeId.Uninitialized)
+                    return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            }
+
+            var tuple = new TupleHeapObject(elements);
+            if (!Memory.TryAllocHeap(tuple, out uint tupleReference))
+                return Fault(RuntimeError.OutOfMemory());
+
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, count, DataValue.FromTupleReference(tupleReference)))
+            {
+                Memory.FreeHeap(tupleReference);
+                return Fault(RuntimeError.InternalVmError("TUPLE could not commit the stack replacement."));
+            }
 
             return AdvanceInstruction(frame);
         }

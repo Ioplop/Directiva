@@ -20,6 +20,7 @@ namespace DSExecution.DataTypes
         List = 6,
         Set = 7,
         Dict = 8,
+        Tuple = 12, // Appended without changing the existing serialized type ids.
 
         // Simulation types
         Unit = 9,

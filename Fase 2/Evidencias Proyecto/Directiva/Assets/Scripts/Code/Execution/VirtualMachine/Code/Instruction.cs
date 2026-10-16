@@ -55,6 +55,12 @@ namespace DSExecution.VirtualMachine
         public static Instruction Print()
             => new(InstructionId.Print);
 
+        /// <summary>
+        /// Consumes count stack values, in order, and replaces them with one heap tuple.
+        /// </summary>
+        public static Instruction Tuple(int count)
+            => new(InstructionId.Tuple, operandA: count);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 
@@ -133,6 +139,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.PushString => $"PushString \"{TextOperand}\"",
                 InstructionId.Cast => $"Cast {DataTypeOperand}",
                 InstructionId.Print => "Print",
+                InstructionId.Tuple => $"Tuple {OperandA}",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

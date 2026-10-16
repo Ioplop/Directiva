@@ -25,7 +25,9 @@ namespace DSExecution.Errors
         InternalVmError = 13,
         OutOfMemory = 14,
         InvalidCast = 15,
-        InvalidCastValue = 16
+        InvalidCastValue = 16,
+        IndexOutOfRange = 17,
+        UnhashableType = 18
     }
 
     /// <summary>
@@ -64,6 +66,24 @@ namespace DSExecution.Errors
             => new(
                 RuntimeErrorId.InvalidMemoryAccess,
                 $"Invalid heap reference {memoryReference}. TODO: Localize!"
+            );
+
+        public static RuntimeError IndexOutOfRange(long index, int count, string containerType)
+            => new(
+                RuntimeErrorId.IndexOutOfRange,
+                $"{containerType} index {index} is out of range for {count} element(s). TODO: Localize!"
+            );
+
+        /// <summary>
+        /// A value cannot be used as a dictionary key or set member, either directly
+        /// or because it appears inside a tuple. The path uses zero-based tuple indexes.
+        /// </summary>
+        public static RuntimeError UnhashableType(DataTypeId type, string tuplePath = "")
+            => new(
+                RuntimeErrorId.UnhashableType,
+                $"Unhashable type {type}" +
+                (string.IsNullOrEmpty(tuplePath) ? "." : $" at tuple element {tuplePath}.") +
+                " TODO: Localize!"
             );
 
         public static RuntimeError StackOverflow()

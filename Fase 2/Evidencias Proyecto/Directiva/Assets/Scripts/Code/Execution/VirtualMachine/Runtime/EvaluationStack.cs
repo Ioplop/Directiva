@@ -49,7 +49,43 @@ namespace DSExecution.VirtualMachine
         }
 
         public bool HasValuesAbove(int floor, int amount)
-            => amount >= 0 && count - floor >= amount;
+            => floor >= 0 && floor <= count && amount >= 0 && count - floor >= amount;
+
+        /// <summary>
+        /// Whether amount values could be replaced atomically by one result value.
+        /// For an empty tuple this also checks the stack capacity before heap allocation.
+        /// </summary>
+        public bool CanReplaceTopWithOne(int floor, int amount)
+            => HasValuesAbove(floor, amount) && (amount > 0 || count < values.Length);
+
+        /// <summary>
+        /// Copies the top amount values in stack order without removing GC roots.
+        /// </summary>
+        public bool TryPeekArguments(int floor, int amount, out DataValue[] arguments)
+        {
+            if (!HasValuesAbove(floor, amount))
+            {
+                arguments = System.Array.Empty<DataValue>();
+                return false;
+            }
+
+            arguments = new DataValue[amount];
+            System.Array.Copy(values, count - amount, arguments, 0, amount);
+            return true;
+        }
+
+        /// <summary>
+        /// Commits an already prepared result by removing amount values and pushing one.
+        /// Callers should use CanReplaceTopWithOne before allocations that could invoke GC.
+        /// </summary>
+        public bool TryReplaceTopWithOne(int floor, int amount, DataValue replacement)
+        {
+            if (!CanReplaceTopWithOne(floor, amount))
+                return false;
+
+            TrimTo(count - amount);
+            return TryPush(replacement);
+        }
 
         /// <summary>
         /// Pops a call/operation argument list while preserving the original left-to-right order.

@@ -60,6 +60,15 @@ namespace DSExecution.VirtualMachine
             if (info.FallbackResult.HasValue)
                 return new OperationDispatchResult(info.FallbackResult.Value, -1);
 
+            // HASH has a more useful failure than the generic unsupported-operation error.
+            if (operationId == OperationId.Hash && arguments.Length == 1)
+            {
+                return new OperationDispatchResult(
+                    OperationResult.OpError(RuntimeError.UnhashableType(arguments[0].dataType)),
+                    -1
+                );
+            }
+
             return new OperationDispatchResult(
                 OperationResult.OpError(
                     RuntimeError.InvalidOperation(

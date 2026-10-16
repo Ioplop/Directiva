@@ -47,6 +47,7 @@ namespace DSExecution.DataTypes
             result[(int)DataTypeId.Int] = DTInt.Instance;
             result[(int)DataTypeId.Decimal] = DTDecimal.Instance;
             result[(int)DataTypeId.String] = DTString.Instance;
+            result[(int)DataTypeId.Tuple] = DTTuple.Instance;
             // Remaining to add...
             // List
             // Set

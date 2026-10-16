@@ -99,8 +99,8 @@ namespace DSCompilation.DIL
             }
         }
 
-        // Container operations are intentionally excluded from the first DIL implementation.
-        // In particular, POP currently means the VM evaluation-stack instruction, not OperationId.Pop.
+        // Container operations supported by existing types are exposed where unambiguous.
+        // POP remains the VM evaluation-stack instruction, not OperationId.Pop.
         private static readonly Dictionary<string, OperationId> OperationMnemonics =
             new(StringComparer.Ordinal)
             {
@@ -119,6 +119,9 @@ namespace DSCompilation.DIL
                 ["LESS_OR_EQUAL"] = OperationId.LessOrEqual,
                 ["NOT"] = OperationId.Not,
                 ["HASH"] = OperationId.Hash,
+                ["LENGTH"] = OperationId.Length,
+                ["GET"] = OperationId.Get,
+                ["COPY"] = OperationId.Copy,
                 ["IS_TRUTHY"] = OperationId.IsTruthy
             };
 
@@ -129,7 +132,8 @@ namespace DSCompilation.DIL
                 ["BOOL"] = DataTypeId.Bool,
                 ["INT"] = DataTypeId.Int,
                 ["DECIMAL"] = DataTypeId.Decimal,
-                ["STRING"] = DataTypeId.String
+                ["STRING"] = DataTypeId.String,
+                ["TUPLE"] = DataTypeId.Tuple
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -687,6 +691,16 @@ namespace DSCompilation.DIL
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
                     instructions.Add(Instruction.Pop());
                     return;
+
+                case "TUPLE":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 0)
+                        Throw(moduleName, lineNumber, "TUPLE requires a non-negative element count.");
+
+                    instructions.Add(Instruction.Tuple(count));
+                    return;
+                }
 
                 case "CAST":
                 {

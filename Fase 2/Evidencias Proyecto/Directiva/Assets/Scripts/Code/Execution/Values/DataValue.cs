@@ -54,6 +54,14 @@ namespace DSExecution.Values
             return new DataValue(DataTypeId.String, memoryReference);
         }
 
+        public static DataValue FromTupleReference(uint memoryReference)
+        {
+            if (memoryReference == 0)
+                throw new System.ArgumentOutOfRangeException(nameof(memoryReference));
+
+            return new DataValue(DataTypeId.Tuple, memoryReference);
+        }
+
         /// <summary>
         /// Returns the heap reference carried by this value when its type is heap-backed.
         /// </summary>
@@ -62,6 +70,7 @@ namespace DSExecution.Values
             switch (dataType)
             {
                 case DataTypeId.String:
+                case DataTypeId.Tuple:
                 case DataTypeId.List:
                 case DataTypeId.Set:
                 case DataTypeId.Dict:
