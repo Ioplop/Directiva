@@ -28,6 +28,16 @@ namespace Directiva.EditorTests
         private static void Hashes() => DirectivaTestRunner.StartCategory("DIL", "Hashes");
         [MenuItem("Directiva/Tests/DIL/Lists/TestEverything", false, 120)]
         private static void Lists() => DirectivaTestRunner.StartCategory("DIL", "Lists");
+        [MenuItem("Directiva/Tests/DIL/Sets/TestEverything", false, 120)]
+        private static void Sets() => DirectivaTestRunner.StartCategory("DIL", "Sets");
+        [MenuItem("Directiva/Tests/DIL/SetAlgebra/TestEverything", false, 120)]
+        private static void SetAlgebra() => DirectivaTestRunner.StartCategory("DIL", "SetAlgebra");
+        [MenuItem("Directiva/Tests/DIL/SetMemory/TestEverything", false, 120)]
+        private static void SetMemory() => DirectivaTestRunner.StartCategory("DIL", "SetMemory");
+        [MenuItem("Directiva/Tests/DIL/SetConcurrency/TestEverything", false, 120)]
+        private static void SetConcurrency() => DirectivaTestRunner.StartCategory("DIL", "SetConcurrency");
+        [MenuItem("Directiva/Tests/DIL/SetRobustness/TestEverything", false, 120)]
+        private static void SetRobustness() => DirectivaTestRunner.StartCategory("DIL", "SetRobustness");
         [MenuItem("Directiva/Tests/DIL/ListMemory/TestEverything", false, 120)]
         private static void ListMemory() => DirectivaTestRunner.StartCategory("DIL", "ListMemory");
         [MenuItem("Directiva/Tests/DIL/ListConcurrency/TestEverything", false, 120)]

@@ -50,5 +50,19 @@
         Extend = 25,
         Contains = 26,
         IndexOf = 27,
+
+        // Hash-backed mutable sets. Existing serialized ids remain unchanged.
+        SetAdd = 28,
+        SetDiscard = 29,
+        SetRemove = 30,
+        SetPop = 31,
+        SetUnion = 32,
+        SetIntersection = 33,
+        SetDifference = 34,
+        SetSymmetricDifference = 35,
+        SetUpdate = 36,
+        SetIsSubset = 37,
+        SetIsSuperset = 38,
+        SetIsDisjoint = 39,
     }
 }

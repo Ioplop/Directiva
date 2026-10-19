@@ -69,6 +69,18 @@ namespace DSExecution.Operations
             SetOperation(temp, OperationId.Extend, new(2, null, 0));
             SetOperation(temp, OperationId.Contains, new(2, null, 0));
             SetOperation(temp, OperationId.IndexOf, new(2, null, 0));
+            SetOperation(temp, OperationId.SetAdd, new(2, null, 0));
+            SetOperation(temp, OperationId.SetDiscard, new(2, null, 0));
+            SetOperation(temp, OperationId.SetRemove, new(2, null, 0));
+            SetOperation(temp, OperationId.SetPop, new(1, null, 0));
+            SetOperation(temp, OperationId.SetUnion, new(2, null, 0));
+            SetOperation(temp, OperationId.SetIntersection, new(2, null, 0));
+            SetOperation(temp, OperationId.SetDifference, new(2, null, 0));
+            SetOperation(temp, OperationId.SetSymmetricDifference, new(2, null, 0));
+            SetOperation(temp, OperationId.SetUpdate, new(2, null, 0));
+            SetOperation(temp, OperationId.SetIsSubset, new(2, null, 0));
+            SetOperation(temp, OperationId.SetIsSuperset, new(2, null, 0));
+            SetOperation(temp, OperationId.SetIsDisjoint, new(2, null, 0));
 
             OperationInfo[] result = new OperationInfo[temp.Length];
 

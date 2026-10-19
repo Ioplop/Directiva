@@ -34,7 +34,7 @@
 | `Robustness/TestEverything` | Stress reproducible, cientos de operaciones muestreadas, carga GC y tuplas profundamente anidadas |
 | `Regression/TestEverything` | Las dos suites de Tuple preexistentes, ahora integradas en el catalogo y con un reporte por caso |
 
-**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `Dict/Set`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
+**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `Dict`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
 
 ## Agregar mas pruebas
 
@@ -56,4 +56,14 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 - `APPEND`/`INSERT`/`DELETE`/`SET`/`EXTEND`: consumen sus operandos y apilan `None`. `POP_ITEM` devuelve el elemento quitado; `COPY` hace copia superficial nueva; `ADD` concatena y devuelve nueva List. `CONTAINS` devuelve Bool; `INDEX_OF` devuelve primer indice o -1.
 - Continuaciones: el buffer auxiliar es un objeto real del heap y lo enraiza un campo dedicado de la VM. Los `OperationState` solo contienen indices y versiones, nunca referencias de heap. La publicacion es atomica; una mutacion de otra VM durante la preparacion produce InvalidOperation, no un merge automatico.
 - `Hash` de List produce `UnhashableType`. Formateo de listas con referencias circulares muestra `[...]` y evita bucles infinitos; Tuple usa el mismo formateador.
-- **Verificacion:** el responsable confirmo que los 242 casos existentes (incluida List) pasaron en Unity el 19-10-2026. Los 12 casos nuevos del grupo Hashes aun requieren compilacion y ejecucion en Unity.
+- **Verificacion:** el responsable confirmo que los 242 casos existentes (incluida List) pasaron en Unity el 19-10-2026. El responsable confirmo 254/254 casos con Hashes; las 126 pruebas de Set de esta entrega aun requieren compilacion y ejecucion en Unity.
+
+## Semantica y nuevas pruebas de Set (2026-10-19)
+
+- Menus: `Directiva/Tests/DIL/Sets`, `SetAlgebra`, `SetMemory`, `SetConcurrency` y `SetRobustness`, cada uno con `TestEverything`; `TestAll` incluye estos grupos automaticamente.
+- **Linea base verificada:** 254/254 pruebas anteriores. **Nuevas:** 126 pruebas (380 previstas) sin validacion Unity. Los informes detallados deben guardarse fuera del repositorio.
+- `SET n` construye un conjunto desde n valores del stack; **`SET` sin numero sigue siendo la operacion de asignacion por indice de listas**.
+- `SET_ADD`, `SET_DISCARD`, `SET_REMOVE`, `SET_POP`, `SET_UPDATE`, `COPY`; `CONTAINS`, `LENGTH`, `VALUE_EQUALS`, `REFERENCE_EQUALS`, `IS_TRUTHY`, `CAST STRING`; `SET_UNION`, `SET_INTERSECTION`, `SET_DIFFERENCE`, `SET_SYMMETRIC_DIFFERENCE`, `SET_IS_SUBSET`, `SET_IS_SUPERSET`, `SET_IS_DISJOINT`.
+- Los elementos deben ser hasheables (por ejemplo String, Tuple hasheable, Int, Bool, Decimal, None); Set/List/Dict no son hasheables. Las colisiones de hash se verifican por igualdad real. No se garantiza orden conceptual; la implementacion conserva una secuencia reproducible bajo el mismo historial de operaciones.
+- Mutaciones basicas usan reserva logica previa; operacion continuada crea un buffer en heap y lo protege a traves de la VM hasta la publicacion atomica. Otra VM que modifica alguno de los operandos durante la preparacion causa `InvalidOperation`.
+- Limitacion: igualdad estructural de conjuntos, creacion `SET n` y conversion a texto se ejecutan en una sola instruccion; los recorridos de algebra y relaciones usan continuaciones por bloques.

@@ -61,6 +61,13 @@ namespace DSExecution.Values
             return new DataValue(DataTypeId.List, memoryReference);
         }
 
+        public static DataValue FromSetReference(uint memoryReference)
+        {
+            if (memoryReference == 0)
+                throw new System.ArgumentOutOfRangeException(nameof(memoryReference));
+            return new DataValue(DataTypeId.Set, memoryReference);
+        }
+
         public static DataValue FromTupleReference(uint memoryReference)
         {
             if (memoryReference == 0)

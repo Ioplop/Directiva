@@ -287,6 +287,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Print => ExecutePrint(frame),
                 InstructionId.Tuple => ExecuteTuple(frame, instruction.OperandA),
                 InstructionId.List => ExecuteList(frame, instruction.OperandA),
+                InstructionId.Set => ExecuteSet(frame, instruction.OperandA),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -392,6 +393,34 @@ namespace DSExecution.VirtualMachine
             if (!evaluationStack.TryReplaceTopWithOne(
                     frame.EvalStackBase, count, DataValue.FromListReference(reference)))
                 return Fault(RuntimeError.InternalVmError("LIST stack replacement failed after validation."));
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Builds a set from stack values, discarding equal duplicates. Validation and
+        /// hashing happen before heap allocation; stack values stay rooted during GC.
+        /// </summary>
+        private VMAdvanceResult ExecuteSet(CallFrame frame, int count)
+        {
+            if (count < 0)
+                return Fault(RuntimeError.InvalidInstruction("SET requires a non-negative count."));
+            if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackOverflow());
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] members))
+                return Fault(RuntimeError.StackUnderflow());
+
+            if (!DTSet.TryConstruct(members, Memory, out SetHeapObject set, out RuntimeError error))
+                return Fault(error);
+            if (!Memory.TryAllocHeap(set, out uint reference))
+                return Fault(RuntimeError.OutOfMemory());
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, count, DataValue.FromSetReference(reference)))
+            {
+                Memory.FreeHeap(reference);
+                return Fault(RuntimeError.InternalVmError("SET stack replacement failed after validation."));
+            }
             return AdvanceInstruction(frame);
         }
 

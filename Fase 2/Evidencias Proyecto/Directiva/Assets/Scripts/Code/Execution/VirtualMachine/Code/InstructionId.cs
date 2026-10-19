@@ -34,6 +34,7 @@ namespace DSExecution.VirtualMachine
         Cast = 19,
         Print = 20,
         Tuple = 21,
-        List = 22
+        List = 22,
+        Set = 23
     }
 }

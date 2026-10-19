@@ -9,7 +9,7 @@ using DSExecution.VirtualMachine;
 namespace DSExecution.DataTypes
 {
     /// <summary>
-    /// Shared String representation of List and Tuple, including mixed nesting,
+    /// Shared String representation of List, Tuple and Set, including mixed nesting,
     /// string quoting and cyclic-list placeholders; no separate repr() API.
     /// </summary>
     internal static class SequenceFormatter
@@ -18,21 +18,25 @@ namespace DSExecution.DataTypes
         {
             internal readonly uint Reference;
             internal readonly HeapObject Sequence;
-            internal readonly bool IsTuple;
+            internal readonly DataTypeId Kind;
             internal readonly int Count;
             internal int Next;
 
-            internal Frame(uint reference, HeapObject sequence, bool isTuple, int count)
+            internal Frame(uint reference, HeapObject sequence, DataTypeId kind, int count)
             {
                 Reference = reference;
                 Sequence = sequence;
-                IsTuple = isTuple;
+                Kind = kind;
                 Count = count;
             }
 
-            internal DataValue Element(int index) => IsTuple
-                ? ((TupleHeapObject)Sequence).GetElement(index)
-                : ((ListHeapObject)Sequence).GetElement(index);
+            internal DataValue Element(int index) => Kind switch
+            {
+                DataTypeId.Tuple => ((TupleHeapObject)Sequence).GetElement(index),
+                DataTypeId.List => ((ListHeapObject)Sequence).GetElement(index),
+                DataTypeId.Set => ((SetHeapObject)Sequence).GetElement(index),
+                _ => throw new InvalidOperationException("Unsupported sequence kind.")
+            };
         }
 
         internal static bool TryFormat(DataValue root, VMMemoryContext memory,
@@ -46,9 +50,10 @@ namespace DSExecution.DataTypes
 
             while (true)
             {
-                if (next.dataType == DataTypeId.List || next.dataType == DataTypeId.Tuple)
+                if (next.dataType == DataTypeId.List || next.dataType == DataTypeId.Tuple ||
+                    next.dataType == DataTypeId.Set)
                 {
-                    bool isTuple = next.dataType == DataTypeId.Tuple;
+                    DataTypeId kind = next.dataType;
                     if (!next.TryGetHeapReference(out uint reference) ||
                         !memory.TryGetHeap(reference, out HeapObject sequence))
                     {
@@ -56,20 +61,41 @@ namespace DSExecution.DataTypes
                         text = null;
                         return false;
                     }
-                    if (!(isTuple ? sequence is TupleHeapObject : sequence is ListHeapObject))
+                    bool valid = kind switch
+                    {
+                        DataTypeId.Tuple => sequence is TupleHeapObject,
+                        DataTypeId.List => sequence is ListHeapObject,
+                        DataTypeId.Set => sequence is SetHeapObject,
+                        _ => false
+                    };
+                    if (!valid)
                     {
                         error = RuntimeError.InternalVmError("Sequence reference has incorrect heap type.");
                         text = null;
                         return false;
                     }
                     if (!active.Add(reference))
-                        builder.Append(isTuple ? "(...)" : "[...]");
+                        builder.Append(kind == DataTypeId.Tuple ? "(...)" :
+                            kind == DataTypeId.Set ? "{...}" : "[...]");
                     else
                     {
-                        int count = isTuple ? ((TupleHeapObject)sequence).Count :
-                            ((ListHeapObject)sequence).Count;
-                        builder.Append(isTuple ? '(' : '[');
-                        frames.Push(new Frame(reference, sequence, isTuple, count));
+                        int count = kind switch
+                        {
+                            DataTypeId.Tuple => ((TupleHeapObject)sequence).Count,
+                            DataTypeId.List => ((ListHeapObject)sequence).Count,
+                            _ => ((SetHeapObject)sequence).Count
+                        };
+                        if (kind == DataTypeId.Set && count == 0)
+                        {
+                            builder.Append("set()");
+                            active.Remove(reference);
+                        }
+                        else
+                        {
+                            builder.Append(kind == DataTypeId.Tuple ? '(' :
+                                kind == DataTypeId.Set ? '{' : '[');
+                            frames.Push(new Frame(reference, sequence, kind, count));
+                        }
                     }
                 }
                 else if (next.dataType == DataTypeId.String)
@@ -117,9 +143,10 @@ namespace DSExecution.DataTypes
                     Frame frame = frames.Peek();
                     if (frame.Next == frame.Count)
                     {
-                        if (frame.IsTuple && frame.Count == 1)
+                        if (frame.Kind == DataTypeId.Tuple && frame.Count == 1)
                             builder.Append(',');
-                        builder.Append(frame.IsTuple ? ')' : ']');
+                        builder.Append(frame.Kind == DataTypeId.Tuple ? ')' :
+                            frame.Kind == DataTypeId.Set ? '}' : ']');
                         frames.Pop();
                         active.Remove(frame.Reference);
                         continue;

@@ -129,6 +129,18 @@ namespace DSCompilation.DIL
                 ["EXTEND"] = OperationId.Extend,
                 ["CONTAINS"] = OperationId.Contains,
                 ["INDEX_OF"] = OperationId.IndexOf,
+                ["SET_ADD"] = OperationId.SetAdd,
+                ["SET_DISCARD"] = OperationId.SetDiscard,
+                ["SET_REMOVE"] = OperationId.SetRemove,
+                ["SET_POP"] = OperationId.SetPop,
+                ["SET_UNION"] = OperationId.SetUnion,
+                ["SET_INTERSECTION"] = OperationId.SetIntersection,
+                ["SET_DIFFERENCE"] = OperationId.SetDifference,
+                ["SET_SYMMETRIC_DIFFERENCE"] = OperationId.SetSymmetricDifference,
+                ["SET_UPDATE"] = OperationId.SetUpdate,
+                ["SET_IS_SUBSET"] = OperationId.SetIsSubset,
+                ["SET_IS_SUPERSET"] = OperationId.SetIsSuperset,
+                ["SET_IS_DISJOINT"] = OperationId.SetIsDisjoint,
                 ["COPY"] = OperationId.Copy,
                 ["IS_TRUTHY"] = OperationId.IsTruthy
             };
@@ -142,7 +154,8 @@ namespace DSCompilation.DIL
                 ["DECIMAL"] = DataTypeId.Decimal,
                 ["STRING"] = DataTypeId.String,
                 ["TUPLE"] = DataTypeId.Tuple,
-                ["LIST"] = DataTypeId.List
+                ["LIST"] = DataTypeId.List,
+                ["SET"] = DataTypeId.Set
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -677,6 +690,17 @@ namespace DSCompilation.DIL
                 return;
 
             string mnemonic = tokens[0];
+
+            // SET (no operand) remains the existing index-assignment operation.
+            // SET n builds a hash-backed set from n stack values, like LIST n.
+            if (mnemonic == "SET" && tokens.Length == 2)
+            {
+                int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                if (count < 0)
+                    Throw(moduleName, lineNumber, "SET requires a non-negative element count.");
+                instructions.Add(Instruction.Set(count));
+                return;
+            }
 
             if (OperationMnemonics.TryGetValue(mnemonic, out OperationId operationId))
             {

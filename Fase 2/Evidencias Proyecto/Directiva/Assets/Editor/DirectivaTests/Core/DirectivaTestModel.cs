@@ -109,6 +109,11 @@ namespace Directiva.EditorTests
             DIL.DILListTests.Register(tests);
             DIL.DILListMemoryTests.Register(tests);
             DIL.DILListConcurrencyTests.Register(tests);
+            DIL.DILSetTests.Register(tests);
+            DIL.DILSetAlgebraTests.Register(tests);
+            DIL.DILSetMemoryTests.Register(tests);
+            DIL.DILSetConcurrencyTests.Register(tests);
+            DIL.DILSetRobustnessTests.Register(tests);
             DIL.DILMemoryTests.Register(tests);
             DIL.DILConcurrencyTests.Register(tests);
             DIL.DILErrorTests.Register(tests);

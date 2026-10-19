@@ -67,6 +67,10 @@ namespace DSExecution.VirtualMachine
         public static Instruction List(int count)
             => new(InstructionId.List, operandA: count);
 
+        /// <summary>Builds a set from stack members; duplicate elements collapse by hash + equality.</summary>
+        public static Instruction Set(int count)
+            => new(InstructionId.Set, operandA: count);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 

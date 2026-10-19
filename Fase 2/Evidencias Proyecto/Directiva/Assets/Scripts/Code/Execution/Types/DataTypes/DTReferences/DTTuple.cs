@@ -218,9 +218,9 @@ namespace DSExecution.DataTypes
                         return OperationResult.OpError(RuntimeError.InvalidOperation(
                             "Cyclic tuples cannot be hashed."));
 
-                    if (nested.TryGetCachedHash(out long childHash))
+                    if (nested.TryGetCachedHash(out long cachedChildHash))
                     {
-                        current.Combine(unchecked((ulong)childHash));
+                        current.Combine(unchecked((ulong)cachedChildHash));
                         continue;
                     }
 
