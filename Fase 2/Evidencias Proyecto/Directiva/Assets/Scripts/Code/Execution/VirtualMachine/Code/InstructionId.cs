@@ -35,6 +35,7 @@ namespace DSExecution.VirtualMachine
         Print = 20,
         Tuple = 21,
         List = 22,
-        Set = 23
+        Set = 23,
+        Dict = 24
     }
 }

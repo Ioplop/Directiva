@@ -7,7 +7,7 @@ using DSExecution.VirtualMachine;
 namespace DSExecution.DataTypes
 {
     /// <summary>
-    /// Iterative structural comparison shared by Tuple and List. Prevents infinite
+    /// Iterative structural comparison shared by Tuple, List and Dict. Prevents infinite
     /// traversal of recursive List graphs, including Tuple-List reference cycles.
     /// </summary>
     internal static class SequenceEquality
@@ -25,12 +25,16 @@ namespace DSExecution.DataTypes
                              pair.Right.dataType == DataTypeId.Tuple;
                 bool list = pair.Left.dataType == DataTypeId.List &&
                             pair.Right.dataType == DataTypeId.List;
-                if (!tuple && !list)
+                bool dict = pair.Left.dataType == DataTypeId.Dict &&
+                            pair.Right.dataType == DataTypeId.Dict;
+                if (!tuple && !list && !dict)
                 {
                     if (pair.Left.dataType == DataTypeId.List ||
                         pair.Left.dataType == DataTypeId.Tuple ||
+                        pair.Left.dataType == DataTypeId.Dict ||
                         pair.Right.dataType == DataTypeId.List ||
-                        pair.Right.dataType == DataTypeId.Tuple)
+                        pair.Right.dataType == DataTypeId.Tuple ||
+                        pair.Right.dataType == DataTypeId.Dict)
                         return OperationResult.Success(DataValue.FromBool(false));
                     OperationResult result = OperationDispatcher.Start(OperationId.ValueEquals,
                         new[] { pair.Left, pair.Right }, memory).Result;
@@ -75,6 +79,21 @@ namespace DSExecution.DataTypes
                     if (!seen.Add((DataTypeId.List, leftRef, rightRef))) continue;
                     for (int i = leftCount - 1; i >= 0; i--)
                         pending.Push((leftList.GetElement(i), rightList.GetElement(i)));
+                }
+                else if (dict && first is DictHeapObject leftDict && second is DictHeapObject rightDict)
+                {
+                    if (leftDict.Count != rightDict.Count)
+                        return OperationResult.Success(DataValue.FromBool(false));
+                    if (!seen.Add((DataTypeId.Dict, leftRef, rightRef))) continue;
+                    for (int i = leftDict.Count - 1; i >= 0; i--)
+                    {
+                        if (!rightDict.TryFind(leftDict.GetKey(i), leftDict.GetKeyHash(i), memory,
+                                out int found, out RuntimeError error))
+                            return OperationResult.OpError(error);
+                        if (found < 0)
+                            return OperationResult.Success(DataValue.FromBool(false));
+                        pending.Push((leftDict.GetValue(i), rightDict.GetValue(found)));
+                    }
                 }
                 else
                 {

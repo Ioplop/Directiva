@@ -9,7 +9,7 @@ using DSExecution.VirtualMachine;
 namespace DSExecution.DataTypes
 {
     /// <summary>
-    /// Shared String representation of List, Tuple and Set, including mixed nesting,
+    /// Shared String representation of List, Tuple, Set and Dict, including mixed nesting,
     /// string quoting and cyclic-list placeholders; no separate repr() API.
     /// </summary>
     internal static class SequenceFormatter
@@ -35,6 +35,9 @@ namespace DSExecution.DataTypes
                 DataTypeId.Tuple => ((TupleHeapObject)Sequence).GetElement(index),
                 DataTypeId.List => ((ListHeapObject)Sequence).GetElement(index),
                 DataTypeId.Set => ((SetHeapObject)Sequence).GetElement(index),
+                DataTypeId.Dict => (index & 1) == 0
+                    ? ((DictHeapObject)Sequence).GetKey(index / 2)
+                    : ((DictHeapObject)Sequence).GetValue(index / 2),
                 _ => throw new InvalidOperationException("Unsupported sequence kind.")
             };
         }
@@ -51,7 +54,7 @@ namespace DSExecution.DataTypes
             while (true)
             {
                 if (next.dataType == DataTypeId.List || next.dataType == DataTypeId.Tuple ||
-                    next.dataType == DataTypeId.Set)
+                    next.dataType == DataTypeId.Set || next.dataType == DataTypeId.Dict)
                 {
                     DataTypeId kind = next.dataType;
                     if (!next.TryGetHeapReference(out uint reference) ||
@@ -66,6 +69,7 @@ namespace DSExecution.DataTypes
                         DataTypeId.Tuple => sequence is TupleHeapObject,
                         DataTypeId.List => sequence is ListHeapObject,
                         DataTypeId.Set => sequence is SetHeapObject,
+                        DataTypeId.Dict => sequence is DictHeapObject,
                         _ => false
                     };
                     if (!valid)
@@ -76,14 +80,15 @@ namespace DSExecution.DataTypes
                     }
                     if (!active.Add(reference))
                         builder.Append(kind == DataTypeId.Tuple ? "(...)" :
-                            kind == DataTypeId.Set ? "{...}" : "[...]");
+                            kind == DataTypeId.Set || kind == DataTypeId.Dict ? "{...}" : "[...]");
                     else
                     {
                         int count = kind switch
                         {
                             DataTypeId.Tuple => ((TupleHeapObject)sequence).Count,
                             DataTypeId.List => ((ListHeapObject)sequence).Count,
-                            _ => ((SetHeapObject)sequence).Count
+                            DataTypeId.Set => ((SetHeapObject)sequence).Count,
+                            _ => ((DictHeapObject)sequence).Count * 2
                         };
                         if (kind == DataTypeId.Set && count == 0)
                         {
@@ -93,7 +98,7 @@ namespace DSExecution.DataTypes
                         else
                         {
                             builder.Append(kind == DataTypeId.Tuple ? '(' :
-                                kind == DataTypeId.Set ? '{' : '[');
+                                kind == DataTypeId.Set || kind == DataTypeId.Dict ? '{' : '[');
                             frames.Push(new Frame(reference, sequence, kind, count));
                         }
                     }
@@ -146,13 +151,14 @@ namespace DSExecution.DataTypes
                         if (frame.Kind == DataTypeId.Tuple && frame.Count == 1)
                             builder.Append(',');
                         builder.Append(frame.Kind == DataTypeId.Tuple ? ')' :
-                            frame.Kind == DataTypeId.Set ? '}' : ']');
+                            frame.Kind == DataTypeId.Set || frame.Kind == DataTypeId.Dict ? '}' : ']');
                         frames.Pop();
                         active.Remove(frame.Reference);
                         continue;
                     }
                     if (frame.Next > 0)
-                        builder.Append(", ");
+                        builder.Append(frame.Kind == DataTypeId.Dict && (frame.Next & 1) != 0
+                            ? ": " : ", ");
                     next = frame.Element(frame.Next++);
                     break;
                 }

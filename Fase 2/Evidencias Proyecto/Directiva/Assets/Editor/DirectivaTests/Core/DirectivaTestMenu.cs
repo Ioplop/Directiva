@@ -38,6 +38,16 @@ namespace Directiva.EditorTests
         private static void SetConcurrency() => DirectivaTestRunner.StartCategory("DIL", "SetConcurrency");
         [MenuItem("Directiva/Tests/DIL/SetRobustness/TestEverything", false, 120)]
         private static void SetRobustness() => DirectivaTestRunner.StartCategory("DIL", "SetRobustness");
+        [MenuItem("Directiva/Tests/DIL/Dictionaries/TestEverything", false, 120)]
+        private static void Dictionaries() => DirectivaTestRunner.StartCategory("DIL", "Dictionaries");
+        [MenuItem("Directiva/Tests/DIL/DictViews/TestEverything", false, 120)]
+        private static void DictViews() => DirectivaTestRunner.StartCategory("DIL", "DictViews");
+        [MenuItem("Directiva/Tests/DIL/DictMemory/TestEverything", false, 120)]
+        private static void DictMemory() => DirectivaTestRunner.StartCategory("DIL", "DictMemory");
+        [MenuItem("Directiva/Tests/DIL/DictConcurrency/TestEverything", false, 120)]
+        private static void DictConcurrency() => DirectivaTestRunner.StartCategory("DIL", "DictConcurrency");
+        [MenuItem("Directiva/Tests/DIL/DictRobustness/TestEverything", false, 120)]
+        private static void DictRobustness() => DirectivaTestRunner.StartCategory("DIL", "DictRobustness");
         [MenuItem("Directiva/Tests/DIL/ListMemory/TestEverything", false, 120)]
         private static void ListMemory() => DirectivaTestRunner.StartCategory("DIL", "ListMemory");
         [MenuItem("Directiva/Tests/DIL/ListConcurrency/TestEverything", false, 120)]

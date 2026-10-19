@@ -71,6 +71,10 @@ namespace DSExecution.VirtualMachine
         public static Instruction Set(int count)
             => new(InstructionId.Set, operandA: count);
 
+        /// <summary>Builds a dictionary from count key/value pairs (2 * count stack values).</summary>
+        public static Instruction Dict(int count)
+            => new(InstructionId.Dict, operandA: count);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 
@@ -151,6 +155,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Print => "Print",
                 InstructionId.Tuple => $"Tuple {OperandA}",
                 InstructionId.List => $"List {OperandA}",
+                InstructionId.Set => $"Set {OperandA}",
+                InstructionId.Dict => $"Dict {OperandA}",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

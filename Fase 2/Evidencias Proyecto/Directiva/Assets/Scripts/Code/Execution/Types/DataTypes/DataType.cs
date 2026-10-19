@@ -50,8 +50,8 @@ namespace DSExecution.DataTypes
             result[(int)DataTypeId.Tuple] = DTTuple.Instance;
             result[(int)DataTypeId.List] = DTList.Instance;
             result[(int)DataTypeId.Set] = DTSet.Instance;
+            result[(int)DataTypeId.Dict] = DTDict.Instance;
             // Remaining to add...
-            // Dict
             // Unit
             // Base
             // Resource

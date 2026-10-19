@@ -28,13 +28,19 @@
 | `Lists/TestEverything` | LIST n, operaciones de mutacion, conversion, igualdad, busqueda y parser DIL |
 | `ListMemory/TestEverything` | Redimensionamiento, swap de buffers, atomicidad OOM, raices auxiliares, GC y ciclos |
 | `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
+| `Sets/TestEverything`, `SetAlgebra`, `SetMemory`, `SetConcurrency`, `SetRobustness` | Conjuntos, hash, algebra, GC, concurrencia y estres (126 pruebas validadas en Unity) |
+| `Dictionaries/TestEverything` | Constructor, GET/SET/DELETE/POP_ITEM, hashing, igualdad y conversiones |
+| `DictViews/TestEverything` | DICT_KEYS/VALUES/ITEMS, formato anidado y continuidad |
+| `DictMemory/TestEverything` | Carga de dos slots, GC, ciclos, OOM y buffers auxiliares |
+| `DictConcurrency/TestEverything` | Update atomico, colisiones de versiones y multiples VMs |
+| `DictRobustness/TestEverything` | Colisiones, orden, churn determinista y seguridad de parser/VM |
 | `Memory/TestEverything` | Heap, limites, mark-and-sweep lazy, OOM, GC anidado/ciclos y raices en stacks, locals, globals y cast |
 | `Concurrency/TestEverything` | Multiples VMs con memoria compartida, round-robin determinista, interleavings, carreras reproducibles y aislamiento |
 | `Errors/TestEverything` | IDs de RuntimeError: casos DIL alcanzables y fixtures VM directos para instrucciones invalidas |
 | `Robustness/TestEverything` | Stress reproducible, cientos de operaciones muestreadas, carga GC y tuplas profundamente anidadas |
 | `Regression/TestEverything` | Las dos suites de Tuple preexistentes, ahora integradas en el catalogo y con un reporte por caso |
 
-**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `Dict`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
+**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no el futuro compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
 
 ## Agregar mas pruebas
 
@@ -56,14 +62,23 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 - `APPEND`/`INSERT`/`DELETE`/`SET`/`EXTEND`: consumen sus operandos y apilan `None`. `POP_ITEM` devuelve el elemento quitado; `COPY` hace copia superficial nueva; `ADD` concatena y devuelve nueva List. `CONTAINS` devuelve Bool; `INDEX_OF` devuelve primer indice o -1.
 - Continuaciones: el buffer auxiliar es un objeto real del heap y lo enraiza un campo dedicado de la VM. Los `OperationState` solo contienen indices y versiones, nunca referencias de heap. La publicacion es atomica; una mutacion de otra VM durante la preparacion produce InvalidOperation, no un merge automatico.
 - `Hash` de List produce `UnhashableType`. Formateo de listas con referencias circulares muestra `[...]` y evita bucles infinitos; Tuple usa el mismo formateador.
-- **Verificacion:** el responsable confirmo que los 242 casos existentes (incluida List) pasaron en Unity el 19-10-2026. El responsable confirmo 254/254 casos con Hashes; las 126 pruebas de Set de esta entrega aun requieren compilacion y ejecucion en Unity.
+- **Verificacion:** el responsable confirmo que los 242 casos existentes (incluida List) pasaron en Unity el 19-10-2026. El responsable confirmo 254/254 casos con Hashes; Set paso 380/380 pruebas en Unity el 19-10-2026.
 
 ## Semantica y nuevas pruebas de Set (2026-10-19)
 
 - Menus: `Directiva/Tests/DIL/Sets`, `SetAlgebra`, `SetMemory`, `SetConcurrency` y `SetRobustness`, cada uno con `TestEverything`; `TestAll` incluye estos grupos automaticamente.
-- **Linea base verificada:** 254/254 pruebas anteriores. **Nuevas:** 126 pruebas (380 previstas) sin validacion Unity. Los informes detallados deben guardarse fuera del repositorio.
+- **Linea base verificada:** 380/380 pruebas en Unity el 19-10-2026 (incluye las 126 nuevas de Set). Los informes detallados deben guardarse fuera del repositorio.
 - `SET n` construye un conjunto desde n valores del stack; **`SET` sin numero sigue siendo la operacion de asignacion por indice de listas**.
 - `SET_ADD`, `SET_DISCARD`, `SET_REMOVE`, `SET_POP`, `SET_UPDATE`, `COPY`; `CONTAINS`, `LENGTH`, `VALUE_EQUALS`, `REFERENCE_EQUALS`, `IS_TRUTHY`, `CAST STRING`; `SET_UNION`, `SET_INTERSECTION`, `SET_DIFFERENCE`, `SET_SYMMETRIC_DIFFERENCE`, `SET_IS_SUBSET`, `SET_IS_SUPERSET`, `SET_IS_DISJOINT`.
 - Los elementos deben ser hasheables (por ejemplo String, Tuple hasheable, Int, Bool, Decimal, None); Set/List/Dict no son hasheables. Las colisiones de hash se verifican por igualdad real. No se garantiza orden conceptual; la implementacion conserva una secuencia reproducible bajo el mismo historial de operaciones.
 - Mutaciones basicas usan reserva logica previa; operacion continuada crea un buffer en heap y lo protege a traves de la VM hasta la publicacion atomica. Otra VM que modifica alguno de los operandos durante la preparacion causa `InvalidOperation`.
 - Limitacion: igualdad estructural de conjuntos, creacion `SET n` y conversion a texto se ejecutan en una sola instruccion; los recorridos de algebra y relaciones usan continuaciones por bloques.
+
+## Semantica y nuevas pruebas de Dictionary (2026-10-19)
+
+- **Linea base validada:** 380/380 pruebas anteriores pasaron en Unity. **150 pruebas nuevas** de Dict repartidas en cinco grupos (530 previstas) se revisaron estaticamente y **deben compilarse y ejecutarse en Unity**.
+- `DICT n` construye un diccionario de los ultimos **n pares** `(clave, valor)` del stack (consume 2n). Tamaño logico `1 + 2n_unicos`; hashes de claves con igualdad real y almacenamiento de insercion determinista. Claves duplicadas actualizan el valor sin reemplazar la clave ni su posicion. Set sin argumento mantiene su semantica anterior de asignacion para List y ahora Dict.
+- Operadores: `GET`, `SET`, `DELETE`, `POP_ITEM`, `CONTAINS`, `LENGTH`, `COPY`, `VALUE_EQUALS`, `REFERENCE_EQUALS`, `IS_TRUTHY`, `CAST DICT`, `CAST STRING`, `DICT_GET_DEFAULT`, `DICT_CLEAR`, `DICT_UPDATE`, `DICT_KEYS`, `DICT_VALUES`, `DICT_ITEMS`. `DICT_GET_DEFAULT` consume dict, clave, fallback; devuelve fallback solo si falta la clave. `DICT_KEYS/VALUES/ITEMS` devuelven List; ITEMS crea pares Tuple.
+- Solo las **claves** necesitan hash estable (Int/Bool/Decimal, None, String, Tuple hasheable); Dict/List/Set son no hasheables, aunque pueden usarse como valores y formar ciclos. Los errores por claves ausentes son `InvalidOperation`; claves no hasheables retornan `UnhashableType`.
+- `COPY`, `DICT_UPDATE` y vistas avanzan 16 entradas por paso con buffer protegido por la VM; update publica atomicamente y se cancela ante modificaciones concurrentes a los operandos. GET/SET/DELETE/POP_ITEM y comparaciones son sincronicas; eliminacion con preservacion de orden requiere actualmente O(n).
+- Los informes detallados de **cada** caso siguen generandose fuera del repositorio. Si falla alguna prueba, compartir ZIP de reports (SUMMARY y tests/*.md) para depuracion. No considerar los 530 casos validados hasta ejecutarlos en Unity.

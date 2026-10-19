@@ -141,6 +141,12 @@ namespace DSCompilation.DIL
                 ["SET_IS_SUBSET"] = OperationId.SetIsSubset,
                 ["SET_IS_SUPERSET"] = OperationId.SetIsSuperset,
                 ["SET_IS_DISJOINT"] = OperationId.SetIsDisjoint,
+                ["DICT_UPDATE"] = OperationId.DictUpdate,
+                ["DICT_KEYS"] = OperationId.DictKeys,
+                ["DICT_VALUES"] = OperationId.DictValues,
+                ["DICT_ITEMS"] = OperationId.DictItems,
+                ["DICT_CLEAR"] = OperationId.DictClear,
+                ["DICT_GET_DEFAULT"] = OperationId.DictGetDefault,
                 ["COPY"] = OperationId.Copy,
                 ["IS_TRUTHY"] = OperationId.IsTruthy
             };
@@ -155,7 +161,8 @@ namespace DSCompilation.DIL
                 ["STRING"] = DataTypeId.String,
                 ["TUPLE"] = DataTypeId.Tuple,
                 ["LIST"] = DataTypeId.List,
-                ["SET"] = DataTypeId.Set
+                ["SET"] = DataTypeId.Set,
+                ["DICT"] = DataTypeId.Dict
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -741,6 +748,15 @@ namespace DSCompilation.DIL
                     if (count < 0)
                         Throw(moduleName, lineNumber, "LIST requires a non-negative element count.");
                     instructions.Add(Instruction.List(count));
+                    return;
+                }
+
+                case "DICT":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 0 || count > int.MaxValue / 2)
+                        Throw(moduleName, lineNumber, "DICT requires a non-negative pair count <= int.MaxValue/2.");
+                    instructions.Add(Instruction.Dict(count));
                     return;
                 }
 

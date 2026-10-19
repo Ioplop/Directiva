@@ -288,6 +288,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Tuple => ExecuteTuple(frame, instruction.OperandA),
                 InstructionId.List => ExecuteList(frame, instruction.OperandA),
                 InstructionId.Set => ExecuteSet(frame, instruction.OperandA),
+                InstructionId.Dict => ExecuteDict(frame, instruction.OperandA),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -420,6 +421,35 @@ namespace DSExecution.VirtualMachine
             {
                 Memory.FreeHeap(reference);
                 return Fault(RuntimeError.InternalVmError("SET stack replacement failed after validation."));
+            }
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// DICT n consumes n ordered key/value pairs; unique equivalent keys keep their
+        /// first position while later values replace older values. Inputs remain stack
+        /// GC roots until construction has succeeded and the resulting object is stored.
+        /// </summary>
+        private VMAdvanceResult ExecuteDict(CallFrame frame, int count)
+        {
+            if (count < 0 || count > int.MaxValue / 2)
+                return Fault(RuntimeError.InvalidInstruction("DICT needs a valid non-negative pair count."));
+            int stackCount = count * 2;
+            if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, stackCount))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, stackCount))
+                return Fault(RuntimeError.StackOverflow());
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, stackCount, out DataValue[] pairs))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!DTDict.TryConstruct(pairs, Memory, out DictHeapObject dict, out RuntimeError error))
+                return Fault(error);
+            if (!Memory.TryAllocHeap(dict, out uint reference))
+                return Fault(RuntimeError.OutOfMemory());
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, stackCount, DataValue.FromDictReference(reference)))
+            {
+                Memory.FreeHeap(reference);
+                return Fault(RuntimeError.InternalVmError("DICT stack replacement failed after validation."));
             }
             return AdvanceInstruction(frame);
         }

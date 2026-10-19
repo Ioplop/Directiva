@@ -34,7 +34,7 @@ namespace DSExecution.DataTypes
             return true;
         }
 
-        private static bool TryHash(DataValue value, IMemContext memory,
+        internal static bool TryHash(DataValue value, IMemContext memory,
             out long hash, out RuntimeError error)
         {
             hash = 0;
