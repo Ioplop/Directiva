@@ -74,6 +74,23 @@ namespace DSExecution.VirtualMachine
             return heap.TryAllocate(obj, out memRef);
         }
 
+        /// <summary>
+        /// Reserves a new logical size and retries after lazy GC under pressure.
+        /// During collection the object being resized is an additional temporary root.
+        /// </summary>
+        public bool TryResizeHeap(uint memRef, uint newSize)
+        {
+            if (!heap.TryGet(memRef, out _))
+                return false;
+            if (heap.TryResize(memRef, newSize))
+                return true;
+            CollectGarbageCore(memRef);
+            return heap.TryResize(memRef, newSize);
+        }
+
+        public bool TrySwapHeapContents(uint firstRef, uint secondRef)
+            => heap.TrySwapContents(firstRef, secondRef);
+
         public bool FreeHeap(uint memRef)
             => heap.Free(memRef);
 
@@ -81,12 +98,16 @@ namespace DSExecution.VirtualMachine
         /// Runs a full mark-and-sweep collection over globals, all live VMs sharing this context,
         /// and recursively reachable heap objects. Cycles are naturally handled by the visited set.
         /// </summary>
-        public int CollectGarbage()
+        public int CollectGarbage() => CollectGarbageCore(0);
+
+        private int CollectGarbageCore(uint protectedReference)
         {
             GarbageCollectionCount++;
 
             var marked = new HashSet<uint>();
             var pending = new Stack<uint>();
+            if (protectedReference != 0)
+                pending.Push(protectedReference);
 
             void MarkValue(DataValue value)
             {

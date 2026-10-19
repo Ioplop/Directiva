@@ -61,6 +61,12 @@ namespace DSExecution.VirtualMachine
         public static Instruction Tuple(int count)
             => new(InstructionId.Tuple, operandA: count);
 
+        /// <summary>
+        /// Consumes count stack values and replaces them with one mutable heap list.
+        /// </summary>
+        public static Instruction List(int count)
+            => new(InstructionId.List, operandA: count);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 
@@ -140,6 +146,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Cast => $"Cast {DataTypeOperand}",
                 InstructionId.Print => "Print",
                 InstructionId.Tuple => $"Tuple {OperandA}",
+                InstructionId.List => $"List {OperandA}",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

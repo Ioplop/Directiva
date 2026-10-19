@@ -45,6 +45,8 @@ namespace DSExecution.VirtualMachine
         private PendingOperation? pendingOperation;
         private DataValue[]? activeOperationArguments;
         private DataValue? activeCastValue;
+        // This root is owned by the VM, not OperationState. Zero means absent.
+        private uint operationAuxPointer;
         private RuntimeError? fault;
         private DataValue returnValue;
 
@@ -284,6 +286,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Cast => ExecuteCast(frame, instruction.DataTypeOperand),
                 InstructionId.Print => ExecutePrint(frame),
                 InstructionId.Tuple => ExecuteTuple(frame, instruction.OperandA),
+                InstructionId.List => ExecuteList(frame, instruction.OperandA),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -365,6 +368,30 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.InternalVmError("TUPLE could not commit the stack replacement."));
             }
 
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>Builds a list atomically with stack inputs rooted during lazy GC.</summary>
+        private VMAdvanceResult ExecuteList(CallFrame frame, int count)
+        {
+            if (count < 0)
+                return Fault(RuntimeError.InvalidInstruction("LIST requires a non-negative count."));
+            if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackOverflow());
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] elements))
+                return Fault(RuntimeError.StackUnderflow());
+
+            foreach (DataValue element in elements)
+                if (element.dataType == DataTypeId.Uninitialized)
+                    return Fault(RuntimeError.VariableUsedBeforeInitialization());
+
+            if (!Memory.TryAllocHeap(new ListHeapObject(elements), out uint reference))
+                return Fault(RuntimeError.OutOfMemory());
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, count, DataValue.FromListReference(reference)))
+                return Fault(RuntimeError.InternalVmError("LIST stack replacement failed after validation."));
             return AdvanceInstruction(frame);
         }
 
@@ -568,7 +595,8 @@ namespace DSExecution.VirtualMachine
                 pending.Arguments,
                 pending.ReceiverIndex,
                 pending.State,
-                Memory
+                Memory,
+                operationAuxPointer
             );
 
             return HandleOperationResult(
@@ -594,6 +622,7 @@ namespace DSExecution.VirtualMachine
             {
                 case OperationStatus.Success:
                     pendingOperation = null;
+                    operationAuxPointer = 0;
 
                     if (!evaluationStack.TryPush(result.Value))
                         return Fault(RuntimeError.StackOverflow());
@@ -602,6 +631,7 @@ namespace DSExecution.VirtualMachine
 
                 case OperationStatus.Error:
                     pendingOperation = null;
+                    operationAuxPointer = 0;
                     return Fault(
                         result.Error ?? RuntimeError.InternalVmError(
                             $"Operation {operationId} returned Error without RuntimeError."
@@ -618,6 +648,15 @@ namespace DSExecution.VirtualMachine
                             )
                         );
                     }
+
+                    if (result.AuxiliaryReference != operationAuxPointer && pendingOperation != null)
+                        return Fault(RuntimeError.InternalVmError(
+                            $"Operation {operationId} changed its auxiliary reference mid-continuation."));
+
+                    if (result.AuxiliaryReference != 0 &&
+                        !Memory.TryGetHeap(result.AuxiliaryReference, out _))
+                        return Fault(RuntimeError.InternalVmError(
+                            $"Operation {operationId} returned a missing auxiliary heap reference."));
 
                     if (pendingOperation == null)
                     {
@@ -636,6 +675,7 @@ namespace DSExecution.VirtualMachine
                             receiverIndex,
                             result.State
                         );
+                        operationAuxPointer = result.AuxiliaryReference;
                     }
                     else
                     {
@@ -866,6 +906,9 @@ namespace DSExecution.VirtualMachine
                 }
             }
 
+            if (operationAuxPointer != 0)
+                yield return operationAuxPointer;
+
             if (pendingOperation != null)
             {
                 foreach (DataValue value in pendingOperation.Arguments)
@@ -906,6 +949,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult Fault(RuntimeError error)
         {
             pendingOperation = null;
+            operationAuxPointer = 0;
             fault = error;
             Status = VMExecutionStatus.Faulted;
             return VMAdvanceResult.Faulted(error);

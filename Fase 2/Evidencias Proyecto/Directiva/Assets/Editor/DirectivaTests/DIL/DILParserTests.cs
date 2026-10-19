@@ -122,7 +122,7 @@ namespace Directiva.EditorTests.DIL
                 new[] { "CaseSensitive", "push int 1\nRETURN", "Unknown DIL" },
                 new[] { "NegativeTuple", "TUPLE -1\nRETURN", "non-negative" },
                 new[] { "InvalidPushType", "PUSH LIST 3\nRETURN", "Unsupported PUSH type" },
-                new[] { "InvalidCastType", "PUSH INT 3\nCAST LIST\nRETURN", "CAST target" },
+                new[] { "InvalidCastType", "PUSH INT 3\nCAST UNREGISTERED_TYPE\nRETURN", "CAST target" },
                 new[] { "BadBool", "PUSH BOOL yes\nRETURN", "BOOL literal" },
                 new[] { "BadInt", "PUSH INT 999999999999999999999999999\nRETURN", "Int64" },
                 new[] { "BadDecimal", "PUSH DECIMAL notdecimal\nRETURN", "decimal" },

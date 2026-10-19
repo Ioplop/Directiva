@@ -2,8 +2,8 @@
 
 > **Documento de orientación para agentes de IA y colaboradores.** Es un mapa del proyecto, no una especificación exhaustiva ni un reemplazo del código fuente.
 >
-> **Última actualización:** 2026-10-15 23:21:07 -03:00 (America/Santiago)  
-> **Base examinada:** `Assets15-10-2026-2222.zip` (copia de `Assets/` entregada el 15-10-2026).  
+> **Última actualización:** 2026-10-19 01:42:43 -03:00 (America/Santiago)  
+> **Base examinada:** `Assets15-10-2026-2222.zip`, más diferenciales posteriores de suite de pruebas y corrección del 15-10-2026; implementación de List desarrollada a partir de esa base el 19-10-2026. El código local/repo posterior prevalece.  
 > **Alcance:** exclusivamente el videojuego Unity **Directiva**. No cubre informes académicos, evidencias, gestión externa ni archivos que no vinieron en este paquete.  
 > **Criterio de verdad:** código, escenas y assets actuales > este resumen > documentación histórica > planes conversados. En caso de discrepancia, inspeccionar el repositorio y `git log`.
 
@@ -11,9 +11,9 @@
 
 **Directiva** es un videojuego educativo y competitivo de PC hecho con **Unity 6 / C#**, con **UI Toolkit** y recursos **URP**. El objetivo es que el jugador programe el comportamiento de **unidades** en un lenguaje textual propio, **DScript**, inspirado en Python, dentro de un entorno de simulación con un **Nexo** (base), recursos y objetivos/misiones. *Unidad* es el término del juego; evitar llamarlas «agentes» para no confundirlas con agentes de IA.
 
-**Estado al corte:** el proyecto tiene interfaz de edición de código, menú y opciones, parser de **DIL**, VM ejecutable con memoria/GC y tipos escalares, String y Tuple. **Todavía no tiene compilador DScript → DIL ni simulación jugable de unidades/Nexo/recursos.** El HUD de simulación y los objetos 3D de las escenas son, por ahora, principalmente maquetas visuales.
+**Estado al corte:** el proyecto tiene interfaz de edición de código, menú y opciones, parser de **DIL**, VM ejecutable con memoria/GC y tipos escalares, String, Tuple y **List (implementación nueva; pendiente de pruebas en Unity)**. **Todavía no tiene compilador DScript → DIL ni simulación jugable de unidades/Nexo/recursos.** El HUD de simulación y los objetos 3D de las escenas son, por ahora, principalmente maquetas visuales.
 
-**Prioridad inmediata acordada:** completar estructuras de datos del heap: **Tuple está implementada y probada**; siguen **List, Dict y Set**, que implican mutación y cambios de tamaño. **Después** desarrollar el compilador **DScript → DIL**. No anticipar esa segunda tarea ni inventar funcionalidades de gameplay como si estuvieran implementadas.
+**Prioridad inmediata acordada:** completar estructuras de datos del heap: **Tuple está implementada y probada**; **List está implementada en este diferencial (pendiente de compilación/pruebas Unity)**; siguen **Dict y Set**, que implican hashing/unicidad. **Después** desarrollar el compilador **DScript → DIL**. No anticipar esa segunda tarea ni inventar funcionalidades de gameplay como si estuvieran implementadas.
 
 ### Estado por subsistema
 
@@ -26,7 +26,7 @@
 | DIL (texto intermedio) | Parser con múltiples módulos/imports, funciones, saltos, constantes y operaciones soportadas; nueva suite automatizada extensa de Editor **pendiente de ejecutar en Unity** | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/` |
 | Máquina virtual | Ejecuta `CodeContext`: stack, llamadas, locals, globals, saltos, operaciones, casts, print y límites | `Scripts/Code/Execution/VirtualMachine/` |
 | Heap y GC | Heap con límites lógicos; **mark-and-sweep lazy** al fallar una reserva, referencias anidadas y compartidas | `Scripts/Code/Execution/VirtualMachine/Memory/` |
-| Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`; List/Set/Dict y entidades solo reservadas | `Scripts/Code/Execution/Types/` |
+| Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`, **List (sin validación Unity aún)**; Set/Dict y entidades solo reservadas | `Scripts/Code/Execution/Types/` |
 | Interfaz de simulación | HUD y editor acoplables; controles de simulación **solo visuales** | `Scripts/UI/Simulation/`, `Scenes/BaseSimulation.unity` |
 | Simulación jugable y misiones | **No implementadas**: lógica de unidades, combate, minería, Nexo, recursos, victoria, tutorial | Crear subsistemas de simulación y orquestación |
 | Análisis/refactorización DScript | Interfaces/diagnósticos preparados; implementaciones **NoOp** | `Scripts/Code/{Analysis,Refactoring,Core}/` |
@@ -76,7 +76,7 @@
 
 - Código del runtime organizado principalmente en namespaces `DSCompilation.DIL`, `DSExecution.*`, `Directiva.CodeUI`, `Directiva.Settings`, `Directiva.UI`, `Directiva.MainMenu` y `Directiva.SimulationUI`.
 - Instrucciones VM (`InstructionId`) y operaciones (`OperationId`) **tienen IDs explícitos**; `DataTypeId` también. **No renumerar identificadores ya usados**: se preservan en previsión de serialización DIB.
-- La VM usa datos tipados mediante `DataValue`. Los escalares pueden ir en el payload del valor; `String` y `Tuple` usan referencias (`uint`) a objetos del heap. No asumir que toda variable C# es un objeto heap ni usar referencias de C# como identidad del lenguaje.
+- La VM usa datos tipados mediante `DataValue`. Los escalares pueden ir en el payload del valor; `String`, `Tuple` y `List` usan referencias (`uint`) a objetos del heap. No asumir que toda variable C# es un objeto heap ni usar referencias de C# como identidad del lenguaje.
 - Conservar **GUIDs y `.meta`** de Unity. En cambios futuros, preferir ZIP diferencial con raíz `Assets/`, únicamente archivos nuevos/modificados y una lista de eliminaciones/renombres. Mantener rutas, mayúsculas y separadores válidos en Windows/Linux.
 - Mantener una semántica **determinista** para el runtime; la física/animación visual de Unity **no constituye** todavía un simulador determinista. La futura ejecución de múltiples VMs con scheduling round-robin sigue siendo una meta, no un sistema jugable existente.
 
@@ -86,6 +86,7 @@
 2. **Primera infraestructura de UI:** editor integrado con explorador y archivos persistentes, consola, botones, localización parcial, estilos y numerosos ajustes iterativos de usabilidad (`Documentation/CodeEditor/CHANGELOG_*`). Se prepararon contratos para analizador/refactor/debug sin fingir que estaban implementados.
 3. **Diseño y ejecución del lenguaje:** separación DScript (objetivo del jugador) / DIL (intermedio) / DIB (formato binario futuro). Desarrollo de `DataValue`, operaciones/tipos, instrucciones y `DirectivaVM`; editor cambiado provisionalmente a `.dil` para probar el runtime.
 4. **Parser, memoria y colecciones inmutables:** soporte textual de DIL con funciones/imports; heap con GC lazy mark-and-sweep, String y después Tuple con hashing, longitud, casting, referencias anidadas y pruebas en Unity.
+5. **List mutable (19-10-2026, por verificar):** reserva/redimensionamiento lógico por objeto, raíz auxiliar por VM para operaciones continuadas, actualización atómica por intercambio de buffers, conflictos deterministas entre VMs y pruebas DIL nuevas.
 5. **Presentación y flujo de juego:** menú principal con identidad visual y selección de niveles, sistema persistente de opciones y escena de simulación/host del editor; la simulación sigue siendo maqueta.
 
 **Estos hitos son una síntesis conceptual, no una cronología exhaustiva de commits**. Para fechas, autores y cambios línea por línea usar Git y los changelogs del repositorio.
@@ -163,12 +164,13 @@ Esta sección pretende permitir localizar rápidamente **qué archivo tocar**; n
 | `Code/Execution/Types/DataTypeId.cs`, `DataTypes/DataType.cs`, `CastResult.cs` | IDs estables, registro/despacho de tipos, truthiness/igualdad base, casting y resultado de cast. |
 | `Code/Execution/Types/DataTypes/DTValues/DTValue.cs`, `DTInt.cs`, `DTDecimal.cs`, `DTBool.cs` | Base y semántica numérica: aritmética, comparación, casts, igualdad/hash compatibles Int/Bool/Decimal. Decimal de representación determinista, no float binario. |
 | `Code/Execution/Types/DataTypes/DTEmptyTypes/DTNone.cs`, `DTUninitialized.cs` | `None` y estado inválido de variables no inicializadas; este último produce errores si se opera con él. |
-| `Code/Execution/Types/DataTypes/DTReferences/DTString.cs`, `DTTuple.cs` | Tipos de referencia **implementados**; String inmutable; Tuple inmutable y ordenada, igualdad por elementos, indexación, hash, longitud, concatenación y cast a String. |
-| `Code/Execution/Types/DataTypes/DTReferences/` | **No contiene** todavía implementaciones de List/Dict/Set. |
+| `Code/Execution/Types/DataTypes/DTReferences/DTString.cs`, `DTTuple.cs`, `DTList.cs` | String/Tuple inmutables; List mutable con Get/Set/Append/Insert/Delete/Pop/Extend/Copy/Add/Contains/IndexOf, longitud, igualdad, impresión y control de memoria. List pendiente de validación en Unity. |
+| `Code/Execution/Types/DataTypes/DTReferences/SequenceEquality.cs`, `SequenceFormatter.cs` | Igualdad estructural y conversión a texto compartidas por Tuple/List; recorrido iterativo y ciclos seguros. |
+| `Code/Execution/Types/DataTypes/DTReferences/` | **Todavía no contiene** implementaciones de Dict/Set. |
 | `Code/Execution/Operations/OperationId.cs`, `OperationCatalog.cs`, `OperationInfo.cs` | Catálogo de operaciones, aridad, fallback, índices de receiver e IDs numéricos estables. |
 | `Code/Execution/Operations/OperationCall.cs`, `OperationResult.cs`, `OperationStatus.cs`, `OperationBinding.cs` | Contexto/resultado de invocación, estado de operación, atributo para enlazar interfaces con tipos. |
-| `Code/Execution/Operations/OperationInterfaces/` | Contratos `IOpArithmetic.cs`, `IOpBoolean.cs`, `IOpContainer.cs`, `IOpHash.cs`, `IOpLength.cs`, `IOpOrdering.cs`, `IOpReferenceEquality.cs`, `IOpTruthiness.cs`, `IOpValueEquality.cs`. Las interfaces enlazan métodos con `OperationId`. |
-| `Code/Execution/Operations/OperationStates/OperationState.cs`, `IntPowerState.cs` | Infraestructura de operaciones continuadas, para distribuir trabajo en varios avances VM. |
+| `Code/Execution/Operations/OperationInterfaces/` | Contratos `IOpArithmetic.cs`, `IOpBoolean.cs`, `IOpContainer.cs`, `IOpHash.cs`, `IOpLength.cs`, `IOpOrdering.cs`, `IOpReferenceEquality.cs`, `IOpTruthiness.cs`, `IOpValueEquality.cs`, además de `IOpExtend.cs` e `IOpSearch.cs`. Las interfaces enlazan métodos con `OperationId`. |
+| `Code/Execution/Operations/OperationStates/OperationState.cs`, `IntPowerState.cs`, `ListBuildState.cs`, `ListSearchState.cs` | Progreso de operaciones continuadas; los estados no guardan referencias al heap. La VM puede conservar una referencia auxiliar como raíz independiente. |
 | `Code/Execution/Errors/RuntimeError.cs` | Errores tipados del runtime (stack, memoria, cast, operación, índice, hash no disponible, etc.). |
 
 **Precaución:** que un `OperationId` o `DataTypeId` exista **no significa** que haya implementación usable en un tipo concreto o exposición desde el parser DIL.
@@ -183,10 +185,10 @@ Esta sección pretende permitir localizar rápidamente **qué archivo tocar**; n
 | `Code/Execution/VirtualMachine/Runtime/EvaluationStack.cs`, `LocalMemory.cs`, `CallFrame.cs` | Stack de evaluación, slots locales y frames/contextos de llamada. |
 | `Code/Execution/VirtualMachine/Runtime/OperationDispatcher.cs` | Despacho de operaciones a tipos, fallback entre receivers y continuaciones. |
 | `Code/Execution/VirtualMachine/Runtime/VMOptions.cs`, `VMExecutionStatus.cs`, `VMAdvanceResult.cs`, `VMRunResult.cs`, `VMDebugState.cs` | Límites, estado de VM, resultados/presupuesto y metadata de depuración. |
-| `Code/Execution/VirtualMachine/Memory/HeapMemory.cs` | Objetos por ID `uint`, límite y conteo de memoria lógica, reserva/liberación, sweep. |
-| `Code/Execution/VirtualMachine/Memory/VMMemoryContext.cs`, `IMemContext.cs` | Heap y globals potencialmente compartidos entre VMs; asignación con GC lazy y recorrido mark-and-sweep. |
+| `Code/Execution/VirtualMachine/Memory/HeapMemory.cs` | Objetos por ID `uint`, reserva/liberación, sweep, **tamaño contabilizado por objeto**, TryResize y cambio de buffers/contabilidad atómico. |
+| `Code/Execution/VirtualMachine/Memory/VMMemoryContext.cs`, `IMemContext.cs` | Heap/globals compartidos, GC lazy mark-and-sweep, TryResizeHeap y TrySwapHeapContents. Durante el resize protege el objeto como raíz temporal. |
 | `Code/Execution/VirtualMachine/Memory/HeapObject.cs` | Objeto base; `Size` lógico y `GetReferences()` para referencias directas hacia hijos. |
-| `Code/Execution/VirtualMachine/Memory/StringHeapObject.cs`, `TupleHeapObject.cs` | Implementaciones de almacenamiento heap, tamaño y contenido inmutables. |
+| `Code/Execution/VirtualMachine/Memory/StringHeapObject.cs`, `TupleHeapObject.cs`, `ListHeapObject.cs` | String/Tuple inmutables y List mutable con referencia a hijos, contador de versión y reemplazo de buffer en O(1). |
 | `Code/Execution/VMExecutionController.cs` | Adaptador entre Unity/Editor y VM; ticks acotados por frame, Start/Stop/Pause/Continue/Step, eventos Print/Completed/Faulted/breakpoint y métricas. |
 | `Code/Execution/IScriptExecutionStateProvider.cs`, `NoOpExecutionStateProvider.cs` | Abstracción de estado de ejecución y alternativa sin ejecución; UI real usa `VMExecutionController`. |
 
@@ -228,7 +230,8 @@ Esta sección pretende permitir localizar rápidamente **qué archivo tocar**; n
 
 - `Assets/Editor/DirectivaTests/README.md`: **guía operativa** de la suite DIL, menús, reportes, grupos y extensión futura a DScript/Simulation.
 - `Editor/DirectivaTests/Core/DirectivaTestModel.cs`: contrato y registro de casos; `DirectivaTestRunner.cs`: ejecución Editor main-thread con cancelación; `DirectivaTestReports.cs`: Markdown por caso y resumen Markdown/JSON externo al repo; `DirectivaTestWindow.cs`: elección de carpeta, selección/filtros y progreso; `DirectivaTestMenu.cs`: rutas `Directiva/Tests/TestAll` y `Directiva/Tests/DIL/.../TestEverything`.
-- `Editor/DirectivaTests/DIL/`: fixtures y tests separados por Parser, VM, Controller, Numeric, References, Memory, Concurrency, Errors, Robustness; `DILTestHarness.cs` centraliza parseo en memoria, recolección de eventos/errores/trazas, assertions y budget de VM.
+- `Scripts/Code/Execution/EditorTestVisibility.cs` permite que la suite de Unity Editor acceda a mutadores internos del runtime (ensamblado `Assembly-CSharp-Editor`) para verificar invariantes sin hacer públicos esos mutadores.
+- `Editor/DirectivaTests/DIL/`: fixtures y tests separados por Parser, VM, Controller, Numeric, References, Memory, Concurrency, Errors, Robustness; `DILTestHarness.cs` centraliza parseo en memoria, recolección de eventos/errores/trazas, assertions y budget de VM. Los archivos `DILListTests`, `DILListMemoryTests` y `DILListConcurrencyTests` amplían los grupos del runner.
 - `Assets/Editor/Directiva_TupleSmokeTests.cs` y `Directiva_TupleCompletionSmokeTests.cs`: 8 + 13 pruebas previas, **ahora incluidas en** `Directiva/Tests/DIL/Regression/TestEverything`. Se retiraron sus accesos de menú antiguos; el catálogo genera un informe por cada caso.
 - `Assets/TutorialInfo/Scripts/Readme.cs` y `TutorialInfo/Scripts/Editor/ReadmeEditor.cs`: scripts de plantilla/ejemplo de Unity; **no** están relacionados con las misiones tutoriales del juego.
 
@@ -248,10 +251,10 @@ Esta sección pretende permitir localizar rápidamente **qué archivo tocar**; n
 - DIL = **Directiva Intermediate Language**, archivo **`.dil`**, forma textual/assembly-like del programa. DScript (`.dscript`) es el lenguaje futuro del jugador; DIB (`.dib`) es la futura representación binaria cargable; ninguna de estas dos capas futuras funciona en este snapshot.
 - El parser es **case-sensitive**. Instrucciones/operaciones usan mnemónicos en mayúsculas; comentarios `//`, anotaciones `#`; etiquetas de salto con `nombre:`. Constantes de parseo numéricas como `# nombre : 10`, usadas mediante `$nombre`, no macros generales.
 - Encabezados: `# IMPORT : modulo.submodulo` al comienzo, `# GLOBAL : nombre`, `# FUNCTION : nombre`, `# PARAMS : N`, `# LOCALS : N`, cierre `# END_FUNCTION`. El parser valida su orden/contexto. Cada función queda cualificada como `modulo.funcion`; el namespace de globales es compartido por todo `CodeContext`.
-- `PUSH NONE`, `PUSH BOOL TRUE/FALSE`, `PUSH INT n`, `PUSH DECIMAL n`, `PUSH STRING "..."`; `TUPLE n` consume `n` valores y apila una referencia. Cast estático: `CAST STRING` (y otros destinos registrados). También existen `POP`, `PRINT`, `LOAD/STORE_LOCAL`, `LOAD/STORE_GLOBAL`, `CALL`, `RETURN`, `CONTEXT_START/END`, saltos y `PASS` (no-op).
-- Operaciones actualmente expuestas por mnemónicos en DIL: aritmética, comparaciones, `NOT`, `IS_TRUTHY`, `HASH`, `LENGTH`, `GET`, `COPY`, igualdad por valor/referencia. `AND`/`OR` se conciben como control de flujo con short-circuit mediante saltos, no una operación binaria simple del tipo.
+- `PUSH NONE`, `PUSH BOOL TRUE/FALSE`, `PUSH INT n`, `PUSH DECIMAL n`, `PUSH STRING "..."`; `TUPLE n` y `LIST n` consumen `n` valores y apilan una referencia. Cast estático: `CAST STRING` (y otros destinos registrados). También existen `POP`, `PRINT`, `LOAD/STORE_LOCAL`, `LOAD/STORE_GLOBAL`, `CALL`, `RETURN`, `CONTEXT_START/END`, saltos y `PASS` (no-op).
+- Operaciones expuestas por DIL: aritmética, comparaciones, `NOT`, `IS_TRUTHY`, `HASH`, `LENGTH`, `GET`, `SET`, `COPY`, `APPEND`, `INSERT`, `DELETE`, `POP_ITEM`, `EXTEND`, `CONTAINS`, `INDEX_OF`, igualdad por valor/referencia. `POP` sigue descartando un valor del stack, distinto de `POP_ITEM` de lista. `AND`/`OR` se conciben como control de flujo con short-circuit mediante saltos, no una operación binaria simple del tipo.
 - El parser puede inyectar `DEBUG_FILE`, `DEBUG_LINE` y `DEBUG_SPAN` en el programa compilado para trazar origen DIL; los saltos se reajustan al insertar metadata. `VMDebugState` conserva esta información. Debugging de **DScript** a partir de AST/source map queda pendiente.
-- No asumir que las operaciones declaradas pero aún sin implementaciones (`Append`, `Insert`, `Delete`, `Set`, etc.) estén disponibles desde DIL. El parser solo expone el conjunto indicado en `DILParser.OperationMnemonics`.
+- No asumir que todas las operaciones declaradas son universales: las mutaciones de List no están implementadas para Tuple/String. El parser expone exclusivamente los mnemónicos de `DILParser.OperationMnemonics`.
 
 **Ejemplo mínimo válido de DIL** (guardar como `demo.dil`; desde el editor, seleccionar y ejecutar `main`):
 
@@ -276,10 +279,11 @@ La consola debe mostrar `(10, 20)` y la función debe devolver `None`.
 - `DirectivaVM.Advance()` procesa un paso; `Run(instructionBudget)` ejecuta un máximo de pasos y permite trabajo acotado. Operaciones continuadas pueden conservar estado entre avances (p. ej. infraestructura de potencia). VM de pila con frames/callstack, locals precontados, globals y retorno; errores controlados en `RuntimeError`.
 - Los locals empiezan como **Uninitialized**; el uso antes de asignar es error. Conjunto de globals pertenece a `VMMemoryContext`; **varias VMs pueden compartir memoria**, pero todavía no hay orquestador completo que planifique unidades en round-robin.
 - `HeapMemory`: objetos direccionados con ID `uint` estable, unidad de memoria **lógica**, independiente de bytes reales de C#. `VMMemoryContext.TryAllocHeap()` intenta reservar; si falla ejecuta **mark-and-sweep** desde globals y raíces de VMs registradas, recorre `HeapObject.GetReferences()` **no recursivamente por objeto** (el GC gestiona el grafo) y reintenta. Visitas repetidas/ciclos se evitan con un conjunto de referencias marcadas. El GC es **lazy/on pressure**, no un barrido fijo cada frame.
-- Tipos actualmente utilizables: escalares `Bool`, `Int`, `Decimal`, `None`, `Uninitialized`; referencias `String` y `Tuple`. `StringHeapObject` es inmutable; su tamaño lógico depende de unidades UTF-16. `TupleHeapObject` conserva copia privada de elementos, tiene tamaño lógico `1 + número de elementos` y expone hijos para GC. **Tamaño heap y `LENGTH` no son la misma medida**.
+- Tipos actualmente utilizables: escalares `Bool`, `Int`, `Decimal`, `None`, `Uninitialized`; referencias `String`, `Tuple` y List (pendiente de ejecutar pruebas nuevas). `StringHeapObject` es inmutable; su tamaño lógico depende de unidades UTF-16. `TupleHeapObject` conserva copia privada de elementos, tiene tamaño lógico `1 + número de elementos` y expone hijos para GC. **Tamaño heap y `LENGTH` no son la misma medida**.
 - `Tuple n` deja referencias originales en el stack durante la reserva para protegerlas ante GC. Las tuplas soportan orden e indexación negativa, igualdad estructural, identidad, concatenación, `LENGTH`, `HASH`, `CAST STRING`, truthiness y `COPY` por referencia. Su `HASH` combina hashes de elementos, respeta igualdad numérica cruzada (p. ej. `1 == True`) y reporta la ruta si un elemento anidado no es hasheable. `String` tiene hash determinista, longitud por puntos de código Unicode; los hashes pueden ser negativos.
 - Casting pertenece a `DataType.CastTo` y se solicita desde **`InstructionId.Cast`**; no hay tipo de primera clase `Type` ni operación genérica `Cast` en `OperationId`. El cast identidad vive en `DataType` base; cada tipo incorpora sus destinos adicionales. Para visualización se usa una única conversión a string, **sin `repr()` público separado**. `Tuple → String` entrecomilla cadenas contenidas y formatea tuplas anidadas.
-- `VMOptions` controla stack de evaluación y profundidad de llamadas; el límite de heap está en `HeapMemory`/`VMMemoryContext`. **El soporte de crecimiento/cambio de tamaño contabilizado para List/Dict/Set aún no existe**: es el siguiente desafío de arquitectura, junto con operaciones de mutación atómicas ante OOM.
+- **Limitación deliberada:** operaciones grandes de List como INSERT interno/EXTEND/DELETE/COPY/ADD y búsquedas trabajan con pasos continuados; `ValueEquals` estructural y conversión a texto aún recorren los elementos de forma síncrona. Los buffers auxiliares consumen heap extra y pueden producir OOM aunque el tamaño final de la lista cupiera por sí solo. Cambios intercalados de otra VM causan `InvalidOperation`; el resultado parcial nunca se publica.
+- `VMOptions` controla stack de evaluación y profundidad de llamadas; el límite de heap está en `HeapMemory`/`VMMemoryContext`. **El crecimiento de List existe desde este diferencial**: `TryResizeHeap` autoriza unidades antes de modificar el objeto; reducción libera unidades lógicas; los bytes/capacidad reales de C# no son la medida del heap. Las mutaciones grandes construyen un `ListHeapObject` auxiliar en heap; la VM mantiene su ID como raíz fuera de `OperationState`; se trabaja por bloques de 16 elementos y se confirma intercambiando contenidos/contabilidad de forma atómica. Versiones detectan modificaciones intercaladas entre VMs y producen error explícito, en lugar de sobrescribirlas. `Dict/Set` todavía no están implementados.
 
 ### 5.4 Menús, opciones y temas
 
@@ -294,7 +298,7 @@ La consola debe mostrar `(10, 20)` y la función debe devolver `None`.
 
 ### P0 — Compromisos inmediatos acordados
 
-1. **Completar heap mutable: List, Dict, Set.** Después de Tuple, definir modificación de tamaño y comunicación con administrador de memoria, rechazo por OOM sin mutaciones parciales, referencias hijas para GC y operaciones correspondientes; Dict/Set agregan igualdad, claves hashables y unicidad. No hay implementaciones concretas actualmente.
+1. **Validar List mutable en Unity**, ejecutar nueva suite DIL y corregir cualquier bug detectado. Luego implementar **Dict y Set**, reutilizando TryResizeHeap, GC y raíz auxiliar de operaciones continuadas; Dict/Set añaden tablas hash, claves hashables/unicidad y semántica propia.
 2. **Implementar compilador DScript → DIL** solo cuando termine la tarea anterior. Incluye diseño sintáctico real, tokenización, AST, scopes, variables, estructuras de control, funciones/imports y mapeo de líneas fuente. No existe todavía en este árbol.
 
 ### P1 — Transformar infraestructura en juego
@@ -321,8 +325,8 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 ### Evidencia disponible
 
 - Las suites de Tuple originales (8 y 13 casos) fueron **ejecutadas exitosamente por el responsable el 15-10-2026** y ahora se registran bajo `Directiva > Tests > DIL > Regression > TestEverything`.
-- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. **Aún no compilada ni ejecutada en Unity en esta entrega; no asumir pruebas exitosas hasta verificar allí.** Leer `Assets/Editor/DirectivaTests/README.md`.
-- El responsable también probó la demo DIL real de tuplas desde el editor: representación anidada, `GET`, hash, `LENGTH` y retorno `None` mostraron resultados plausibles.
+- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. **El responsable confirmó 184/184 pruebas DIL previas aprobadas en Unity el 15-10-2026. Los nuevos casos de List de este diferencial aún NO se han compilado/ejecutado en Unity.** Leer `Assets/Editor/DirectivaTests/README.md`.
+- El responsable también probó la demo DIL real de tuplas desde el editor: representación anidada, `GET`, hash, `LENGTH` y retorno `None` mostraron resultados plausibles. Las pruebas de List incluyen GC circular, OOM atómico, root auxiliar, búsqueda continuada y conflictos entre VMs.
 - **Este documento se elaboró leyendo el paquete `Assets/`**; no ejecuta Unity ni reemplaza una compilación/CI. No extrapolar las pruebas de Tuple a los subsistemas todavía no construidos.
 
 ### No asumir que existe / riesgos habituales al continuar
@@ -342,7 +346,7 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 2. **Antes de editar una clase**, abrir código real, firmas y clases consumidoras. Documentación de `Documentation/` sirve para intención y evolución, no para sustituir revisión de implementación.
 3. **No romper compatibilidad** de `DataTypeId`, `OperationId`, `InstructionId`, `.meta`/GUID ni rutas de scripts. Preferir cambios pequeños, tipados y testeables.
 4. **Mantener la frontera VM/simulación.** Evitar referencias Unity UI dentro del núcleo DSExecution; usar eventos/controladores/contratos para integración.
-5. **Revisar raíces del GC y presupuesto de memoria** al introducir contenedores o casts que asignen heap; el GC existe y funciona para referencias anidadas, pero los contenedores mutables son la siguiente dificultad.
+5. **Revisar raíces del GC y presupuesto de memoria** al introducir contenedores o casts; las listas mutables ya tienen TryResizeHeap y operación auxiliar en la VM. No almacenar DataValue/HeapId en OperationState, ni exponer buffers provisionales desde DIL.
 6. **Diferenciar implementado / parcial / previsto / no implementado** en los informes. No sustituir evidencia por nombres de clases o assets.
 7. **Pruebas:** ejecutar primero `Directiva > Tests > TestAll` (seleccionar carpeta externa desde la ventana), analizar `SUMMARY.md` y los informes fallidos, luego probar `BasicCoding`, navegación `MainMenu → BaseSimulation` y cambios de UI/configuración. Añadir casos mínimos reproducibles al cambiar VM/parser.
 8. **Entregas de código:** usar diferencial `Assets/` con `.meta` preservados y declarar eliminaciones/renombres; actualizar este archivo cuando cambien arquitectura, estado de una función relevante, decisiones principales o prioridades.

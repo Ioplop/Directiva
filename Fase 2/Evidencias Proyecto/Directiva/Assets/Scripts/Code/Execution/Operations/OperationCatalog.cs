@@ -66,6 +66,9 @@ namespace DSExecution.Operations
             SetOperation(temp, OperationId.Hash, new(1, null, 0));
             SetOperation(temp, OperationId.IsTruthy, new(1, null, 0));
             SetOperation(temp, OperationId.Length, new(1, null, 0));
+            SetOperation(temp, OperationId.Extend, new(2, null, 0));
+            SetOperation(temp, OperationId.Contains, new(2, null, 0));
+            SetOperation(temp, OperationId.IndexOf, new(2, null, 0));
 
             OperationInfo[] result = new OperationInfo[temp.Length];
 

@@ -122,8 +122,8 @@ namespace DSExecution.DataTypes
         }
 
         /// <summary>
-        /// Compares tuple contents iteratively to avoid host call-stack overflow for
-        /// deeply nested tuples. Non-tuple elements use standard operation dispatch.
+        /// Structural equality is delegated to the same cycle-safe comparer used
+        /// by lists, including tuple/list/tuple nesting.
         /// </summary>
         public override OperationResult ValueEquals(OperationCall opCall)
         {
@@ -131,50 +131,8 @@ namespace DSExecution.DataTypes
                 opCall.Arguments[0].dataType != DataTypeId.Tuple ||
                 opCall.Arguments[1].dataType != DataTypeId.Tuple)
                 return OperationResult.NotImplemented();
-
-            var pending = new Stack<(DataValue Left, DataValue Right)>();
-            pending.Push((opCall.Arguments[0], opCall.Arguments[1]));
-
-            while (pending.Count > 0)
-            {
-                var pair = pending.Pop();
-                if (!TryResolve(opCall.Memory, pair.Left, out var left, out var leftFailure))
-                    return leftFailure;
-                if (!TryResolve(opCall.Memory, pair.Right, out var right, out var rightFailure))
-                    return rightFailure;
-
-                if (left.Count != right.Count)
-                    return OperationResult.Success(DataValue.FromBool(false));
-
-                for (int i = left.Count - 1; i >= 0; i--)
-                {
-                    DataValue a = left.GetElement(i);
-                    DataValue b = right.GetElement(i);
-
-                    if (a.dataType == DataTypeId.Tuple && b.dataType == DataTypeId.Tuple)
-                    {
-                        pending.Push((a, b));
-                        continue;
-                    }
-
-                    var result = OperationDispatcher.Start(
-                        OperationId.ValueEquals, new[] { a, b }, opCall.Memory).Result;
-                    if (result.Status != OperationStatus.Success)
-                    {
-                        return result.Status == OperationStatus.Continued
-                            ? OperationResult.OpError(RuntimeError.InternalVmError(
-                                "A continued equality operation cannot be nested in tuple equality."))
-                            : result;
-                    }
-                    if (result.Value.dataType != DataTypeId.Bool)
-                        return OperationResult.OpError(RuntimeError.InternalVmError(
-                            "ValueEquals did not return Bool while comparing tuple elements."));
-                    if (result.Value.value == 0)
-                        return OperationResult.Success(DataValue.FromBool(false));
-                }
-            }
-
-            return OperationResult.Success(DataValue.FromBool(true));
+            return SequenceEquality.Compare(opCall.Memory,
+                opCall.Arguments[0], opCall.Arguments[1]);
         }
 
         /// <summary>
@@ -348,160 +306,18 @@ namespace DSExecution.DataTypes
         }
 
         /// <summary>
-        /// Uses the existing CAST instruction. The tuple assembles a single final
-        /// string; contained strings are quoted and nested tuples are traversed
-        /// iteratively. Scalar CastTo(String) calls may allocate temporary strings.
+        /// CAST STRING shares the list/tuple formatter, including quoting and
+        /// cyclic mixed structures. No separate repr() operation is exposed.
         /// </summary>
         public override CastResult CastTo(
-            DataTypeId targetType,
-            DataValue value,
-            VMMemoryContext memory)
+            DataTypeId targetType, DataValue value, VMMemoryContext memory)
         {
             if (targetType != DataTypeId.String || value.dataType != DataTypeId.Tuple)
                 return base.CastTo(targetType, value, memory);
-
-            if (!TryResolve(memory, value, out var root, out var rootFailure))
-                return CastResult.Failure(rootFailure.Error ?? RuntimeError.InvalidCastValue(
-                    value.dataType, targetType, "Invalid tuple reference."));
-
-            uint rootReference = (uint)value.value;
-            var builder = new StringBuilder();
-            var pending = new Stack<FormatFrame>();
-            var active = new HashSet<uint>();
-            pending.Push(new FormatFrame(rootReference, root));
-            active.Add(rootReference);
-            builder.Append('(');
-
-            while (pending.Count > 0)
-            {
-                FormatFrame current = pending.Peek();
-                if (current.NextIndex == current.Tuple.Count)
-                {
-                    if (current.Tuple.Count == 1)
-                        builder.Append(',');
-                    builder.Append(')');
-                    pending.Pop();
-                    active.Remove(current.Reference);
-                    continue;
-                }
-
-                if (current.NextIndex > 0)
-                    builder.Append(", ");
-
-                DataValue child = current.Tuple.GetElement(current.NextIndex++);
-                if (child.dataType == DataTypeId.Tuple)
-                {
-                    if (!TryResolve(memory, child, out var nested, out var nestedFailure))
-                        return CastResult.Failure(nestedFailure.Error ?? RuntimeError.InvalidCastValue(
-                            child.dataType, targetType, "Invalid nested tuple reference."));
-
-                    uint nestedReference = (uint)child.value;
-                    if (!active.Add(nestedReference))
-                        return CastResult.Failure(RuntimeError.InvalidOperation(
-                            "Cyclic tuples cannot be formatted."));
-
-                    builder.Append('(');
-                    pending.Push(new FormatFrame(nestedReference, nested));
-                    continue;
-                }
-
-                if (child.dataType == DataTypeId.String)
-                {
-                    if (!TryReadString(memory, child, out string stringValue, out var stringError))
-                        return CastResult.Failure(stringError);
-
-                    AppendQuoted(builder, stringValue);
-                    continue;
-                }
-
-                if (child.dataType == DataTypeId.Uninitialized)
-                    return CastResult.Failure(RuntimeError.VariableUsedBeforeInitialization());
-
-                DataType sourceType = GetDataType(child.dataType);
-                if (sourceType == null)
-                    return CastResult.Failure(RuntimeError.InvalidCast(child.dataType, targetType));
-
-                CastResult cast = sourceType.CastTo(DataTypeId.String, child, memory);
-                if (!cast.IsSuccess)
-                    return cast;
-
-                if (cast.Value.dataType != DataTypeId.String)
-                    return CastResult.Failure(RuntimeError.InternalVmError(
-                        $"Cast from {child.dataType} to String returned {cast.Value.dataType}."));
-
-                if (!TryReadString(memory, cast.Value, out string leafText, out var leafError))
-                    return CastResult.Failure(leafError);
-
-                builder.Append(leafText);
-            }
-
-            return DTString.CreateValue(builder.ToString(), memory);
-        }
-
-        private sealed class FormatFrame
-        {
-            public uint Reference { get; }
-            public TupleHeapObject Tuple { get; }
-            public int NextIndex { get; set; }
-
-            public FormatFrame(uint reference, TupleHeapObject tuple)
-            {
-                Reference = reference;
-                Tuple = tuple;
-            }
-        }
-
-        private static bool TryReadString(
-            IMemContext memory,
-            DataValue value,
-            out string text,
-            out RuntimeError error)
-        {
-            text = string.Empty;
-            error = null;
-            if (!value.TryGetHeapReference(out uint reference))
-            {
-                error = RuntimeError.InvalidOperation("Invalid string heap reference.");
-                return false;
-            }
-
-            if (!memory.TryGetHeap(reference, out HeapObject obj) ||
-                !(obj is StringHeapObject stringObject))
-            {
-                error = RuntimeError.InvalidMemoryAccess(reference);
-                return false;
-            }
-
-            text = stringObject.Value;
-            return true;
-        }
-
-        private static void AppendQuoted(StringBuilder builder, string text)
-        {
-            builder.Append('"');
-            foreach (char c in text)
-            {
-                switch (c)
-                {
-                    case '\\': builder.Append("\\\\"); break;
-                    case '"': builder.Append("\\\""); break;
-                    case '\n': builder.Append("\\n"); break;
-                    case '\r': builder.Append("\\r"); break;
-                    case '\t': builder.Append("\\t"); break;
-                    default:
-                        if (char.IsControl(c))
-                        {
-                            builder.Append("\\u");
-                            builder.Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
-                        }
-                        else
-                        {
-                            builder.Append(c);
-                        }
-                        break;
-                }
-            }
-            builder.Append('"');
+            if (!SequenceFormatter.TryFormat(value, memory, out string text,
+                    out RuntimeError error))
+                return CastResult.Failure(error);
+            return DTString.CreateValue(text, memory);
         }
 
         // Mutable container operations cannot change an immutable tuple.

@@ -23,5 +23,12 @@ namespace DSExecution.VirtualMachine
         /// Compatibility alias for older heap object callers. New GC code uses GetReferences().
         /// </summary>
         public IEnumerable<uint> EnumerateHeapReferences() => GetReferences();
+
+        /// <summary>
+        /// Only mutable, compatible heap objects may swap their contents. Called from
+        /// HeapMemory with accounting updated in the same uninterrupted VM step.
+        /// Implementations must not allocate or fail after modifying either object.
+        /// </summary>
+        internal virtual bool TrySwapContents(HeapObject other) => false;
     }
 }

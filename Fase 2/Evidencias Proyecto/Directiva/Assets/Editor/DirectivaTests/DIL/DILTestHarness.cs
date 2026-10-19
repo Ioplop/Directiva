@@ -170,9 +170,9 @@ namespace Directiva.EditorTests.DIL
             t.Equal(DataTypeId.Decimal, r.Value.dataType, "result type");
             t.Equal(expectedRaw, unchecked((long)r.Value.value), "result Decimal raw");
         }
-        internal static void ExpectBool(DirectivaTestContext t, string body, bool expected)
+        internal static void ExpectBool(DirectivaTestContext t, string body, bool expected, int locals = 0)
         {
-            var r = ExpectCompleted(t, body);
+            var r = ExpectCompleted(t, body, locals: locals);
             t.Equal(DataTypeId.Bool, r.Value.dataType, "result type");
             t.Equal(expected ? 1UL : 0UL, r.Value.value, "result Bool");
         }

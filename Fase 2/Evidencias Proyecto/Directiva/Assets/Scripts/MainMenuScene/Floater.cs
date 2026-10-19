@@ -11,7 +11,7 @@ public class Floater : MonoBehaviour
     private void Start()
     {
         startY = transform.position.y;
-        delta = Random.Range(0, 2 * Mathf.PI);
+        delta = Random.Range(0.0f, 2.0f * Mathf.PI);
     }
 
     void Update()

@@ -121,6 +121,14 @@ namespace DSCompilation.DIL
                 ["HASH"] = OperationId.Hash,
                 ["LENGTH"] = OperationId.Length,
                 ["GET"] = OperationId.Get,
+                ["SET"] = OperationId.Set,
+                ["APPEND"] = OperationId.Append,
+                ["INSERT"] = OperationId.Insert,
+                ["DELETE"] = OperationId.Delete,
+                ["POP_ITEM"] = OperationId.Pop, // POP alone discards the evaluation stack top.
+                ["EXTEND"] = OperationId.Extend,
+                ["CONTAINS"] = OperationId.Contains,
+                ["INDEX_OF"] = OperationId.IndexOf,
                 ["COPY"] = OperationId.Copy,
                 ["IS_TRUTHY"] = OperationId.IsTruthy
             };
@@ -133,7 +141,8 @@ namespace DSCompilation.DIL
                 ["INT"] = DataTypeId.Int,
                 ["DECIMAL"] = DataTypeId.Decimal,
                 ["STRING"] = DataTypeId.String,
-                ["TUPLE"] = DataTypeId.Tuple
+                ["TUPLE"] = DataTypeId.Tuple,
+                ["LIST"] = DataTypeId.List
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -699,6 +708,15 @@ namespace DSCompilation.DIL
                         Throw(moduleName, lineNumber, "TUPLE requires a non-negative element count.");
 
                     instructions.Add(Instruction.Tuple(count));
+                    return;
+                }
+
+                case "LIST":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 0)
+                        Throw(moduleName, lineNumber, "LIST requires a non-negative element count.");
+                    instructions.Add(Instruction.List(count));
                     return;
                 }
 

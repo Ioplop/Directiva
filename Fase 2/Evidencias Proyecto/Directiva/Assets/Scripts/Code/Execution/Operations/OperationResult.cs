@@ -13,13 +13,16 @@ namespace DSExecution.Operations
         public DataValue Value { get; }
         public OperationState? State { get; }
         public RuntimeError? Error { get; }
+        /// <summary>Private heap root held by the VM while an operation is continued.</summary>
+        public uint AuxiliaryReference { get; }
 
-        private OperationResult(OperationStatus status, DataValue value, OperationState? state, RuntimeError? error)
+        private OperationResult(OperationStatus status, DataValue value, OperationState? state, RuntimeError? error, uint auxiliaryReference = 0)
         {
             Status = status;
             Value = value;
             State = state;
             Error = error;
+            AuxiliaryReference = auxiliaryReference;
         }
 
         public static OperationResult NotImplemented()
@@ -42,13 +45,14 @@ namespace DSExecution.Operations
             );
         }
 
-        public static OperationResult Continued(OperationState state)
+        public static OperationResult Continued(OperationState state, uint auxiliaryReference = 0)
         {
             return new OperationResult(
                 OperationStatus.Continued,
                 DataValue.None(),
                 state,
-                null
+                null,
+                auxiliaryReference
             );
         }
 

@@ -87,7 +87,8 @@ namespace DSExecution.VirtualMachine
             DataValue[] arguments,
             int receiverIndex,
             OperationState state,
-            IMemContext memory)
+            IMemContext memory,
+            uint auxiliaryReference = 0)
         {
             if ((uint)receiverIndex >= (uint)arguments.Length)
             {
@@ -114,7 +115,8 @@ namespace DSExecution.VirtualMachine
                 arguments,
                 receiverIndex,
                 memory,
-                state
+                state,
+                auxiliaryReference
             );
 
             var result = dataType.Operate(operationId, call);

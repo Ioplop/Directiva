@@ -24,13 +24,16 @@
 | `Controller/TestEverything` | Controlador de ejecucion del editor: Start/Stop, Pause/Continue, Step, metadata, breakpoints y eventos |
 | `Numeric/TestEverything` | Int, Decimal, Bool, None; operadores, casts actualmente soportados, comparaciones, hashes y continuaciones |
 | `References/TestEverything` | String y Tuple, construccion/indexacion, Unicode, igualdad, identidad, hashing, impresion y casts |
+| `Lists/TestEverything` | LIST n, operaciones de mutacion, conversion, igualdad, busqueda y parser DIL |
+| `ListMemory/TestEverything` | Redimensionamiento, swap de buffers, atomicidad OOM, raices auxiliares, GC y ciclos |
+| `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
 | `Memory/TestEverything` | Heap, limites, mark-and-sweep lazy, OOM, GC anidado/ciclos y raices en stacks, locals, globals y cast |
 | `Concurrency/TestEverything` | Multiples VMs con memoria compartida, round-robin determinista, interleavings, carreras reproducibles y aislamiento |
 | `Errors/TestEverything` | IDs de RuntimeError: casos DIL alcanzables y fixtures VM directos para instrucciones invalidas |
 | `Robustness/TestEverything` | Stress reproducible, cientos de operaciones muestreadas, carga GC y tuplas profundamente anidadas |
 | `Regression/TestEverything` | Las dos suites de Tuple preexistentes, ahora integradas en el catalogo y con un reporte por caso |
 
-**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `List/Dict/Set`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
+**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no los futuros `Dict/Set`, compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
 
 ## Agregar mas pruebas
 
@@ -42,6 +45,14 @@
 
 ## Diagnosticos y desarrollo
 
-Los scripts de test y sus utilidades son **Editor-only**. El runtime `Assets/Scripts/` no fue modificado por esta entrega. Hay dos niveles de prueba: de texto DIL real (parser + VM) y de `CodeContext`/VM creados directamente (para ejercitar errores que el parser impide). Los tests de concurrencia hacen interleaving secuencial de varias VMs; no simulan hilos OS.
+Los scripts de test y sus utilidades son **Editor-only**. El runtime `Assets/Scripts/` fue ampliado para soportar List y memoria mutable en esta entrega; las suites existentes siguen registradas. Hay dos niveles de prueba: de texto DIL real (parser + VM) y de `CodeContext`/VM creados directamente (para ejercitar errores que el parser impide). Los tests de concurrencia hacen interleaving secuencial de varias VMs; no simulan hilos OS.
 
 Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP, **pero requiere compilacion y ejecucion en Unity antes de poder afirmar que todos los casos pasan**. Si alguno falla, compartir `SUMMARY.md`, `SUMMARY.json` y los reportes de `tests/` de los casos fallidos (evitar adjuntar datos personales de rutas en caso de compartir publicamente).
+
+## Semantica y nuevas pruebas de List (2026-10-19)
+
+- `LIST n`: toma n valores de stack (igual que `TUPLE n`). `GET`, `SET` y `POP_ITEM` aceptan indices negativos. `INSERT` limita indices fuera de rango a ambos extremos; GET/SET/DELETE/POP_ITEM en cambio fallan si se sale de rango.
+- `APPEND`/`INSERT`/`DELETE`/`SET`/`EXTEND`: consumen sus operandos y apilan `None`. `POP_ITEM` devuelve el elemento quitado; `COPY` hace copia superficial nueva; `ADD` concatena y devuelve nueva List. `CONTAINS` devuelve Bool; `INDEX_OF` devuelve primer indice o -1.
+- Continuaciones: el buffer auxiliar es un objeto real del heap y lo enraiza un campo dedicado de la VM. Los `OperationState` solo contienen indices y versiones, nunca referencias de heap. La publicacion es atomica; una mutacion de otra VM durante la preparacion produce InvalidOperation, no un merge automatico.
+- `Hash` de List produce `UnhashableType`. Formateo de listas con referencias circulares muestra `[...]` y evita bucles infinitos; Tuple usa el mismo formateador.
+- **Verificacion:** se revisaron estaticamente los archivos, pero la nueva bateria todavia requiere compilar y ejecutar en Unity. No afirmar que estas nuevas pruebas pasaron hasta que el usuario comparta el reporte.

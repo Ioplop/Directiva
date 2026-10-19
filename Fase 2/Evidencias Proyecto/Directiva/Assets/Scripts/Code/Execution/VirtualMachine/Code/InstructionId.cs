@@ -33,6 +33,7 @@ namespace DSExecution.VirtualMachine
         PushString = 18,
         Cast = 19,
         Print = 20,
-        Tuple = 21
+        Tuple = 21,
+        List = 22
     }
 }

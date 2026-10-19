@@ -17,6 +17,19 @@ namespace DSExecution.VirtualMachine
         /// </summary>
         bool TryAllocHeap(HeapObject obj, out uint memRef);
 
+        /// <summary>
+        /// Authorizes a new logical size before the owning object changes its contents.
+        /// Failure leaves both the object and heap accounting unchanged. The caller must
+        /// immediately commit a successful resize without another allocation/GC in between.
+        /// </summary>
+        bool TryResizeHeap(uint memRef, uint newSize);
+
+        /// <summary>
+        /// Atomically exchanges already-reserved contents between two heap objects.
+        /// Used to publish prepared mutable results without allocating again.
+        /// </summary>
+        bool TrySwapHeapContents(uint firstRef, uint secondRef);
+
         bool FreeHeap(uint memRef);
     }
 }

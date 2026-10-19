@@ -24,6 +24,12 @@ namespace Directiva.EditorTests
         private static void Numeric() => DirectivaTestRunner.StartCategory("DIL", "Numeric");
         [MenuItem("Directiva/Tests/DIL/References/TestEverything", false, 120)]
         private static void References() => DirectivaTestRunner.StartCategory("DIL", "References");
+        [MenuItem("Directiva/Tests/DIL/Lists/TestEverything", false, 120)]
+        private static void Lists() => DirectivaTestRunner.StartCategory("DIL", "Lists");
+        [MenuItem("Directiva/Tests/DIL/ListMemory/TestEverything", false, 120)]
+        private static void ListMemory() => DirectivaTestRunner.StartCategory("DIL", "ListMemory");
+        [MenuItem("Directiva/Tests/DIL/ListConcurrency/TestEverything", false, 120)]
+        private static void ListConcurrency() => DirectivaTestRunner.StartCategory("DIL", "ListConcurrency");
         [MenuItem("Directiva/Tests/DIL/Memory/TestEverything", false, 120)]
         private static void Memory() => DirectivaTestRunner.StartCategory("DIL", "Memory");
         [MenuItem("Directiva/Tests/DIL/Concurrency/TestEverything", false, 120)]

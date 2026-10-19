@@ -45,5 +45,10 @@
 
         // Logical number of elements (or Unicode scalar values for strings).
         Length = 24,
+
+        // Mutable sequences and linear search. Existing IDs never change.
+        Extend = 25,
+        Contains = 26,
+        IndexOf = 27,
     }
 }
