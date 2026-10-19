@@ -13,6 +13,18 @@ namespace DSExecution.VirtualMachine
     {
         private readonly DataValue[] items;
 
+        // Tuples cannot change their elements. A successful structural hash stays valid;
+        // tuples containing unhashable mutable objects never receive a cached value.
+        private long? cachedHash;
+
+        internal bool TryGetCachedHash(out long hash)
+        {
+            hash = cachedHash.GetValueOrDefault();
+            return cachedHash.HasValue;
+        }
+
+        internal void CacheHash(long hash) => cachedHash = hash;
+
         public int Count => items.Length;
         public ReadOnlySpan<DataValue> Items => items;
         public override uint Size => 1u + (uint)items.Length;

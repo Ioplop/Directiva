@@ -11,6 +11,18 @@ namespace DSExecution.VirtualMachine
     {
         public string Value { get; }
 
+        // A nullable value distinguishes an uncached hash from the legitimate hash 0.
+        // This host-side optimization does not change Directiva's logical heap charge.
+        private long? cachedHash;
+
+        internal bool TryGetCachedHash(out long hash)
+        {
+            hash = cachedHash.GetValueOrDefault();
+            return cachedHash.HasValue;
+        }
+
+        internal void CacheHash(long hash) => cachedHash = hash;
+
         public override uint Size
             => 1u + (uint)(((long)Value.Length + 3L) / 4L);
 

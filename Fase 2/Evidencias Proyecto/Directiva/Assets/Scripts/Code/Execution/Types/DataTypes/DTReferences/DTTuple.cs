@@ -166,9 +166,10 @@ namespace DSExecution.DataTypes
         }
 
         /// <summary>
-        /// Hashes each element in order. Nested tuples are traversed iteratively so deep
-        /// nesting cannot exhaust the host C# call stack. Hashes use the element's own
-        /// semantics (not its DataTypeId), preserving cross-type numeric equality.
+        /// Hashes each element in order. Successful tuple hashes (including nested
+        /// tuples) are cached on their immutable heap objects. Repeated calls are O(1).
+        /// Uncached tuples are traversed iteratively to avoid exhausting the host stack.
+        /// Hashes use element semantics, preserving cross-type numeric equality.
         /// </summary>
         public OperationResult Hash(OperationCall opCall)
         {
@@ -178,6 +179,9 @@ namespace DSExecution.DataTypes
 
             if (!TryResolve(opCall.Memory, opCall.Arguments[0], out var root, out var failure))
                 return failure;
+
+            if (root.TryGetCachedHash(out long rootHash))
+                return OperationResult.Success(DataValue.FromInt(rootHash));
 
             uint rootReference = (uint)opCall.Arguments[0].value;
             var pending = new Stack<HashFrame>();
@@ -191,6 +195,8 @@ namespace DSExecution.DataTypes
                 if (current.NextIndex == current.Tuple.Count)
                 {
                     ulong completedHash = current.Finish();
+                    // Cache only after this tuple's entire hash has succeeded.
+                    current.Tuple.CacheHash(unchecked((long)completedHash));
                     pending.Pop();
                     active.Remove(current.Reference);
 
@@ -208,10 +214,17 @@ namespace DSExecution.DataTypes
                         return nestedFailure;
 
                     uint nestedReference = (uint)child.value;
-                    if (!active.Add(nestedReference))
+                    if (active.Contains(nestedReference))
                         return OperationResult.OpError(RuntimeError.InvalidOperation(
                             "Cyclic tuples cannot be hashed."));
 
+                    if (nested.TryGetCachedHash(out long childHash))
+                    {
+                        current.Combine(unchecked((ulong)childHash));
+                        continue;
+                    }
+
+                    active.Add(nestedReference);
                     pending.Push(new HashFrame(nestedReference, nested));
                     continue;
                 }

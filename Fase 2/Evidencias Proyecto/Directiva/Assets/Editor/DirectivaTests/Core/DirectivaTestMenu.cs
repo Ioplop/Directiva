@@ -24,6 +24,8 @@ namespace Directiva.EditorTests
         private static void Numeric() => DirectivaTestRunner.StartCategory("DIL", "Numeric");
         [MenuItem("Directiva/Tests/DIL/References/TestEverything", false, 120)]
         private static void References() => DirectivaTestRunner.StartCategory("DIL", "References");
+        [MenuItem("Directiva/Tests/DIL/Hashes/TestEverything", false, 120)]
+        private static void Hashes() => DirectivaTestRunner.StartCategory("DIL", "Hashes");
         [MenuItem("Directiva/Tests/DIL/Lists/TestEverything", false, 120)]
         private static void Lists() => DirectivaTestRunner.StartCategory("DIL", "Lists");
         [MenuItem("Directiva/Tests/DIL/ListMemory/TestEverything", false, 120)]

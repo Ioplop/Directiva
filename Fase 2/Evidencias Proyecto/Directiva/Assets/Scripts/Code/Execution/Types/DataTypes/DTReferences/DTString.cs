@@ -96,6 +96,7 @@ namespace DSExecution.DataTypes
 
         /// <summary>
         /// Stable FNV-1a over UTF-16 code units (in fixed little-endian byte order).
+        /// The first successful hash is cached on the immutable heap object; later calls are O(1).
         /// This matches ordinal string equality without relying on randomized .NET hashes.
         /// </summary>
         public OperationResult Hash(OperationCall opCall)
@@ -106,6 +107,9 @@ namespace DSExecution.DataTypes
 
             if (!TryResolve(opCall, opCall.Arguments[0], out var text, out var error))
                 return error.Status == OperationStatus.Error ? error : OperationResult.NotImplemented();
+
+            if (text.TryGetCachedHash(out long cachedHash))
+                return OperationResult.Success(DataValue.FromInt(cachedHash));
 
             unchecked
             {
@@ -120,7 +124,9 @@ namespace DSExecution.DataTypes
                     hash *= prime;
                 }
 
-                return OperationResult.Success(DataValue.FromInt((long)hash));
+                long result = (long)hash;
+                text.CacheHash(result);
+                return OperationResult.Success(DataValue.FromInt(result));
             }
         }
 
