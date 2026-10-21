@@ -161,10 +161,12 @@ namespace Directiva.EditorTests.DIL
                     RuntimeErrorId.InternalVmError, RuntimeErrorId.OutOfMemory, RuntimeErrorId.InvalidCast,
                     RuntimeErrorId.InvalidCastValue, RuntimeErrorId.IndexOutOfRange, RuntimeErrorId.UnhashableType,
                     RuntimeErrorId.MemberNotFound, RuntimeErrorId.ReadOnlyProperty,
-                    RuntimeErrorId.WriteOnlyProperty, RuntimeErrorId.InvalidMemberArgumentCount
+                    RuntimeErrorId.WriteOnlyProperty, RuntimeErrorId.InvalidMemberArgumentCount,
+                    RuntimeErrorId.InvalidCallTarget, RuntimeErrorId.InvalidFunctionArgumentCount,
+                    RuntimeErrorId.ForeignFunctionProgram
                 };
                 foreach (var id in defined) t.Check(covered.Contains(id), "Missing test for RuntimeErrorId." + id);
-                t.Note("Reserved/factory-only: InvalidCastValue. WriteOnlyProperty is covered by an annotated DataType fixture in the Members group; the remaining new member faults have DIL fixtures.");
+                t.Note("Reserved/factory-only: InvalidCastValue. WriteOnlyProperty is covered by an annotated DataType fixture in the Members group; function-call faults are covered in Functions and FunctionConcurrency; the remaining member faults have DIL fixtures.");
             });
         }
     }

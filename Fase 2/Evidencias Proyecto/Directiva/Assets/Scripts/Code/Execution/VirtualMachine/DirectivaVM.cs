@@ -316,6 +316,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.JumpIfTrue => ExecuteConditionalJump(frame, instruction.OperandA, true),
                 InstructionId.JumpIfFalse => ExecuteConditionalJump(frame, instruction.OperandA, false),
                 InstructionId.Call => ExecuteCall(frame, instruction.OperandA),
+                InstructionId.PushFunction => ExecutePushFunction(frame, instruction.OperandA),
+                InstructionId.CallIndirect => ExecuteCallIndirect(frame, instruction.OperandA),
                 InstructionId.Return => ExecuteReturn(frame),
                 InstructionId.ContextStart => ExecuteContextStart(frame, instruction.OperandA, instruction.OperandB),
                 InstructionId.ContextEnd => ExecuteContextEnd(frame),
@@ -882,6 +884,67 @@ namespace DSExecution.VirtualMachine
             else
                 frame.InstructionPointer++;
 
+            return VMAdvanceResult.Running();
+        }
+
+        /// <summary>Pushes a program-local compiled-function reference with no heap allocation.</summary>
+        private VMAdvanceResult ExecutePushFunction(CallFrame frame, int functionId)
+        {
+            if (!Code.TryGetFunction(functionId, out _))
+                return Fault(RuntimeError.InvalidFunction(functionId));
+
+            if (!Memory.TryBindFunctionProgram(Code))
+                return Fault(RuntimeError.ForeignFunctionProgram());
+
+            return ExecutePush(frame, DataValue.FromFunctionId(functionId));
+        }
+
+        /// <summary>
+        /// Calls an already compiled function obtained from the stack. The stack layout
+        /// is [function, argument0, ..., argumentN-1] and CALL_INDIRECT N consumes
+        /// all N+1 values. No closures or runtime compilation are involved.
+        /// </summary>
+        private VMAdvanceResult ExecuteCallIndirect(CallFrame caller, int argumentCount)
+        {
+            if (argumentCount < 0 || argumentCount == int.MaxValue)
+                return Fault(RuntimeError.InvalidInstruction(
+                    "CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue."));
+
+            if (!evaluationStack.TryPeekArguments(
+                    caller.EvalStackBase, argumentCount + 1, out DataValue[] operands))
+                return Fault(RuntimeError.StackUnderflow());
+
+            DataValue callee = operands[0];
+            if (callee.dataType == DataTypeId.Uninitialized)
+                return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            if (callee.dataType != DataTypeId.Function)
+                return Fault(RuntimeError.InvalidCallTarget(callee.dataType));
+
+            if (!callee.TryGetFunctionId(out int functionId) ||
+                !Code.TryGetFunction(functionId, out FunctionContext function))
+                return Fault(RuntimeError.InvalidFunction(functionId));
+
+            if (!Memory.TryBindFunctionProgram(Code))
+                return Fault(RuntimeError.ForeignFunctionProgram());
+
+            if (function.ParameterCount != argumentCount)
+                return Fault(RuntimeError.InvalidFunctionArgumentCount(
+                    functionId, function.ParameterCount, argumentCount));
+
+            if (callStack.Count >= options.MaxCallDepth)
+                return Fault(RuntimeError.CallStackOverflow());
+
+            // All validation has succeeded. Committing a call is allocation-free in
+            // the Directiva heap, and arguments move directly into the callee frame.
+            if (!evaluationStack.TryPopArguments(
+                    caller.EvalStackBase, argumentCount + 1, out DataValue[] popped))
+                return Fault(RuntimeError.InternalVmError(
+                    "Validated CALL_INDIRECT arguments disappeared from the stack."));
+
+            DataValue[] arguments = new DataValue[argumentCount];
+            Array.Copy(popped, 1, arguments, 0, argumentCount);
+            caller.InstructionPointer++;
+            callStack.Add(new CallFrame(function, evaluationStack.Count, arguments));
             return VMAdvanceResult.Running();
         }
 

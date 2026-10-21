@@ -39,6 +39,8 @@ namespace DSExecution.VirtualMachine
         Dict = 24,
         GetProperty = 25,
         SetProperty = 26,
-        CallMethod = 27
+        CallMethod = 27,
+        PushFunction = 28,
+        CallIndirect = 29
     }
 }

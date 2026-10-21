@@ -119,6 +119,14 @@ namespace DSExecution.VirtualMachine
         public static Instruction JumpIfFalse(int targetInstruction)
             => new(InstructionId.JumpIfFalse, operandA: targetInstruction);
 
+        /// <summary>Pushes an immutable reference to a function in the compiled program.</summary>
+        public static Instruction PushFunction(int functionId)
+            => new(InstructionId.PushFunction, operandA: functionId);
+
+        /// <summary>Calls a Function DataValue followed by argumentCount arguments.</summary>
+        public static Instruction CallIndirect(int argumentCount)
+            => new(InstructionId.CallIndirect, operandA: argumentCount);
+
         public static Instruction Call(int functionId)
             => new(InstructionId.Call, operandA: functionId);
 
@@ -181,6 +189,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.JumpIfTrue => $"JumpIfTrue {OperandA}",
                 InstructionId.JumpIfFalse => $"JumpIfFalse {OperandA}",
                 InstructionId.Call => $"Call {OperandA}",
+                InstructionId.PushFunction => $"PushFunction {OperandA}",
+                InstructionId.CallIndirect => $"CallIndirect {OperandA}",
                 InstructionId.ContextStart => $"ContextStart {OperandA} {OperandB}",
                 InstructionId.DebugFile => $"DebugFile {TextOperand}",
                 InstructionId.DebugLine => $"DebugLine {OperandA}",

@@ -162,7 +162,8 @@ namespace DSCompilation.DIL
                 ["TUPLE"] = DataTypeId.Tuple,
                 ["LIST"] = DataTypeId.List,
                 ["SET"] = DataTypeId.Set,
-                ["DICT"] = DataTypeId.Dict
+                ["DICT"] = DataTypeId.Dict,
+                ["FUNCTION"] = DataTypeId.Function
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -480,6 +481,7 @@ namespace DSCompilation.DIL
                 CompileModule(
                     module,
                     baseSymbols,
+                    functionIds,
                     globalSlots.Count,
                     compiled,
                     generateDebugMetadata
@@ -492,6 +494,7 @@ namespace DSCompilation.DIL
         private static void CompileModule(
             ModuleDefinition module,
             Dictionary<string, long> baseSymbols,
+            Dictionary<string, int> functionIds,
             int globalCount,
             FunctionContext[] output,
             bool generateDebugMetadata)
@@ -593,6 +596,7 @@ namespace DSCompilation.DIL
                     currentFunction!,
                     line,
                     symbols,
+                    functionIds,
                     globalCount,
                     output.Length,
                     instructions!,
@@ -687,6 +691,7 @@ namespace DSCompilation.DIL
             FunctionDefinition function,
             string line,
             Dictionary<string, long> symbols,
+            Dictionary<string, int> functionIds,
             int globalCount,
             int functionCount,
             List<Instruction> instructions,
@@ -833,6 +838,33 @@ namespace DSCompilation.DIL
                     int globalIndex = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     ValidateGlobalIndex(moduleName, lineNumber, globalCount, globalIndex);
                     instructions.Add(Instruction.StoreGlobal(globalIndex));
+                    return;
+                }
+
+                case "PUSH_FUNCTION":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
+                    string name = tokens[1];
+                    // Bare identifiers mean a function from this DIL module.
+                    // Qualified names are resolved against the complete import graph.
+                    if (name.StartsWith("$", StringComparison.Ordinal))
+                        name = name.Substring(1);
+                    if (!IsValidQualifiedName(name))
+                        Throw(moduleName, lineNumber, $"Invalid function name '{tokens[1]}'.");
+                    string qualified = name.IndexOf('.') < 0 ? moduleName + "." + name : name;
+                    if (!functionIds.TryGetValue(qualified, out int id))
+                        Throw(moduleName, lineNumber, $"Unknown function '{qualified}'.");
+                    instructions.Add(Instruction.PushFunction(id));
+                    return;
+                }
+
+                case "CALL_INDIRECT":
+                {
+                    int argumentCount = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (argumentCount < 0 || argumentCount == int.MaxValue)
+                        Throw(moduleName, lineNumber,
+                            "CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.");
+                    instructions.Add(Instruction.CallIndirect(argumentCount));
                     return;
                 }
 

@@ -29,7 +29,9 @@
 | `ListMemory/TestEverything` | Redimensionamiento, swap de buffers, atomicidad OOM, raices auxiliares, GC y ciclos |
 | `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
 | `Sets/TestEverything`, `SetAlgebra`, `SetMemory`, `SetConcurrency`, `SetRobustness` | Conjuntos, hash, algebra, GC, concurrencia y estres (126 pruebas validadas en Unity) |
-| `Members/TestEverything` | Parser y ejecución de miembros DIL, herencia, getters/setters y métodos continuados (53 pruebas nuevas) |
+| `Members/TestEverything` | Parser y ejecución de miembros DIL, herencia, getters/setters y métodos continuados (53 pruebas; validadas en Unity) |
+| `Functions/TestEverything` | Function como valor, imports, aridad, CALL_INDIRECT, hashing, colecciones y fallos esperados (63 nuevas) |
+| `FunctionConcurrency/TestEverything` | Selector global de comportamiento entre VMs, snapshots, determinismo, programa compartido y GC (10 nuevas) |
 | `Dictionaries/TestEverything` | Constructor, GET/SET/DELETE/POP_ITEM, hashing, igualdad y conversiones |
 | `DictViews/TestEverything` | DICT_KEYS/VALUES/ITEMS, formato anidado y continuidad |
 | `DictMemory/TestEverything` | Carga de dos slots, GC, ciclos, OOM y buffers auxiliares |
@@ -90,3 +92,11 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 `DILMemberTests.cs` aporta 53 casos registrados en el catálogo, con menú `Directiva/Tests/DIL/Members/TestEverything`. Valida DIL, adaptadores de miembros sobre tipos actuales, errores de aridad, reflexión solo al registrar, herencia y sobrescritura `virtual`/`abstract`/`override`, setters mediante tipos de prueba, GC y concurrencia de métodos continuados. No se agrega ningún setter ficticio a los tipos de juego: los setters de integración a futuras entidades se probarán cuando existan.
 
 **Línea base confirmada:** 530/530 casos anteriores aprobados en Unity. **Total objetivo:** 583 con 53 nuevas aún pendientes de compilar y ejecutar. Los informes se guardan fuera del repositorio mediante la ventana existente.
+
+## Funciones como valores (2026-10-20; validación Unity pendiente)
+
+- Nuevas instrucciones: `PUSH_FUNCTION nombre` y `CALL_INDIRECT n`. Para llamadas indirectas apilar **primero la función** y después los n argumentos. Funciones compiladas, no anónimas ni closures. `FunctionId` es local al `CodeContext` del programa.
+- `DTFunction` es un escalar no heap (nuevo `DataTypeId.Function = 13`); puede guardarse en variables, retornos y colecciones. `CAST STRING` muestra `<function #id>`; hashing y truthiness admitidos. `FunctionId` 0 es válido.
+- **Memoria compartida:** VMs que intercambian funciones por globales deben compartir la **misma instancia** `CodeContext`. El contexto de memoria rechaza el uso de referencias Function de otro programa para evitar invocaciones equivocadas.
+- **73 casos nuevos**: 63 de semántica/parsing/errores y 10 de concurrencia (583 previos aprobados en Unity; 656 previstos con esta entrega).
+- Ejecutar `Directiva > Tests > DIL > Functions > TestEverything`, luego `FunctionConcurrency`, y finalmente `TestAll`. Los informes se guardan fuera del repositorio como de costumbre.

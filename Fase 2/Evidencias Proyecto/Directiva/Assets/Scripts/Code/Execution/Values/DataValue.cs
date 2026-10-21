@@ -75,6 +75,28 @@ namespace DSExecution.Values
             return new DataValue(DataTypeId.Dict, memoryReference);
         }
 
+        /// <summary>References an already compiled function by its program-local id.</summary>
+        public static DataValue FromFunctionId(int functionId)
+        {
+            if (functionId < 0)
+                throw new System.ArgumentOutOfRangeException(nameof(functionId));
+
+            return new DataValue(DataTypeId.Function, (ulong)functionId);
+        }
+
+        /// <summary>Decodes a function id without truncating invalid raw values.</summary>
+        public bool TryGetFunctionId(out int functionId)
+        {
+            if (dataType == DataTypeId.Function && value <= int.MaxValue)
+            {
+                functionId = (int)value;
+                return true;
+            }
+
+            functionId = -1;
+            return false;
+        }
+
         public static DataValue FromTupleReference(uint memoryReference)
         {
             if (memoryReference == 0)

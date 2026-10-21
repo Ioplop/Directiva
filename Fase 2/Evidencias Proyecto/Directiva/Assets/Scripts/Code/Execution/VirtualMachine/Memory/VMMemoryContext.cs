@@ -13,6 +13,7 @@ namespace DSExecution.VirtualMachine
         private readonly DataValue[] globals;
         private readonly HeapMemory heap;
         private readonly List<WeakReference<DirectivaVM>> vms = new();
+        private CodeContext functionProgram;
 
         public int GlobalCount => globals.Length;
         public HeapMemory Heap => heap;
@@ -36,6 +37,25 @@ namespace DSExecution.VirtualMachine
             this.heap = heap ?? throw new ArgumentNullException(nameof(heap));
             globals = new DataValue[globalCount];
             ResetGlobals();
+        }
+
+        /// <summary>
+        /// Function ids are program-local. Once first used, shared memory must not
+        /// interpret them using a different CodeContext instance. Ordinary VMs with
+        /// no function values remain compatible with existing shared-memory workflows.
+        /// </summary>
+        internal bool TryBindFunctionProgram(CodeContext code)
+        {
+            if (code == null)
+                throw new ArgumentNullException(nameof(code));
+
+            if (functionProgram == null)
+            {
+                functionProgram = code;
+                return true;
+            }
+
+            return ReferenceEquals(functionProgram, code);
         }
 
         internal void RegisterVM(DirectivaVM vm)

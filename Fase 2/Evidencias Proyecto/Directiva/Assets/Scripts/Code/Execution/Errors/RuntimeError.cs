@@ -31,7 +31,10 @@ namespace DSExecution.Errors
         MemberNotFound = 19,
         ReadOnlyProperty = 20,
         WriteOnlyProperty = 21,
-        InvalidMemberArgumentCount = 22
+        InvalidMemberArgumentCount = 22,
+        InvalidCallTarget = 23,
+        InvalidFunctionArgumentCount = 24,
+        ForeignFunctionProgram = 25
     }
 
     /// <summary>
@@ -131,6 +134,18 @@ namespace DSExecution.Errors
                 RuntimeErrorId.InvalidInstruction,
                 $"Invalid instruction. {details} TODO: Localize!"
             );
+
+        public static RuntimeError InvalidCallTarget(DataTypeId actualType)
+            => new(RuntimeErrorId.InvalidCallTarget,
+                $"Indirect call requires a Function, got {actualType}. TODO: Localize!");
+
+        public static RuntimeError InvalidFunctionArgumentCount(int functionId, int expected, int actual)
+            => new(RuntimeErrorId.InvalidFunctionArgumentCount,
+                $"Function {functionId} expects {expected} argument(s), got {actual}. TODO: Localize!");
+
+        public static RuntimeError ForeignFunctionProgram()
+            => new(RuntimeErrorId.ForeignFunctionProgram,
+                "Function references in shared memory must belong to the same compiled CodeContext. TODO: Localize!");
 
         public static RuntimeError InvalidFunction(int functionId)
             => new(

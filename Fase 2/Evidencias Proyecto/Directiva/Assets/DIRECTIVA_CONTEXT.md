@@ -2,8 +2,8 @@
 
 > **Documento de orientación para agentes de IA y colaboradores.** Es un mapa del proyecto, no una especificación exhaustiva ni un reemplazo del código fuente.
 >
-> **Última actualización:** 2026-10-20 20:43:32 -0300 (America/Santiago)  
-> **Base examinada:** `Assets.tar.gz` del 19-10-2026 + diferencial de Dictionary; el responsable confirmó **530/530 tests aprobados en Unity**. Este cambio agrega el sistema de miembros y 53 tests nuevos pendientes de compilar/ejecutar en Unity.  
+> **Última actualización:** 2026-10-20 23:41:13 -0300 (America/Santiago)  
+> **Base examinada:** `Assets20-10-2026-2328.zip` entregado por el responsable; confirmó que los miembros de tipo compilaron y pasaron la batería anterior (**583/583**). Esta entrega agrega referencias a funciones compiladas y 73 casos nuevos pendientes de ejecutar en Unity (**656 previstos**).  
 > **Alcance:** exclusivamente el videojuego Unity **Directiva**. No cubre informes académicos, evidencias, gestión externa ni archivos que no vinieron en este paquete.  
 > **Criterio de verdad:** código, escenas y assets actuales > este resumen > documentación histórica > planes conversados. En caso de discrepancia, inspeccionar el repositorio y `git log`.
 
@@ -11,9 +11,9 @@
 
 **Directiva** es un videojuego educativo y competitivo de PC hecho con **Unity 6 / C#**, con **UI Toolkit** y recursos **URP**. El objetivo es que el jugador programe el comportamiento de **unidades** en un lenguaje textual propio, **DScript**, inspirado en Python, dentro de un entorno de simulación con un **Nexo** (base), recursos y objetivos/misiones. *Unidad* es el término del juego; evitar llamarlas «agentes» para no confundirlas con agentes de IA.
 
-**Estado al corte:** el proyecto tiene menú/editor DIL, opciones, parser DIL, VM, heap/GC y tipos `Int`, `Decimal`, `Bool`, `None`, `String`, `Tuple`, `List`, `Set`, `Dict`: **530/530 pruebas aprobadas en Unity**. Se añade el sistema de **miembros de tipo** (anotaciones C#, instrucciones DIL, 53 pruebas sin validar aún). El compilador DScript → DIL, las entidades de simulación y el gameplay funcional siguen pendientes.
+**Estado al corte:** el proyecto tiene menú/editor DIL, opciones, parser DIL, VM, heap/GC y tipos `Int`, `Decimal`, `Bool`, `None`, `String`, `Tuple`, `List`, `Set`, `Dict` y miembros de tipo: **583/583 pruebas aprobadas en Unity**. Se incorporan **funciones compiladas como valores** (`DTFunction`, `PUSH_FUNCTION`, `CALL_INDIRECT`), con 73 pruebas nuevas por validar. El compilador DScript → DIL, las entidades de simulación y el gameplay funcional siguen pendientes.
 
-**Prioridad inmediata acordada:** validar los 53 casos nuevos de miembros junto a las 530 regresiones anteriores (**583 pruebas previstas**). Después, desarrollar el compilador DScript y definir los objetos de simulación; estos últimos deben usar referencias administradas fuera del heap y podrán heredar miembros.
+**Prioridad inmediata acordada:** validar los 73 tests de Function junto a las 583 regresiones existentes (**656 pruebas previstas**) y continuar con el **compilador DScript → DIL**. La integración de objetos de simulación sigue pendiente; deberán usar referencias externas al heap y podrán heredar miembros.
 
 ### Estado por subsistema
 
@@ -23,11 +23,12 @@
 | Opciones persistentes | JSON/PlayerPrefs y aplicación de resolución, fullscreen, cursor y ejecución en segundo plano; audio/idioma sin integración global | `Scripts/Settings/`, `Documentation/MainMenu/SETTINGS.md` |
 | Editor de scripts | Funcional para **`.dil`**; árbol de archivos, edición, backups, historial undo/redo, consola, breakpoints DIL | `Scripts/UI/CodeEditor/`, `Scripts/Code/{Storage,Workspace}/` |
 | Lenguaje DScript | Diseñado conceptualmente; **sin compilador ni parser funcional** | `Scripts/Code/Compilation/` (actualmente solo `DIL/`) |
-| DIL (texto intermedio) | Parser con múltiples módulos/imports, funciones, saltos, constantes y operaciones; suite automatizada Editor **530/530 aprobadas**, 53 casos nuevos de miembros aún sin ejecutar en Unity | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/` |
-| Miembros de tipo | **Implementados aquí, pendientes de validar en Unity**: anotaciones getter/setter/método, herencia y `override`, acceso por DIL, continuaciones | `Scripts/Code/Execution/Types/DataTypes/{DScriptMemberAttributes.cs,DataType.Members.cs}`; `DirectivaVM`, `DILParser` |
+| DIL (texto intermedio) | Parser con múltiples módulos/imports, funciones, saltos, constantes y operaciones; suite automatizada Editor **583/583 aprobadas**, 73 casos nuevos de Function pendientes de ejecutar en Unity | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/` |
+| Miembros de tipo | **Implementados y validados en Unity**: anotaciones getter/setter/método, herencia y `override`, acceso por DIL, continuaciones | `Scripts/Code/Execution/Types/DataTypes/{DScriptMemberAttributes.cs,DataType.Members.cs}`; `DirectivaVM`, `DILParser` |
+| Funciones como valores | **Añadidas en esta entrega; pendientes de Unity**: `PUSH_FUNCTION`, `CALL_INDIRECT n`, `DTFunction`; un `CodeContext` compartido define sus IDs | `Code/Execution/Types/DataTypes/DTValues/DTFunction.cs`, `DirectivaVM`, `DILParser` |
 | Máquina virtual | Ejecuta `CodeContext`: stack, llamadas, locals, globals, saltos, operaciones, casts, print y límites | `Scripts/Code/Execution/VirtualMachine/` |
 | Heap y GC | Heap con límites lógicos; **mark-and-sweep lazy** al fallar una reserva, referencias anidadas y compartidas | `Scripts/Code/Execution/VirtualMachine/Memory/` |
-| Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`, `List`, `Set` y **Dict (530/530 tests validados en Unity)**; tipos de simulación pendientes | `Scripts/Code/Execution/Types/` |
+| Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`, `List`, `Set`, `Dict` y **Function** (no heap, nueva); tipos de simulación pendientes | `Scripts/Code/Execution/Types/` |
 | Interfaz de simulación | HUD y editor acoplables; controles de simulación **solo visuales** | `Scripts/UI/Simulation/`, `Scenes/BaseSimulation.unity` |
 | Simulación jugable y misiones | **No implementadas**: lógica de unidades, combate, minería, Nexo, recursos, victoria, tutorial | Crear subsistemas de simulación y orquestación |
 | Análisis/refactorización DScript | Interfaces/diagnósticos preparados; implementaciones **NoOp** | `Scripts/Code/{Analysis,Refactoring,Core}/` |
@@ -77,7 +78,7 @@
 
 - Código del runtime organizado principalmente en namespaces `DSCompilation.DIL`, `DSExecution.*`, `Directiva.CodeUI`, `Directiva.Settings`, `Directiva.UI`, `Directiva.MainMenu` y `Directiva.SimulationUI`.
 - Instrucciones VM (`InstructionId`) y operaciones (`OperationId`) **tienen IDs explícitos**; `DataTypeId` también. **No renumerar identificadores ya usados**: se preservan en previsión de serialización DIB.
-- La VM usa datos tipados mediante `DataValue`. Los escalares pueden ir en el payload del valor; `String`, `Tuple`, `List`, `Set` y `Dict` usan referencias (`uint`) a objetos del heap. No asumir que toda variable C# es un objeto heap ni usar referencias de C# como identidad del lenguaje.
+- La VM usa datos tipados mediante `DataValue`. Los escalares y **Function** usan el payload del valor; `String`, `Tuple`, `List`, `Set` y `Dict` usan referencias (`uint`) a objetos del heap. No asumir que toda variable C# es un objeto heap ni usar referencias de C# como identidad del lenguaje.
 - Conservar **GUIDs y `.meta`** de Unity. En cambios futuros, preferir ZIP diferencial con raíz `Assets/`, únicamente archivos nuevos/modificados y una lista de eliminaciones/renombres. Mantener rutas, mayúsculas y separadores válidos en Windows/Linux.
 - Mantener una semántica **determinista** para el runtime; la física/animación visual de Unity **no constituye** todavía un simulador determinista. La futura ejecución de múltiples VMs con scheduling round-robin sigue siendo una meta, no un sistema jugable existente.
 
@@ -282,7 +283,7 @@ La consola debe mostrar `(10, 20)` y la función debe devolver `None`.
 - `DirectivaVM.Advance()` procesa un paso; `Run(instructionBudget)` ejecuta un máximo de pasos y permite trabajo acotado. Operaciones continuadas pueden conservar estado entre avances (p. ej. infraestructura de potencia). VM de pila con frames/callstack, locals precontados, globals y retorno; errores controlados en `RuntimeError`.
 - Los locals empiezan como **Uninitialized**; el uso antes de asignar es error. Conjunto de globals pertenece a `VMMemoryContext`; **varias VMs pueden compartir memoria**, pero todavía no hay orquestador completo que planifique unidades en round-robin.
 - `HeapMemory`: objetos direccionados con ID `uint` estable, unidad de memoria **lógica**, independiente de bytes reales de C#. `VMMemoryContext.TryAllocHeap()` intenta reservar; si falla ejecuta **mark-and-sweep** desde globals y raíces de VMs registradas, recorre `HeapObject.GetReferences()` **no recursivamente por objeto** (el GC gestiona el grafo) y reintenta. Visitas repetidas/ciclos se evitan con un conjunto de referencias marcadas. El GC es **lazy/on pressure**, no un barrido fijo cada frame.
-- Tipos actualmente utilizables: escalares `Bool`, `Int`, `Decimal`, `None`, `Uninitialized`; referencias `String`, `Tuple`, `List` (probada en Unity) y `Set` (validado en Unity) y `Dict` (pendiente de validar en Unity). `StringHeapObject` es inmutable; su tamaño lógico depende de unidades UTF-16. `TupleHeapObject` conserva copia privada de elementos, tiene tamaño lógico `1 + número de elementos` y expone hijos para GC. **Tamaño heap y `LENGTH` no son la misma medida**.
+- Tipos actualmente utilizables: escalares `Bool`, `Int`, `Decimal`, `None`, `Uninitialized`; referencias `String`, `Tuple`, `List`, `Set` y `Dict` (validados en Unity) y `Function` (nuevo, por validar). `StringHeapObject` es inmutable; su tamaño lógico depende de unidades UTF-16. `TupleHeapObject` conserva copia privada de elementos, tiene tamaño lógico `1 + número de elementos` y expone hijos para GC. **Tamaño heap y `LENGTH` no son la misma medida**.
 - `TUPLE n` deja referencias originales en el stack durante la reserva para protegerlas ante GC. Las tuplas soportan orden e indexación negativa, igualdad estructural, identidad, concatenación, `LENGTH`, `HASH`, `CAST STRING`, truthiness y `COPY` por referencia. Su `HASH` combina hashes de elementos y ahora almacena el resultado exitoso en caché dentro de `TupleHeapObject` (incluidas tuplas anidadas), respeta igualdad numérica cruzada (p. ej. `1 == True`) y reporta la ruta si un elemento anidado no es hasheable. `String` tiene hash determinista FNV-1a cacheado en `StringHeapObject` tras el primer cálculo, longitud por puntos de código Unicode; los hashes pueden ser negativos.
 - Casting pertenece a `DataType.CastTo` y se solicita desde **`InstructionId.Cast`**; no hay tipo de primera clase `Type` ni operación genérica `Cast` en `OperationId`. El cast identidad vive en `DataType` base; cada tipo incorpora sus destinos adicionales. Para visualización se usa una única conversión a string, **sin `repr()` público separado**. `Tuple → String` entrecomilla cadenas contenidas y formatea tuplas anidadas.
 - **Limitación deliberada:** operaciones grandes de List como INSERT interno/EXTEND/DELETE/COPY/ADD y búsquedas trabajan con pasos continuados; `ValueEquals` estructural y conversión a texto aún recorren los elementos de forma síncrona. Los buffers auxiliares consumen heap extra y pueden producir OOM aunque el tamaño final de la lista cupiera por sí solo. Cambios intercalados de otra VM causan `InvalidOperation`; el resultado parcial nunca se publica.
@@ -319,7 +320,7 @@ La consola debe mostrar `(10, 20)` y la función debe devolver `None`.
 ### P0 — Compromisos inmediatos acordados
 
 1. **Heap/colecciones:** String, Tuple, List, Set y Dict se consideran implementados y aprobados en Unity (**530/530 pruebas confirmadas**). No añadir nuevas estructuras del heap salvo necesidad justificada; preservar regresión.
-2. **Validar miembros de tipo** con 583 pruebas (53 nuevas) y corregir regresiones. **Después, implementar compilador DScript → DIL**: tokenización, parser/AST, scopes, variables, estructuras de control, funciones/imports y mapeo de líneas fuente. No existe todavía en este árbol.
+2. **Validar referencias a funciones** con 656 pruebas (73 nuevas) y corregir regresiones. **Después, implementar compilador DScript → DIL**: tokenización, parser/AST, scopes, variables, estructuras de control, funciones/imports y mapeo de líneas fuente. No existe todavía en este árbol.
 
 ### P1 — Transformar infraestructura en juego
 
@@ -345,7 +346,7 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 ### Evidencia disponible
 
 - Las suites de Tuple originales (8 y 13 casos) fueron **ejecutadas exitosamente por el responsable el 15-10-2026** y ahora se registran bajo `Directiva > Tests > DIL > Regression > TestEverything`.
-- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. El responsable confirmó **184/184** (15-10), **242/242** tras List, **254/254** tras Hash, **380/380** tras Set y **530/530** tras Dictionary (19-10-2026). **53 pruebas de miembros** quedan pendientes de ejecutar (**583 previstas en total**). Leer `Assets/Editor/DirectivaTests/README.md`.
+- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. El responsable confirmó **184/184** (15-10), **242/242** tras List, **254/254** tras Hash, **380/380** tras Set y **530/530** tras Dictionary (19-10-2026). **Miembros validados (583/583); hay 73 nuevas pruebas de Function, pendientes de ejecutar en Unity (656 previstas).** Leer `Assets/Editor/DirectivaTests/README.md`.
 - El responsable también probó la demo DIL real de tuplas desde el editor: representación anidada, `GET`, hash, `LENGTH` y retorno `None` mostraron resultados plausibles. Las pruebas de List incluyen GC circular, OOM atómico, root auxiliar, búsqueda continuada y conflictos entre VMs.
 - **Este documento se elaboró leyendo el paquete `Assets/` más los diferenciales indicados y confirmaciones de pruebas del responsable**; no ejecuta Unity ni reemplaza una compilación/CI. No extrapolar las pruebas de Tuple a los subsistemas todavía no construidos.
 
@@ -378,15 +379,27 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 - **Periodicidad:** acompañar cambios importantes en futuros ZIP diferenciales `Assets/*`; **no** es necesario tocarlo por ajustes cosméticos o cambios menores sin impacto contextual.
 - **Auditoría histórica:** commits, changelogs del editor, documentos externos y evidencias quedan en el repositorio; este documento es una **foto mantenible del presente** con el contexto suficiente para continuar el proyecto.
 
-## Sistema de Miembros de Tipo (2026-10-20, pendiente de validar en Unity)
+## Sistema de Miembros de Tipo (2026-10-20, validado en Unity)
 
 - **Infraestructura añadida:** `[DScriptMethod("name", argumentCount)]` (cantidad opcional; -1 variádico), `[DScriptGetter("name")]`, `[DScriptSetter("name")]` sobre métodos C#. Reutilizan `OperationCall`, `OperationResult`, presupuesto y continuaciones, sin un `OperationId` por miembro.
 - **Polimorfismo:** métodos de `DataType` `virtual`/`abstract` pueden declararse en la clase base y sobrescribirse con `override` en clases descendientes sin repetir la anotación. Registro por reflexión una vez al crear el `DataType`; después despacho por delegado, sin reflexión por invocación. Duplicados accidentales/método y propiedad con el mismo nombre se rechazan en registro.
 - **DIL:** `GET_PROPERTY length` (consume receptor; devuelve valor); `SET_PROPERTY property` (consume receptor y valor; no deja resultado); `CALL_METHOD append 1` (consume receptor y N parámetros; devuelve resultado o `None`). Los nombres se conservan con su capitalización, y las instrucciones siguen en mayúsculas.
 - **GC y continuaciones:** los métodos continuados comparten la raíz auxiliar y los argumentos pendientes de la VM. No guardar referencias heap en `OperationState`. `SetProperty` admite `Continued` y exige `Success(None)` al terminar.
 - **Primeros miembros sobre tipos existentes:** `String`, `Tuple`, `List`, `Set`, `Dict`: getter `.length`; `List`: `.append()`, `.insert()`, `.extend()`, `.contains()`, `.indexOf()`; `Set`: `.add()`, `.discard()`, `.remove()`, `.contains()`; `Dict`: `.keys()`, `.values()`, `.items()`, `.contains()`. Solo son adaptadores a operaciones que ya existían. `String.split()` aún no implementado.
-- **Validación:** `Directiva > Tests > DIL > Members > TestEverything` añade 53 pruebas de parser, errores, métodos reales, herencia, getters/setters mock, GC, concurrencia y continuaciones. **530 pruebas anteriores aprobadas por el responsable + 53 nuevas sin ejecutar en Unity = 583 previstas.**
+- **Validación:** `Directiva > Tests > DIL > Members > TestEverything` añade 53 pruebas de parser, errores, métodos reales, herencia, getters/setters mock, GC, concurrencia y continuaciones. **583/583 pruebas (incluidos miembros) aprobadas en Unity, según el responsable.**
 - **Simulación futura:** referencias a entidades (`SimulationId`) estarán administradas por `SimulationManager` y no en el heap; usarán el mismo sistema de miembros. Aún no existe una implementación jugable de esos tipos.
+
+---
+
+## Funciones compiladas como valores (2026-10-20; pendientes de validar en Unity)
+
+- **Tipo nuevo:** `DataTypeId.Function = 13`; `DTFunction` es inmutable, **no usa heap** y contiene un `int FunctionId` válido dentro del `CodeContext` compilado. Soporta igualdad e identidad por identificador, hash determinista, truthiness (`FunctionId 0` también es verdadero), casting identidad y `CAST STRING` (`<function #id>`). No son closures.
+- **DIL:** `PUSH_FUNCTION nombre` coloca referencia a función ya compilada (nombre simple del módulo actual o cualificado del grafo de imports); el parser valida el nombre durante el enlace. `CALL_INDIRECT n` consume `Function`, seguido de los n argumentos, crea frame normal y retorna un valor. `CALL` directo sigue disponible. Opcodes 28/29; IDs previos inalterados.
+- **Uso:** funciones almacenables en locals/globals, parámetros, retornos, listas, tuplas, sets y diccionarios. Un global compartido como `action` puede almacenar referencias `miner`/`attacker` y los bots ejecutarlas dinámicamente al consultarlo de nuevo.
+- **Identidad entre VMs:** los `FunctionId` son locales a un programa compilado; las VMs que comparten referencias deben usar **la misma instancia `CodeContext`**. `VMMemoryContext` rechaza llamadas/referencias Function desde un CodeContext diferente cuando está vinculado. No intercambiar funciones entre programas independientes. El ID `0` es una función válida.
+- **Restricciones deliberadas:** no hay `def` anidados, lambdas, cierres/capturas, código generado o compilado durante ejecución, ni funciones de simulación (`create_bot`) por ahora. Los argumentos de llamadas indirectas son explícitos y se valida aridad. No se crean funciones nuevas al hacer `PUSH_FUNCTION`.
+- **Pruebas:** `Directiva > Tests > DIL > Functions` y `FunctionConcurrency` (73 casos); total de 656 previsto, todavía **no validado en Unity**. Demostración DIL de función global intercambiable incluida por separado en el entregable.
+- **Siguiente paso probable:** DScript → DIL debe emitir `PUSH_FUNCTION` al referenciar nombres de funciones como valores y `CALL_INDIRECT` cuando el receptor sea un valor; no requiere un compilador dinámico.
 
 ---
 

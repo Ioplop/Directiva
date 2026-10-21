@@ -22,6 +22,9 @@ namespace DSExecution.DataTypes
         Dict = 8,
         Tuple = 12, // Appended without changing the existing serialized type ids.
 
+        // Compiled function reference. Not heap-backed and never creates runtime code.
+        Function = 13,
+
         // Simulation types
         Unit = 9,
         Base = 10,
