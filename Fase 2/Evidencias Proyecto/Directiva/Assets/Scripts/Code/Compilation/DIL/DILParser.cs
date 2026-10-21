@@ -163,7 +163,9 @@ namespace DSCompilation.DIL
                 ["LIST"] = DataTypeId.List,
                 ["SET"] = DataTypeId.Set,
                 ["DICT"] = DataTypeId.Dict,
-                ["FUNCTION"] = DataTypeId.Function
+                ["FUNCTION"] = DataTypeId.Function,
+                ["RANGE"] = DataTypeId.Range,
+                ["ITERATOR"] = DataTypeId.Iterator
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -663,7 +665,8 @@ namespace DSCompilation.DIL
                 Instruction instruction = instructions[i];
                 if (instruction.Id == InstructionId.Jump ||
                     instruction.Id == InstructionId.JumpIfTrue ||
-                    instruction.Id == InstructionId.JumpIfFalse)
+                    instruction.Id == InstructionId.JumpIfFalse ||
+                    instruction.Id == InstructionId.IterNext)
                 {
                     int oldTarget = instruction.OperandA;
                     if ((uint)oldTarget >= (uint)expandedStart.Length)
@@ -755,6 +758,20 @@ namespace DSCompilation.DIL
                     instructions.Add(Instruction.List(count));
                     return;
                 }
+
+                case "RANGE":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 1 || count > 3)
+                        Throw(moduleName, lineNumber, "RANGE requires exactly 1, 2, or 3 operands on the stack.");
+                    instructions.Add(Instruction.Range(count));
+                    return;
+                }
+
+                case "ITER_INIT":
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
+                    instructions.Add(Instruction.IterInit());
+                    return;
 
                 case "DICT":
                 {
@@ -908,6 +925,11 @@ namespace DSCompilation.DIL
                     instructions.Add(Instruction.ContextEnd());
                     return;
 
+                case "ITER_NEXT":
+                    ParseJump(moduleName, lineNumber, InstructionId.IterNext, mnemonic,
+                        tokens, symbols, instructions, pendingJumps);
+                    return;
+
                 case "JUMP":
                     ParseJump(moduleName, lineNumber, InstructionId.Jump, mnemonic, tokens, symbols, instructions, pendingJumps);
                     return;
@@ -1042,7 +1064,8 @@ namespace DSCompilation.DIL
                 Instruction instruction = instructions[i];
                 if (instruction.Id != InstructionId.Jump &&
                     instruction.Id != InstructionId.JumpIfTrue &&
-                    instruction.Id != InstructionId.JumpIfFalse)
+                    instruction.Id != InstructionId.JumpIfFalse &&
+                    instruction.Id != InstructionId.IterNext)
                 {
                     continue;
                 }
@@ -1065,6 +1088,7 @@ namespace DSCompilation.DIL
                 InstructionId.Jump => Instruction.Jump(target),
                 InstructionId.JumpIfTrue => Instruction.JumpIfTrue(target),
                 InstructionId.JumpIfFalse => Instruction.JumpIfFalse(target),
+                InstructionId.IterNext => Instruction.IterNext(target),
                 _ => throw new ArgumentOutOfRangeException(nameof(id))
             };
         }

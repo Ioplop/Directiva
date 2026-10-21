@@ -301,6 +301,9 @@ namespace DSExecution.VirtualMachine
                 InstructionId.List => ExecuteList(frame, instruction.OperandA),
                 InstructionId.Set => ExecuteSet(frame, instruction.OperandA),
                 InstructionId.Dict => ExecuteDict(frame, instruction.OperandA),
+                InstructionId.Range => ExecuteRange(frame, instruction.OperandA),
+                InstructionId.IterInit => ExecuteIterInit(frame),
+                InstructionId.IterNext => ExecuteIterNext(frame, instruction.OperandA),
                 InstructionId.GetProperty => ExecuteMember(frame, InstructionId.GetProperty,
                     instruction.TextOperand, 0),
                 InstructionId.SetProperty => ExecuteMember(frame, InstructionId.SetProperty,
@@ -471,6 +474,137 @@ namespace DSExecution.VirtualMachine
                 Memory.FreeHeap(reference);
                 return Fault(RuntimeError.InternalVmError("DICT stack replacement failed after validation."));
             }
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Constructs a lazy arithmetic progression. RANGE 1/2/3 accepts signed Int/Bool
+        /// arguments; the input stack remains rooted until allocation succeeds.
+        /// </summary>
+        private VMAdvanceResult ExecuteRange(CallFrame frame, int count)
+        {
+            if (count < 1 || count > 3)
+                return Fault(RuntimeError.InvalidInstruction("RANGE expects 1, 2 or 3 arguments."));
+            if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] args))
+                return Fault(RuntimeError.StackUnderflow());
+            foreach (DataValue argument in args)
+            {
+                if (argument.dataType == DataTypeId.Uninitialized)
+                    return Fault(RuntimeError.VariableUsedBeforeInitialization());
+                if (argument.dataType != DataTypeId.Int && argument.dataType != DataTypeId.Bool)
+                    return Fault(RuntimeError.InvalidOperation("RANGE requires Int/Bool arguments."));
+            }
+            long start = count > 1 ? unchecked((long)args[0].value) : 0L;
+            long stop = count > 1 ? unchecked((long)args[1].value) : unchecked((long)args[0].value);
+            long step = count == 3 ? unchecked((long)args[2].value) : 1L;
+            if (step == 0)
+                return Fault(RuntimeError.InvalidOperation("RANGE step cannot be zero."));
+            if (!Memory.TryAllocHeap(new RangeHeapObject(start, stop, step), out uint reference))
+                return Fault(RuntimeError.OutOfMemory());
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, count, DataValue.FromRangeReference(reference)))
+            {
+                Memory.FreeHeap(reference);
+                return Fault(RuntimeError.InternalVmError("RANGE stack replacement failed."));
+            }
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// ITER_INIT replaces one iterable with a cursor. An existing iterator is its
+        /// own iterator, preserving the position rather than restarting traversal.
+        /// </summary>
+        private VMAdvanceResult ExecuteIterInit(CallFrame frame)
+        {
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, 1, out DataValue[] top))
+                return Fault(RuntimeError.StackUnderflow());
+            DataValue sourceValue = top[0];
+            if (sourceValue.dataType == DataTypeId.Uninitialized)
+                return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            if (sourceValue.dataType == DataTypeId.Iterator)
+            {
+                if (!sourceValue.TryGetHeapReference(out uint existing) ||
+                    !Memory.TryGetHeap(existing, out HeapObject iteratorObject) ||
+                    !(iteratorObject is IteratorHeapObject))
+                    return Fault(RuntimeError.InvalidMemoryAccess((uint)sourceValue.value));
+                return AdvanceInstruction(frame);
+            }
+            if (sourceValue.dataType != DataTypeId.Tuple &&
+                sourceValue.dataType != DataTypeId.List &&
+                sourceValue.dataType != DataTypeId.Set &&
+                sourceValue.dataType != DataTypeId.Dict &&
+                sourceValue.dataType != DataTypeId.Range)
+                return Fault(RuntimeError.NotIterable(sourceValue.dataType));
+            if (!sourceValue.TryGetHeapReference(out uint sourceReference) ||
+                !Memory.TryGetHeap(sourceReference, out HeapObject source))
+                return Fault(RuntimeError.InvalidMemoryAccess((uint)sourceValue.value));
+            // Check the heap object's kind explicitly instead of accepting forged values.
+            bool matching = sourceValue.dataType switch
+            {
+                DataTypeId.Tuple => source is TupleHeapObject,
+                DataTypeId.List => source is ListHeapObject,
+                DataTypeId.Set => source is SetHeapObject,
+                DataTypeId.Dict => source is DictHeapObject,
+                DataTypeId.Range => source is RangeHeapObject,
+                _ => false
+            };
+            if (!matching)
+                return Fault(RuntimeError.InvalidOperation("Iterable reference has the wrong heap object type."));
+            var cursor = new IteratorHeapObject(sourceValue.dataType, sourceReference, source);
+            if (!Memory.TryAllocHeap(cursor, out uint iteratorReference))
+                return Fault(RuntimeError.OutOfMemory());
+            if (!evaluationStack.TryReplaceTopWithOne(
+                    frame.EvalStackBase, 1, DataValue.FromIteratorReference(iteratorReference)))
+            {
+                Memory.FreeHeap(iteratorReference);
+                return Fault(RuntimeError.InternalVmError("ITER_INIT could not commit its cursor."));
+            }
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Success: [cursor] becomes [cursor, nextItem], even when nextItem is None.
+        /// Exhaustion: consumes cursor and jumps to endTarget. Each check costs one
+        /// VM step. Stack overflow is checked before moving the cursor.
+        /// </summary>
+        private VMAdvanceResult ExecuteIterNext(CallFrame frame, int endTarget)
+        {
+            if (!IsValidJumpTarget(frame, endTarget))
+                return Fault(RuntimeError.InvalidJumpTarget(endTarget));
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, 1, out DataValue[] top))
+                return Fault(RuntimeError.StackUnderflow());
+            DataValue iterator = top[0];
+            if (iterator.dataType == DataTypeId.Uninitialized)
+                return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            if (iterator.dataType != DataTypeId.Iterator)
+                return Fault(RuntimeError.InvalidIterator(iterator.dataType));
+            if (!iterator.TryGetHeapReference(out uint reference) ||
+                !Memory.TryGetHeap(reference, out HeapObject heapObject) ||
+                !(heapObject is IteratorHeapObject cursor))
+                return Fault(RuntimeError.InvalidMemoryAccess((uint)iterator.value));
+            // Detect exhaustion before checking stack capacity. An empty iterator may
+            // jump with no free stack slots; a nonempty cursor must not advance if it
+            // cannot push an item. These checks are uninterrupted in one VM step.
+            if (!cursor.TryHasNext(Memory, out bool available, out RuntimeError peekError))
+                return Fault(peekError);
+            if (!available)
+            {
+                if (!evaluationStack.TryPop(frame.EvalStackBase, out _))
+                    return Fault(RuntimeError.InternalVmError("ITER_NEXT exhausted but stack lost cursor."));
+                frame.InstructionPointer = endTarget;
+                return VMAdvanceResult.Running();
+            }
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, 0))
+                return Fault(RuntimeError.StackOverflow());
+            bool hasValue = cursor.TryGetNext(Memory, out DataValue item, out RuntimeError error);
+            if (error != null)
+                return Fault(error);
+            if (!hasValue)
+                return Fault(RuntimeError.InternalVmError("Iterator became exhausted during a single VM step."));
+            if (!evaluationStack.TryPush(item))
+                return Fault(RuntimeError.InternalVmError("ITER_NEXT failed after capacity check."));
             return AdvanceInstruction(frame);
         }
 

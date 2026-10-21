@@ -42,6 +42,12 @@ namespace Directiva.EditorTests
         private static void Functions() => DirectivaTestRunner.StartCategory("DIL", "Functions");
         [MenuItem("Directiva/Tests/DIL/FunctionConcurrency/TestEverything", false, 120)]
         private static void FunctionConcurrency() => DirectivaTestRunner.StartCategory("DIL", "FunctionConcurrency");
+        [MenuItem("Directiva/Tests/DIL/Iterators/TestEverything", false, 120)]
+        private static void Iterators() => DirectivaTestRunner.StartCategory("DIL", "Iterators");
+        [MenuItem("Directiva/Tests/DIL/Ranges/TestEverything", false, 120)]
+        private static void Ranges() => DirectivaTestRunner.StartCategory("DIL", "Ranges");
+        [MenuItem("Directiva/Tests/DIL/IteratorMemory/TestEverything", false, 120)]
+        private static void IteratorMemory() => DirectivaTestRunner.StartCategory("DIL", "IteratorMemory");
         [MenuItem("Directiva/Tests/DIL/Members/TestEverything", false, 120)]
         private static void Members() => DirectivaTestRunner.StartCategory("DIL", "Members");
         [MenuItem("Directiva/Tests/DIL/Dictionaries/TestEverything", false, 120)]

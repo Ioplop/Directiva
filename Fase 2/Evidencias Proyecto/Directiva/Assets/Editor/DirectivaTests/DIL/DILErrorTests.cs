@@ -163,7 +163,9 @@ namespace Directiva.EditorTests.DIL
                     RuntimeErrorId.MemberNotFound, RuntimeErrorId.ReadOnlyProperty,
                     RuntimeErrorId.WriteOnlyProperty, RuntimeErrorId.InvalidMemberArgumentCount,
                     RuntimeErrorId.InvalidCallTarget, RuntimeErrorId.InvalidFunctionArgumentCount,
-                    RuntimeErrorId.ForeignFunctionProgram
+                    RuntimeErrorId.ForeignFunctionProgram,
+                    RuntimeErrorId.NotIterable, RuntimeErrorId.InvalidIterator,
+                    RuntimeErrorId.IteratorModified
                 };
                 foreach (var id in defined) t.Check(covered.Contains(id), "Missing test for RuntimeErrorId." + id);
                 t.Note("Reserved/factory-only: InvalidCastValue. WriteOnlyProperty is covered by an annotated DataType fixture in the Members group; function-call faults are covered in Functions and FunctionConcurrency; the remaining member faults have DIL fixtures.");

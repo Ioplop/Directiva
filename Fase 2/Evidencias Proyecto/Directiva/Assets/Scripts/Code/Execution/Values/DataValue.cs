@@ -97,6 +97,20 @@ namespace DSExecution.Values
             return false;
         }
 
+        public static DataValue FromRangeReference(uint memoryReference)
+        {
+            if (memoryReference == 0)
+                throw new System.ArgumentOutOfRangeException(nameof(memoryReference));
+            return new DataValue(DataTypeId.Range, memoryReference);
+        }
+
+        public static DataValue FromIteratorReference(uint memoryReference)
+        {
+            if (memoryReference == 0)
+                throw new System.ArgumentOutOfRangeException(nameof(memoryReference));
+            return new DataValue(DataTypeId.Iterator, memoryReference);
+        }
+
         public static DataValue FromTupleReference(uint memoryReference)
         {
             if (memoryReference == 0)
@@ -117,6 +131,8 @@ namespace DSExecution.Values
                 case DataTypeId.List:
                 case DataTypeId.Set:
                 case DataTypeId.Dict:
+                case DataTypeId.Range:
+                case DataTypeId.Iterator:
                     if (value == 0 || value > uint.MaxValue)
                         break;
 

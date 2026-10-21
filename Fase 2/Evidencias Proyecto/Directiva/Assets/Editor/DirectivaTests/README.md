@@ -30,6 +30,9 @@
 | `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
 | `Sets/TestEverything`, `SetAlgebra`, `SetMemory`, `SetConcurrency`, `SetRobustness` | Conjuntos, hash, algebra, GC, concurrencia y estres (126 pruebas validadas en Unity) |
 | `Members/TestEverything` | Parser y ejecución de miembros DIL, herencia, getters/setters y métodos continuados (53 pruebas; validadas en Unity) |
+| `Iterators/TestEverything` | Iteración de Tuple/List/Set/Dict, None vs fin, saltos DIL y errores de cursor (40 pruebas nuevas) |
+| `Ranges/TestEverything` | Construcción `RANGE 1/2/3`, rangos perezosos, límites Int64, Length, casts y OOM (38 pruebas nuevas) |
+| `IteratorMemory/TestEverything` | Raíces GC, presión de memoria, invalidación por mutación y varias VMs (17 pruebas nuevas) |
 | `Functions/TestEverything` | Function como valor, imports, aridad, CALL_INDIRECT, hashing, colecciones y fallos esperados (63 nuevas) |
 | `FunctionConcurrency/TestEverything` | Selector global de comportamiento entre VMs, snapshots, determinismo, programa compartido y GC (10 nuevas) |
 | `Dictionaries/TestEverything` | Constructor, GET/SET/DELETE/POP_ITEM, hashing, igualdad y conversiones |
@@ -100,3 +103,12 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 - **Memoria compartida:** VMs que intercambian funciones por globales deben compartir la **misma instancia** `CodeContext`. El contexto de memoria rechaza el uso de referencias Function de otro programa para evitar invocaciones equivocadas.
 - **73 casos nuevos**: 63 de semántica/parsing/errores y 10 de concurrencia (583 previos aprobados en Unity; 656 previstos con esta entrega).
 - Ejecutar `Directiva > Tests > DIL > Functions > TestEverything`, luego `FunctionConcurrency`, y finalmente `TestAll`. Los informes se guardan fuera del repositorio como de costumbre.
+
+## Iteradores y Range (2026-10-21; pendientes de Unity)
+
+- **Instrucciones:** `RANGE 1/2/3` crea un Range en heap a partir de argumentos `Int`/`Bool`. `ITER_INIT` toma el iterable en el stack y lo reemplaza por un cursor. `ITER_NEXT end` requiere el cursor en el tope: al avanzar deja `[iterator, value]` (el cuerpo consume `value`); al agotarse elimina el cursor y salta a `end`.
+- **Error y None:** `None` es un elemento normal. El fin de iteración se representa por el salto, nunca con un valor especial.
+- **Fuentes:** Tuple, List, Set, Dictionary (claves), Range; los mutable cambian `Version` en cada mutación efectiva. El iterador detecta cambios y devuelve `IteratorModified` antes de avanzar.
+- **GC:** los cursores residen en heap y su `GetReferences()` conserva el objeto original. Ambos tienen tamaño lógico fijo; ningún valor individual de Range se preasigna.
+- **Pruebas:** menús `DIL/Iterators`, `DIL/Ranges` y `DIL/IteratorMemory`; 40+38+17=95 nuevas, total previsto **751** partiendo de las 656 aprobadas. **No afirmar PASS hasta ejecutar Unity.**
+- **Pendiente:** la función nativa `range()` para DScript y el compilador DScript; `RANGE n` es un constructor textual de DIL para permitir pruebas independientes.

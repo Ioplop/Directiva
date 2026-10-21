@@ -34,7 +34,10 @@ namespace DSExecution.Errors
         InvalidMemberArgumentCount = 22,
         InvalidCallTarget = 23,
         InvalidFunctionArgumentCount = 24,
-        ForeignFunctionProgram = 25
+        ForeignFunctionProgram = 25,
+        NotIterable = 26,
+        InvalidIterator = 27,
+        IteratorModified = 28
     }
 
     /// <summary>
@@ -68,6 +71,18 @@ namespace DSExecution.Errors
                 $"Member '{name}' on {type} expected " +
                 (expected < 0 ? "a valid argument count" : expected.ToString() + " argument(s)") +
                 $", got {actual}. TODO: Localize!");
+
+        public static RuntimeError NotIterable(DataTypeId sourceType)
+            => new(RuntimeErrorId.NotIterable,
+                $"Type {sourceType} does not support iteration. TODO: Localize!");
+
+        public static RuntimeError InvalidIterator(DataTypeId sourceType)
+            => new(RuntimeErrorId.InvalidIterator,
+                $"ITER_NEXT needs an Iterator, received {sourceType}. TODO: Localize!");
+
+        public static RuntimeError IteratorModified(DataTypeId sourceType)
+            => new(RuntimeErrorId.IteratorModified,
+                $"{sourceType} was modified during iteration. TODO: Localize!");
 
         public static RuntimeError DivisionByZero()
             => new(
