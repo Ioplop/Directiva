@@ -16,6 +16,9 @@ namespace DSExecution.DataTypes
     /// </summary>
     public sealed class DTTuple : DataType, IOpContainer, IOpReferenceEquality, IOpArithmetic, IOpHash, IOpLength
     {
+        [DScriptGetter("length")]
+        public OperationResult GetLengthMember(OperationCall call) => Length(call);
+
         public static DTTuple Instance { get; } = new DTTuple();
 
         private DTTuple() { }

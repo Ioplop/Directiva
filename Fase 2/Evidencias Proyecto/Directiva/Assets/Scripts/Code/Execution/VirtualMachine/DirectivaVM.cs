@@ -21,6 +21,9 @@ namespace DSExecution.VirtualMachine
         private sealed class PendingOperation
         {
             public OperationId OperationId { get; }
+            public InstructionId Kind { get; }
+            public string? MemberName { get; }
+            public int MemberArgumentCount { get; }
             public DataValue[] Arguments { get; }
             public int ReceiverIndex { get; }
             public OperationState State { get; set; }
@@ -29,9 +32,15 @@ namespace DSExecution.VirtualMachine
                 OperationId operationId,
                 DataValue[] arguments,
                 int receiverIndex,
-                OperationState state)
+                OperationState state,
+                InstructionId kind = InstructionId.Operation,
+                string? memberName = null,
+                int memberArgumentCount = 0)
             {
                 OperationId = operationId;
+                Kind = kind;
+                MemberName = memberName;
+                MemberArgumentCount = memberArgumentCount;
                 Arguments = arguments;
                 ReceiverIndex = receiverIndex;
                 State = state;
@@ -264,17 +273,20 @@ namespace DSExecution.VirtualMachine
 
             if (pendingOperation != null)
             {
-                if (instruction.Id != InstructionId.Operation ||
-                    instruction.OperationOperand != pendingOperation.OperationId)
+                PendingOperation pending = pendingOperation;
+                if (pending.Kind != instruction.Id ||
+                    (pending.Kind == InstructionId.Operation
+                        ? instruction.OperationOperand != pending.OperationId
+                        : instruction.TextOperand != pending.MemberName ||
+                          (pending.Kind == InstructionId.CallMethod &&
+                           instruction.OperandA != pending.MemberArgumentCount)))
                 {
-                    return Fault(
-                        RuntimeError.InternalVmError(
-                            "Pending operation no longer matches the current instruction."
-                        )
-                    );
+                    return Fault(RuntimeError.InternalVmError(
+                        "Pending operation no longer matches the current instruction."));
                 }
 
-                return ContinueOperation(frame);
+                return pending.Kind == InstructionId.Operation
+                    ? ContinueOperation(frame) : ContinueMember(frame);
             }
 
             return instruction.Id switch
@@ -289,6 +301,12 @@ namespace DSExecution.VirtualMachine
                 InstructionId.List => ExecuteList(frame, instruction.OperandA),
                 InstructionId.Set => ExecuteSet(frame, instruction.OperandA),
                 InstructionId.Dict => ExecuteDict(frame, instruction.OperandA),
+                InstructionId.GetProperty => ExecuteMember(frame, InstructionId.GetProperty,
+                    instruction.TextOperand, 0),
+                InstructionId.SetProperty => ExecuteMember(frame, InstructionId.SetProperty,
+                    instruction.TextOperand, 1),
+                InstructionId.CallMethod => ExecuteMember(frame, InstructionId.CallMethod,
+                    instruction.TextOperand, instruction.OperandA),
                 InstructionId.LoadLocal => ExecuteLoadLocal(frame, instruction.OperandA),
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
@@ -644,6 +662,62 @@ namespace DSExecution.VirtualMachine
         }
 
         /// <summary>
+        /// Member calls reuse OperationCall/OperationResult and the same VM-owned GC roots
+        /// as ordinary operations; DIL never sees private continuation buffers.
+        /// </summary>
+        private VMAdvanceResult ExecuteMember(CallFrame frame, InstructionId kind,
+            string? name, int argumentCount)
+        {
+            if (string.IsNullOrEmpty(name) || argumentCount < 0 || argumentCount == int.MaxValue)
+                return Fault(RuntimeError.InvalidInstruction("Invalid member invocation operands."));
+
+            int total = argumentCount + 1;
+            if (!evaluationStack.TryPopArguments(frame.EvalStackBase, total, out DataValue[] arguments))
+                return Fault(RuntimeError.StackUnderflow());
+            foreach (DataValue value in arguments)
+                if (value.dataType == DataTypeId.Uninitialized)
+                    return Fault(RuntimeError.VariableUsedBeforeInitialization());
+
+            activeOperationArguments = arguments;
+            try
+            {
+                OperationResult result = DispatchMember(kind, name, arguments, null, 0);
+                return HandleOperationResult(frame, default, arguments, 0, result,
+                    kind, name, argumentCount);
+            }
+            finally
+            {
+                activeOperationArguments = null;
+            }
+        }
+
+        private OperationResult DispatchMember(InstructionId kind, string name,
+            DataValue[] arguments, OperationState? state, uint auxiliaryReference)
+        {
+            DataType? type = DataType.GetDataType(arguments[0].dataType);
+            if (type == null)
+                return OperationResult.OpError(RuntimeError.MemberNotFound(
+                    arguments[0].dataType.ToString(), name));
+            DScriptMemberKind memberKind = kind switch
+            {
+                InstructionId.GetProperty => DScriptMemberKind.Getter,
+                InstructionId.SetProperty => DScriptMemberKind.Setter,
+                _ => DScriptMemberKind.Method
+            };
+            return type.InvokeMember(memberKind, name,
+                new OperationCall(arguments, 0, Memory, state, auxiliaryReference));
+        }
+
+        private VMAdvanceResult ContinueMember(CallFrame frame)
+        {
+            PendingOperation pending = pendingOperation!;
+            OperationResult result = DispatchMember(pending.Kind, pending.MemberName!,
+                pending.Arguments, pending.State, operationAuxPointer);
+            return HandleOperationResult(frame, default, pending.Arguments, 0, result,
+                pending.Kind, pending.MemberName, pending.MemberArgumentCount);
+        }
+
+        /// <summary>
         /// Advances an operation that previously returned Continued without moving the instruction pointer.
         /// </summary>
         private VMAdvanceResult ContinueOperation(CallFrame frame)
@@ -675,15 +749,26 @@ namespace DSExecution.VirtualMachine
             OperationId operationId,
             DataValue[] arguments,
             int receiverIndex,
-            OperationResult result)
+            OperationResult result,
+            InstructionId kind = InstructionId.Operation,
+            string? memberName = null,
+            int memberArgumentCount = 0)
         {
+            string label = kind == InstructionId.Operation ? $"Operation {operationId}" :
+                $"Member {kind} '{memberName}'";
             switch (result.Status)
             {
                 case OperationStatus.Success:
                     pendingOperation = null;
                     operationAuxPointer = 0;
 
-                    if (!evaluationStack.TryPush(result.Value))
+                    if (kind == InstructionId.SetProperty)
+                    {
+                        if (result.Value.dataType != DataTypeId.None)
+                            return Fault(RuntimeError.InternalVmError(
+                                $"{label} setter returned a value instead of None."));
+                    }
+                    else if (!evaluationStack.TryPush(result.Value))
                         return Fault(RuntimeError.StackOverflow());
 
                     return AdvanceInstruction(frame);
@@ -693,7 +778,7 @@ namespace DSExecution.VirtualMachine
                     operationAuxPointer = 0;
                     return Fault(
                         result.Error ?? RuntimeError.InternalVmError(
-                            $"Operation {operationId} returned Error without RuntimeError."
+                            $"{label} returned Error without RuntimeError."
                         )
                     );
 
@@ -703,19 +788,19 @@ namespace DSExecution.VirtualMachine
                         pendingOperation = null;
                         return Fault(
                             RuntimeError.InternalVmError(
-                                $"Operation {operationId} returned Continued without state."
+                                $"{label} returned Continued without state."
                             )
                         );
                     }
 
                     if (result.AuxiliaryReference != operationAuxPointer && pendingOperation != null)
                         return Fault(RuntimeError.InternalVmError(
-                            $"Operation {operationId} changed its auxiliary reference mid-continuation."));
+                            $"{label} changed its auxiliary reference mid-continuation."));
 
                     if (result.AuxiliaryReference != 0 &&
                         !Memory.TryGetHeap(result.AuxiliaryReference, out _))
                         return Fault(RuntimeError.InternalVmError(
-                            $"Operation {operationId} returned a missing auxiliary heap reference."));
+                            $"{label} returned a missing auxiliary heap reference."));
 
                     if (pendingOperation == null)
                     {
@@ -723,7 +808,7 @@ namespace DSExecution.VirtualMachine
                         {
                             return Fault(
                                 RuntimeError.InternalVmError(
-                                    $"Operation {operationId} continued without a receiver."
+                                    $"{label} continued without a receiver."
                                 )
                             );
                         }
@@ -732,7 +817,10 @@ namespace DSExecution.VirtualMachine
                             operationId,
                             arguments,
                             receiverIndex,
-                            result.State
+                            result.State,
+                            kind,
+                            memberName,
+                            memberArgumentCount
                         );
                         operationAuxPointer = result.AuxiliaryReference;
                     }
@@ -748,7 +836,7 @@ namespace DSExecution.VirtualMachine
                     pendingOperation = null;
                     return Fault(
                         RuntimeError.InternalVmError(
-                            $"Operation dispatcher leaked status {result.Status} for {operationId}."
+                            $"Member/operation dispatcher leaked status {result.Status} for {label}."
                         )
                     );
             }

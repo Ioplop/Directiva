@@ -11,7 +11,7 @@ using DSExecution.VirtualMachine;
 
 namespace DSExecution.DataTypes
 {
-    public abstract class DataType : IOpValueEquality, IOpTruthiness
+    public abstract partial class DataType : IOpValueEquality, IOpTruthiness
     {
         private static class Registry
         {
@@ -68,6 +68,7 @@ namespace DSExecution.DataTypes
 
             operations = new OperationHandler?[maxOperationId + 1];
             PopulateOperations();
+            PopulateMembers();
         }
 
         private void PopulateOperations()

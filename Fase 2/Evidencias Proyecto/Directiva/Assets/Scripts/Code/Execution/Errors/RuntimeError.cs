@@ -27,7 +27,11 @@ namespace DSExecution.Errors
         InvalidCast = 15,
         InvalidCastValue = 16,
         IndexOutOfRange = 17,
-        UnhashableType = 18
+        UnhashableType = 18,
+        MemberNotFound = 19,
+        ReadOnlyProperty = 20,
+        WriteOnlyProperty = 21,
+        InvalidMemberArgumentCount = 22
     }
 
     /// <summary>
@@ -43,6 +47,24 @@ namespace DSExecution.Errors
             Id = id;
             Message = message;
         }
+
+        public static RuntimeError MemberNotFound(string type, string name)
+            => new(RuntimeErrorId.MemberNotFound,
+                $"Member '{name}' is not available on type {type}. TODO: Localize!");
+
+        public static RuntimeError ReadOnlyProperty(string type, string name)
+            => new(RuntimeErrorId.ReadOnlyProperty,
+                $"Property '{name}' on {type} is read-only. TODO: Localize!");
+
+        public static RuntimeError WriteOnlyProperty(string type, string name)
+            => new(RuntimeErrorId.WriteOnlyProperty,
+                $"Property '{name}' on {type} is write-only. TODO: Localize!");
+
+        public static RuntimeError InvalidMemberArgumentCount(string type, string name, int expected, int actual)
+            => new(RuntimeErrorId.InvalidMemberArgumentCount,
+                $"Member '{name}' on {type} expected " +
+                (expected < 0 ? "a valid argument count" : expected.ToString() + " argument(s)") +
+                $", got {actual}. TODO: Localize!");
 
         public static RuntimeError DivisionByZero()
             => new(

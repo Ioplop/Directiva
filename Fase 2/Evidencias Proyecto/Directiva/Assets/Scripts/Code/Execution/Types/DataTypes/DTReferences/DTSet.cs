@@ -14,6 +14,21 @@ namespace DSExecution.DataTypes
         IOpContainer, IOpReferenceEquality
     {
         private const int ItemsPerStep = 16;
+        [DScriptGetter("length")]
+        public OperationResult GetLengthMember(OperationCall call) => Length(call);
+
+        [DScriptMethod("add", 1)]
+        public OperationResult AddMember(OperationCall call) => SetAdd(call);
+
+        [DScriptMethod("discard", 1)]
+        public OperationResult DiscardMember(OperationCall call) => SetDiscard(call);
+
+        [DScriptMethod("remove", 1)]
+        public OperationResult RemoveMember(OperationCall call) => SetRemove(call);
+
+        [DScriptMethod("contains", 1)]
+        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+
         public static DTSet Instance { get; } = new DTSet();
         private DTSet() { }
 

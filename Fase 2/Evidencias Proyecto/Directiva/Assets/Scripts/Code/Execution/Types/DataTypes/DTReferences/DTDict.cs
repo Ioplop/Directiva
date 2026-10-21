@@ -15,6 +15,21 @@ namespace DSExecution.DataTypes
         IOpReferenceEquality, IOpDictionary
     {
         private const int ItemsPerStep = 16;
+        [DScriptGetter("length")]
+        public OperationResult GetLengthMember(OperationCall call) => Length(call);
+
+        [DScriptMethod("keys", 0)]
+        public OperationResult KeysMember(OperationCall call) => DictKeys(call);
+
+        [DScriptMethod("values", 0)]
+        public OperationResult ValuesMember(OperationCall call) => DictValues(call);
+
+        [DScriptMethod("items", 0)]
+        public OperationResult ItemsMember(OperationCall call) => DictItems(call);
+
+        [DScriptMethod("contains", 1)]
+        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+
         public static DTDict Instance { get; } = new DTDict();
         private DTDict() { }
 

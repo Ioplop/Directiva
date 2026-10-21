@@ -760,6 +760,29 @@ namespace DSCompilation.DIL
                     return;
                 }
 
+                case "GET_PROPERTY":
+                case "SET_PROPERTY":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
+                    if (!IsValidIdentifier(tokens[1]))
+                        Throw(moduleName, lineNumber, $"Invalid property name '{tokens[1]}'.");
+                    instructions.Add(mnemonic == "GET_PROPERTY"
+                        ? Instruction.GetProperty(tokens[1]) : Instruction.SetProperty(tokens[1]));
+                    return;
+                }
+
+                case "CALL_METHOD":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 3);
+                    if (!IsValidIdentifier(tokens[1]))
+                        Throw(moduleName, lineNumber, $"Invalid method name '{tokens[1]}'.");
+                    int argumentCount = ResolveInt32(moduleName, lineNumber, tokens[2], symbols);
+                    if (argumentCount < 0 || argumentCount == int.MaxValue)
+                        Throw(moduleName, lineNumber, "CALL_METHOD requires a non-negative argument count below Int32.MaxValue.");
+                    instructions.Add(Instruction.CallMethod(tokens[1], argumentCount));
+                    return;
+                }
+
                 case "CAST":
                 {
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);

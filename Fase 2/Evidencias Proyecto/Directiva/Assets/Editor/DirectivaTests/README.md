@@ -29,6 +29,7 @@
 | `ListMemory/TestEverything` | Redimensionamiento, swap de buffers, atomicidad OOM, raices auxiliares, GC y ciclos |
 | `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
 | `Sets/TestEverything`, `SetAlgebra`, `SetMemory`, `SetConcurrency`, `SetRobustness` | Conjuntos, hash, algebra, GC, concurrencia y estres (126 pruebas validadas en Unity) |
+| `Members/TestEverything` | Parser y ejecución de miembros DIL, herencia, getters/setters y métodos continuados (53 pruebas nuevas) |
 | `Dictionaries/TestEverything` | Constructor, GET/SET/DELETE/POP_ITEM, hashing, igualdad y conversiones |
 | `DictViews/TestEverything` | DICT_KEYS/VALUES/ITEMS, formato anidado y continuidad |
 | `DictMemory/TestEverything` | Carga de dos slots, GC, ciclos, OOM y buffers auxiliares |
@@ -82,3 +83,10 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 - Solo las **claves** necesitan hash estable (Int/Bool/Decimal, None, String, Tuple hasheable); Dict/List/Set son no hasheables, aunque pueden usarse como valores y formar ciclos. Los errores por claves ausentes son `InvalidOperation`; claves no hasheables retornan `UnhashableType`.
 - `COPY`, `DICT_UPDATE` y vistas avanzan 16 entradas por paso con buffer protegido por la VM; update publica atomicamente y se cancela ante modificaciones concurrentes a los operandos. GET/SET/DELETE/POP_ITEM y comparaciones son sincronicas; eliminacion con preservacion de orden requiere actualmente O(n).
 - Los informes detallados de **cada** caso siguen generandose fuera del repositorio. Si falla alguna prueba, compartir ZIP de reports (SUMMARY y tests/*.md) para depuracion. No considerar los 530 casos validados hasta ejecutarlos en Unity.
+
+
+## Miembros de tipo (2026-10-20)
+
+`DILMemberTests.cs` aporta 53 casos registrados en el catálogo, con menú `Directiva/Tests/DIL/Members/TestEverything`. Valida DIL, adaptadores de miembros sobre tipos actuales, errores de aridad, reflexión solo al registrar, herencia y sobrescritura `virtual`/`abstract`/`override`, setters mediante tipos de prueba, GC y concurrencia de métodos continuados. No se agrega ningún setter ficticio a los tipos de juego: los setters de integración a futuras entidades se probarán cuando existan.
+
+**Línea base confirmada:** 530/530 casos anteriores aprobados en Unity. **Total objetivo:** 583 con 53 nuevas aún pendientes de compilar y ejecutar. Los informes se guardan fuera del repositorio mediante la ventana existente.

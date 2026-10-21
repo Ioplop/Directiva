@@ -12,6 +12,9 @@ namespace DSExecution.DataTypes
     /// </summary>
     public sealed class DTString : DataType, IOpArithmetic, IOpReferenceEquality, IOpHash, IOpLength
     {
+        [DScriptGetter("length")]
+        public OperationResult GetLengthMember(OperationCall call) => Length(call);
+
         public static DTString Instance { get; } = new DTString();
 
         private DTString()

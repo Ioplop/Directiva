@@ -15,6 +15,24 @@ namespace DSExecution.DataTypes
         IOpArithmetic, IOpReferenceEquality, IOpLength
     {
         private const int ItemsPerStep = 16;
+        [DScriptGetter("length")]
+        public OperationResult GetLengthMember(OperationCall call) => Length(call);
+
+        [DScriptMethod("append", 1)]
+        public OperationResult AppendMember(OperationCall call) => Append(call);
+
+        [DScriptMethod("insert", 2)]
+        public OperationResult InsertMember(OperationCall call) => Insert(call);
+
+        [DScriptMethod("extend", 1)]
+        public OperationResult ExtendMember(OperationCall call) => Extend(call);
+
+        [DScriptMethod("contains", 1)]
+        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+
+        [DScriptMethod("indexOf", 1)]
+        public OperationResult IndexOfMember(OperationCall call) => IndexOf(call);
+
         public static DTList Instance { get; } = new DTList();
         private DTList() { }
 

@@ -75,6 +75,18 @@ namespace DSExecution.VirtualMachine
         public static Instruction Dict(int count)
             => new(InstructionId.Dict, operandA: count);
 
+        /// <summary>GET_PROPERTY name: consumes a receiver, pushes the property's value.</summary>
+        public static Instruction GetProperty(string name)
+            => new(InstructionId.GetProperty, textOperand: name);
+
+        /// <summary>SET_PROPERTY name: consumes receiver and value, pushes nothing.</summary>
+        public static Instruction SetProperty(string name)
+            => new(InstructionId.SetProperty, textOperand: name);
+
+        /// <summary>CALL_METHOD name n: consumes receiver and n arguments, pushes one result.</summary>
+        public static Instruction CallMethod(string name, int argumentCount)
+            => new(InstructionId.CallMethod, operandA: argumentCount, textOperand: name);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 
@@ -157,6 +169,9 @@ namespace DSExecution.VirtualMachine
                 InstructionId.List => $"List {OperandA}",
                 InstructionId.Set => $"Set {OperandA}",
                 InstructionId.Dict => $"Dict {OperandA}",
+                InstructionId.GetProperty => $"GetProperty {TextOperand}",
+                InstructionId.SetProperty => $"SetProperty {TextOperand}",
+                InstructionId.CallMethod => $"CallMethod {TextOperand} {OperandA}",
                 InstructionId.LoadLocal => $"LoadLocal {OperandA}",
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",

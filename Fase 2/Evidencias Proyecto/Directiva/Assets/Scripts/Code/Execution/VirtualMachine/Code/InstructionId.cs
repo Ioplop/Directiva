@@ -36,6 +36,9 @@ namespace DSExecution.VirtualMachine
         Tuple = 21,
         List = 22,
         Set = 23,
-        Dict = 24
+        Dict = 24,
+        GetProperty = 25,
+        SetProperty = 26,
+        CallMethod = 27
     }
 }

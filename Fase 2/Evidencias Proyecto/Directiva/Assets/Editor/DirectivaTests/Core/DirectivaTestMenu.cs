@@ -38,6 +38,8 @@ namespace Directiva.EditorTests
         private static void SetConcurrency() => DirectivaTestRunner.StartCategory("DIL", "SetConcurrency");
         [MenuItem("Directiva/Tests/DIL/SetRobustness/TestEverything", false, 120)]
         private static void SetRobustness() => DirectivaTestRunner.StartCategory("DIL", "SetRobustness");
+        [MenuItem("Directiva/Tests/DIL/Members/TestEverything", false, 120)]
+        private static void Members() => DirectivaTestRunner.StartCategory("DIL", "Members");
         [MenuItem("Directiva/Tests/DIL/Dictionaries/TestEverything", false, 120)]
         private static void Dictionaries() => DirectivaTestRunner.StartCategory("DIL", "Dictionaries");
         [MenuItem("Directiva/Tests/DIL/DictViews/TestEverything", false, 120)]
