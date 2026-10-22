@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using DSExecution.DataTypes;
+using DSExecution.Native;
 using DSExecution.Errors;
 using DSExecution.Operations;
 using DSExecution.Values;
@@ -1024,7 +1025,7 @@ namespace DSExecution.VirtualMachine
         /// <summary>Pushes a program-local compiled-function reference with no heap allocation.</summary>
         private VMAdvanceResult ExecutePushFunction(CallFrame frame, int functionId)
         {
-            if (!Code.TryGetFunction(functionId, out _))
+            if (!Code.ContainsCallable(functionId))
                 return Fault(RuntimeError.InvalidFunction(functionId));
 
             if (!Memory.TryBindFunctionProgram(Code))
@@ -1054,13 +1055,17 @@ namespace DSExecution.VirtualMachine
             if (callee.dataType != DataTypeId.Function)
                 return Fault(RuntimeError.InvalidCallTarget(callee.dataType));
 
-            if (!callee.TryGetFunctionId(out int functionId) ||
-                !Code.TryGetFunction(functionId, out FunctionContext function))
+            if (!callee.TryGetFunctionId(out int functionId) || !Code.ContainsCallable(functionId))
                 return Fault(RuntimeError.InvalidFunction(functionId));
 
             if (!Memory.TryBindFunctionProgram(Code))
                 return Fault(RuntimeError.ForeignFunctionProgram());
 
+            if (Code.TryGetNativeFunction(functionId, out NativeFunction native))
+                return ExecuteNativeCall(caller, native, argumentCount, true);
+
+            if (!Code.TryGetFunction(functionId, out FunctionContext function))
+                return Fault(RuntimeError.InvalidFunction(functionId));
             if (function.ParameterCount != argumentCount)
                 return Fault(RuntimeError.InvalidFunctionArgumentCount(
                     functionId, function.ParameterCount, argumentCount));
@@ -1087,6 +1092,13 @@ namespace DSExecution.VirtualMachine
         /// </summary>
         private VMAdvanceResult ExecuteCall(CallFrame caller, int functionId)
         {
+            if (Code.TryGetNativeFunction(functionId, out NativeFunction native))
+            {
+                if (native.MinArguments != native.MaxArguments)
+                    return Fault(RuntimeError.InvalidInstruction(
+                        $"Variadic native '{native.QualifiedName}' requires PUSH_FUNCTION + CALL_INDIRECT n."));
+                return ExecuteNativeCall(caller, native, native.MinArguments, false);
+            }
             if (!Code.TryGetFunction(functionId, out var function))
                 return Fault(RuntimeError.InvalidFunction(functionId));
 
@@ -1113,6 +1125,49 @@ namespace DSExecution.VirtualMachine
             );
 
             return VMAdvanceResult.Running();
+        }
+
+        /// <summary>
+        /// Native functions are bounded, atomic instructions. Source operands remain GC roots
+        /// while their handler executes; no native frame is pushed and no heap objects are
+        /// silently kept alive after the single result replaces the call expression.
+        /// </summary>
+        private VMAdvanceResult ExecuteNativeCall(CallFrame frame, NativeFunction native,
+            int argumentCount, bool indirect)
+        {
+            if (!native.Accepts(argumentCount))
+                return Fault(RuntimeError.InvalidOperation(
+                    $"Native '{native.QualifiedName}' expects {native.MinArguments}..{native.MaxArguments} " +
+                    $"arguments, got {argumentCount}."));
+            int consumed = argumentCount + (indirect ? 1 : 0);
+            if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, consumed, out DataValue[] operands))
+                return Fault(RuntimeError.StackUnderflow());
+            if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, consumed))
+                return Fault(RuntimeError.StackOverflow());
+            var arguments = new DataValue[argumentCount];
+            Array.Copy(operands, indirect ? 1 : 0, arguments, 0, argumentCount);
+            foreach (DataValue value in arguments)
+                if (value.dataType == DataTypeId.Uninitialized)
+                    return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            NativeResult result;
+            try
+            {
+                result = native.Invoke(new NativeCallContext(
+                    Memory, arguments, text => Printed?.Invoke(text)));
+            }
+            catch (Exception ex)
+            {
+                // An unexpected exception in trusted C# is a VM integration defect,
+                // never a script exception allowed to escape the simulation scheduler.
+                return Fault(RuntimeError.InternalVmError(
+                    $"Native '{native.QualifiedName}' raised {ex.GetType().Name}: {ex.Message}"));
+            }
+            if (!result.IsSuccess)
+                return Fault(result.Error ?? RuntimeError.InternalVmError(
+                    $"Native '{native.QualifiedName}' failed without an error."));
+            if (!evaluationStack.TryReplaceTopWithOne(frame.EvalStackBase, consumed, result.Value))
+                return Fault(RuntimeError.InternalVmError("Validated native stack replacement failed."));
+            return AdvanceInstruction(frame);
         }
 
         /// <summary>

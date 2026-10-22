@@ -125,6 +125,7 @@ namespace Directiva.EditorTests
             DIL.DILIteratorTests.Register(tests);
             DIL.DILRangeTests.Register(tests);
             DIL.DILIteratorMemoryTests.Register(tests);
+            DIL.DILNativeTests.Register(tests);
             DIL.DILMemoryTests.Register(tests);
             DIL.DILConcurrencyTests.Register(tests);
             DIL.DILErrorTests.Register(tests);
