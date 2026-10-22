@@ -24,6 +24,15 @@ namespace Directiva.CodeUI
         private const float MinimumFontSize = 6f;
         private const float MaximumFontSize = 48f;
         private const float ZoomStep = 1f;
+        private const long SyntaxDebounceMilliseconds = 75;
+        private const int SyntaxOverscanLines = 2;
+        private const int SyntaxOverscanColumns = 3;
+        // UI Toolkit can update TextField glyph geometry a frame after font-size
+        // changes, even if the input's own bounds never fire GeometryChangedEvent.
+        private const long ZoomLayoutFollowupMilliseconds = 34;
+        // 0 = first visible line, 0.5 = viewport center. Keep the center stable
+        // as glyph size changes; this also preserves partial-line positions.
+        private const float ZoomAnchorViewportFraction = 0.5f;
 
         private readonly FontAsset _normalFont;
         private readonly FontAsset _boldFont;
@@ -47,6 +56,18 @@ namespace Directiva.CodeUI
         private readonly VisualElement _executionHighlightLayer;
         private readonly VisualElement _executionLineHighlight;
         private readonly VisualElement _indentGuideLayer;
+        private readonly VisualElement _syntaxOverlay;
+        private readonly List<Label> _syntaxLabels = new List<Label>();
+        private readonly Dictionary<DScriptSyntaxKind, string> _syntaxColorHex =
+            new Dictionary<DScriptSyntaxKind, string>();
+        private DirectivaSyntaxColors _syntaxColors = new DirectivaSyntaxColors();
+        private DScriptSyntaxDocument _syntaxDocument;
+        private IVisualElementScheduledItem _syntaxRefreshTask;
+        private IVisualElementScheduledItem _zoomLayoutSyncTask;
+        private int _zoomLayoutSyncPassesRemaining;
+        private bool _zoomAnchorPending;
+        private float _zoomAnchorLogicalLine;
+        private bool _nativeTextHidden;
         private readonly Label _metricsProbe;
         private readonly TextField _textField;
         private readonly HashSet<int> _breakpoints = new HashSet<int>();
@@ -130,6 +151,20 @@ namespace Directiva.CodeUI
             _indentGuideLayer.AddToClassList("indent-guide-layer");
             _indentGuideLayer.pickingMode = PickingMode.Ignore;
 
+            // One non-interactive text layer mirrors only the visible portion of
+            // TextField. TextField remains the sole source of text, caret, selection,
+            // keyboard input and undo/redo; Unity TextField cannot render rich text.
+            _syntaxOverlay = new VisualElement();
+            _syntaxOverlay.AddToClassList("code-syntax-overlay");
+            _syntaxOverlay.pickingMode = PickingMode.Ignore;
+            _syntaxOverlay.style.position = Position.Absolute;
+            _syntaxOverlay.style.left = 0f;
+            _syntaxOverlay.style.top = 0f;
+            _syntaxOverlay.style.bottom = 0f;
+            _syntaxOverlay.style.overflow = Overflow.Hidden;
+            _syntaxOverlay.style.display = DisplayStyle.None;
+            CacheSyntaxColors();
+
             // Invisible zero-padding label used only as a fallback when direct
             // FontAsset metrics cannot be read (for example, a missing space glyph).
             _metricsProbe = new Label();
@@ -155,6 +190,7 @@ namespace Directiva.CodeUI
             _editorStack.Add(_textField);
             _editorStack.Add(_executionHighlightLayer);
             _editorStack.Add(_indentGuideLayer);
+            _editorStack.Add(_syntaxOverlay);
             _editorStack.Add(_metricsProbe);
 
             Add(_gutterViewport);
@@ -208,6 +244,7 @@ namespace Directiva.CodeUI
                 UpdateInternalScrollContentSize();
                 RebuildGutter();
                 RebuildIndentGuides();
+                ScheduleSyntaxRefresh();
                 ValidateExecutionLine();
                 UpdateExecutionHighlightPosition();
                 TextChanged?.Invoke(normalized);
@@ -231,6 +268,15 @@ namespace Directiva.CodeUI
                 }).ExecuteLater(1);
             });
 
+            RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                // A paused schedule must not leave the syntax layer hidden on
+                // the next attach. AttachToPanel will rebuild its alignment.
+                _zoomLayoutSyncPassesRemaining = 0;
+                _zoomAnchorPending = false;
+                _zoomLayoutSyncTask?.Pause();
+            });
+
             SetEnabled(false);
             SetTextWithoutNotify(string.Empty);
         }
@@ -251,6 +297,11 @@ namespace Directiva.CodeUI
         {
             CaptureActiveHistorySelection();
 
+            // An anchor from the previous source file must never scroll the newly
+            // opened document when a pending zoom callback arrives.
+            _zoomAnchorPending = false;
+            _zoomLayoutSyncPassesRemaining = 0;
+            _zoomLayoutSyncTask?.Pause();
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -297,6 +348,9 @@ namespace Directiva.CodeUI
         public void ClearDocument()
         {
             CaptureActiveHistorySelection();
+            _zoomAnchorPending = false;
+            _zoomLayoutSyncPassesRemaining = 0;
+            _zoomLayoutSyncTask?.Pause();
             _activeUndoHistory = null;
             DocumentPath = string.Empty;
             _breakpoints.Clear();
@@ -376,6 +430,7 @@ namespace Directiva.CodeUI
             UpdateInternalScrollContentSize();
             RebuildGutter();
             RebuildIndentGuides();
+            RefreshSyntaxImmediately();
             ValidateExecutionLine();
             UpdateExecutionHighlightPosition();
         }
@@ -553,17 +608,21 @@ namespace Directiva.CodeUI
 
             _textInputGeometryHooked = true;
 
-            input.RegisterCallback<GeometryChangedEvent>(_ =>
-            {
-                // Geometry changes when the editor is first enabled, resized, or
-                // relaid out. These are exactly the moments when text origin must
-                // be sampled again.
-                RefreshTextOrigin();
-                UpdateInternalScrollContentSize();
-                RebuildGutter();
-                RebuildIndentGuides();
-                UpdateExecutionHighlightPosition();
-            });
+            input.RegisterCallback<GeometryChangedEvent>(_ => RefreshAfterGeometryChange());
+        }
+
+        private void RefreshAfterGeometryChange()
+        {
+            // Font changes and splitter drags may change the input or viewport
+            // while retaining the same TextField bounds. Always resample the
+            // original native input rather than estimating its new position.
+            RefreshTextOrigin();
+            UpdateInternalScrollContentSize();
+            RestoreZoomAnchor();
+            RebuildGutter();
+            RebuildIndentGuides();
+            UpdateExecutionHighlightPosition();
+            RefreshVisibleSyntaxLines();
         }
 
         private void HookTextInputKeyHandling()
@@ -594,11 +653,10 @@ namespace Directiva.CodeUI
             if (Mathf.Approximately(clamped, _fontSize))
                 return;
 
+            CaptureZoomAnchor();
             _fontSize = clamped;
             ApplyFontStyles();
-
-            if (panel != null)
-                schedule.Execute(RefreshFontMetricsAndLayout).ExecuteLater(1);
+            RequestZoomLayoutSync();
         }
 
         public void SetEditorPadding(
@@ -620,6 +678,9 @@ namespace Directiva.CodeUI
                 return;
             }
 
+            // Padding changes shift the native text as well; keep the same
+            // document location in view while the layout is resampled.
+            CaptureZoomAnchor();
             _paddingLeftPx = leftPx;
             _paddingTopPx = topPx;
             _paddingRightPx = rightPx;
@@ -629,6 +690,9 @@ namespace Directiva.CodeUI
             RefreshTextOrigin();
             RebuildGutter();
             RebuildIndentGuides();
+            RefreshVisibleSyntaxLines();
+            // Input padding can also shift native glyphs on the next layout pass.
+            RequestZoomLayoutSync();
         }
 
         public void SetIndentGuideFineOffsetPx(float offsetPx)
@@ -640,12 +704,205 @@ namespace Directiva.CodeUI
             RebuildIndentGuides();
         }
 
+        /// <summary>
+        /// Runtime-friendly entry point for future Settings > Editor options.
+        /// A private copy is used: changing user options cannot dirty the shared asset.
+        /// </summary>
+        public void SetSyntaxColors(DirectivaSyntaxColors colors)
+        {
+            _syntaxColors = (colors ?? new DirectivaSyntaxColors()).Copy();
+            CacheSyntaxColors();
+            _syntaxOverlay.style.display = _syntaxColors.enabled
+                ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_syntaxColors.enabled) RefreshSyntaxImmediately();
+            else
+            {
+                _syntaxRefreshTask?.Pause();
+                UpdateSyntaxInputAppearance(false);
+            }
+        }
+
+        public void SetSyntaxHighlightingEnabled(bool enabled)
+        {
+            if (_syntaxColors.enabled == enabled) return;
+            _syntaxColors.enabled = enabled;
+            _syntaxOverlay.style.display = enabled ? DisplayStyle.Flex : DisplayStyle.None;
+            if (enabled) RefreshSyntaxImmediately();
+            else
+            {
+                _syntaxRefreshTask?.Pause();
+                UpdateSyntaxInputAppearance(false);
+            }
+        }
+
+        private void CacheSyntaxColors()
+        {
+            _syntaxColorHex.Clear();
+            foreach (DScriptSyntaxKind kind in Enum.GetValues(typeof(DScriptSyntaxKind)))
+            {
+                Color color;
+                switch (kind)
+                {
+                    case DScriptSyntaxKind.Keyword: color = _syntaxColors.keyword; break;
+                    case DScriptSyntaxKind.Literal: color = _syntaxColors.literal; break;
+                    case DScriptSyntaxKind.Number: color = _syntaxColors.number; break;
+                    case DScriptSyntaxKind.String: color = _syntaxColors.stringLiteral; break;
+                    case DScriptSyntaxKind.Comment: color = _syntaxColors.comment; break;
+                    case DScriptSyntaxKind.Operator: color = _syntaxColors.operation; break;
+                    case DScriptSyntaxKind.Variable: color = _syntaxColors.variable; break;
+                    case DScriptSyntaxKind.Shared: color = _syntaxColors.sharedVariable; break;
+                    case DScriptSyntaxKind.Function: color = _syntaxColors.function; break;
+                    case DScriptSyntaxKind.Module: color = _syntaxColors.module; break;
+                    case DScriptSyntaxKind.Member: color = _syntaxColors.member; break;
+                    default: color = _syntaxColors.plain; break;
+                }
+                _syntaxColorHex[kind] = "#" + ColorUtility.ToHtmlStringRGBA(color);
+            }
+        }
+
+        private string SyntaxHex(DScriptSyntaxKind kind) =>
+            kind == DScriptSyntaxKind.Plain ? null : _syntaxColorHex[kind];
+
+        private void ScheduleSyntaxRefresh()
+        {
+            if (!_syntaxColors.enabled) return;
+            // Most scripts are small: color synchronously to avoid any visible
+            // lag between caret movement and glyphs while the user is typing.
+            if (panel == null || (_textField.value?.Length ?? 0) <= 16384)
+            {
+                _syntaxRefreshTask?.Pause();
+                RefreshSyntaxImmediately();
+                return;
+            }
+            // For very large drafts, debounce tokenization and show native text
+            // temporarily rather than leaving old colored glyphs under the caret.
+            _syntaxOverlay.style.display = DisplayStyle.None;
+            UpdateSyntaxInputAppearance(false);
+            if (_syntaxRefreshTask == null)
+                _syntaxRefreshTask = schedule.Execute(RefreshSyntaxImmediately);
+            _syntaxRefreshTask.ExecuteLater(SyntaxDebounceMilliseconds);
+        }
+
+        private void RefreshSyntaxImmediately()
+        {
+            if (!_syntaxColors.enabled) return;
+            // No parser or compiler state is mutated: this is a tolerant preview.
+            _syntaxDocument = DScriptSyntaxHighlighter.Analyze(_textField.value);
+            RefreshVisibleSyntaxLines();
+        }
+
+        private void UpdateSyntaxInputAppearance(bool visibleOverlay)
+        {
+            if (_nativeTextHidden == visibleOverlay) return;
+            var input = GetTextInput();
+            if (input == null) return;
+            // Keep the native caret and selection (customized via USS) while
+            // hiding only the native glyphs, which the overlay replaces.
+            input.style.color = visibleOverlay
+                ? new StyleColor(Color.clear)
+                : new StyleColor(StyleKeyword.Null);
+            _nativeTextHidden = visibleOverlay;
+        }
+
+        private Label AcquireSyntaxLabel(int index)
+        {
+            while (_syntaxLabels.Count <= index)
+            {
+                var label = new Label();
+                label.enableRichText = true;
+                // A DScript literal containing the two characters \n must stay on
+                // this line; only actual source newlines are laid out as lines.
+                label.parseEscapeSequences = false;
+                label.pickingMode = PickingMode.Ignore;
+                label.AddToClassList("code-syntax-line");
+                label.style.position = Position.Absolute;
+                label.style.whiteSpace = WhiteSpace.NoWrap;
+                label.style.fontSize = _fontSize;
+                label.style.marginLeft = 0f;
+                label.style.marginTop = 0f;
+                label.style.marginRight = 0f;
+                label.style.marginBottom = 0f;
+                label.style.paddingLeft = 0f;
+                label.style.paddingTop = 0f;
+                label.style.paddingRight = 0f;
+                label.style.paddingBottom = 0f;
+                label.style.unityTextAlign = TextAnchor.UpperLeft;
+                if (_normalFont != null)
+                    label.style.unityFontDefinition = new StyleFontDefinition(_normalFont);
+                _syntaxOverlay.Add(label);
+                _syntaxLabels.Add(label);
+            }
+            return _syntaxLabels[index];
+        }
+
+        private void RefreshVisibleSyntaxLines()
+        {
+            // During zoom the TextField/ScrollView may still contain pre-layout
+            // glyph and scroll geometry. Draw native uncolored text until both
+            // post-layout samples have completed; never show stale colored text
+            // over the real caret and selection.
+            if (_zoomLayoutSyncPassesRemaining > 0)
+            {
+                _syntaxOverlay.style.display = DisplayStyle.None;
+                UpdateSyntaxInputAppearance(false);
+                return;
+            }
+
+            if (!_syntaxColors.enabled || _syntaxDocument == null || _internalScroll == null || panel == null)
+            {
+                UpdateSyntaxInputAppearance(false);
+                return;
+            }
+
+            var viewport = _internalScroll.contentViewport;
+            if (viewport == null || viewport.resolvedStyle.height <= 0f ||
+                viewport.resolvedStyle.width <= 0f || _lineHeight <= 0f || _characterWidth <= 0f)
+            {
+                UpdateSyntaxInputAppearance(false);
+                return;
+            }
+
+            var offset = _internalScroll.scrollOffset;
+            float height = viewport.resolvedStyle.height;
+            float width = viewport.resolvedStyle.width;
+            int first = Mathf.Max(0, Mathf.FloorToInt((offset.y - _textOriginY) / _lineHeight) - SyntaxOverscanLines);
+            int last = Mathf.Min(_syntaxDocument.LineCount - 1,
+                Mathf.CeilToInt((offset.y + height - _textOriginY) / _lineHeight) + SyntaxOverscanLines);
+            int firstColumn = Mathf.Max(0, Mathf.FloorToInt((offset.x - _textOriginX) / _characterWidth) - SyntaxOverscanColumns);
+            int lastColumn = Mathf.Max(firstColumn + 1,
+                Mathf.CeilToInt((offset.x + width - _textOriginX) / _characterWidth) + SyntaxOverscanColumns);
+            int count = 0;
+
+            // Never paint over the scrollbars; x is relative to the editor stack.
+            _syntaxOverlay.style.width = Mathf.Max(0f,
+                viewport.worldBound.xMax - _editorStack.worldBound.xMin);
+            _syntaxOverlay.style.display = DisplayStyle.Flex;
+            for (int line = first; line <= last; line++)
+            {
+                var label = AcquireSyntaxLabel(count++);
+                label.style.display = DisplayStyle.Flex;
+                label.style.left = _textOriginX + firstColumn * _characterWidth - offset.x;
+                label.style.top = _textOriginY + line * _lineHeight - offset.y;
+                label.style.height = _lineHeight;
+                label.style.color = _syntaxColors.plain;
+                label.text = _syntaxDocument.FormatLine(line, firstColumn,
+                    lastColumn - firstColumn, SyntaxHex);
+            }
+            for (int i = count; i < _syntaxLabels.Count; i++)
+                _syntaxLabels[i].style.display = DisplayStyle.None;
+
+            // Only make TextField glyphs transparent once a drawn overlay is ready.
+            UpdateSyntaxInputAppearance(count > 0);
+        }
+
         private void ApplyFontStyles()
         {
             style.fontSize = _fontSize;
             _gutterViewport.style.fontSize = _fontSize;
             _textField.style.fontSize = _fontSize;
             _metricsProbe.style.fontSize = _fontSize;
+            foreach (var label in _syntaxLabels)
+                label.style.fontSize = _fontSize;
 
             if (_normalFont != null)
             {
@@ -654,6 +911,8 @@ namespace Directiva.CodeUI
                 _gutterViewport.style.unityFontDefinition = definition;
                 _textField.style.unityFontDefinition = definition;
                 _metricsProbe.style.unityFontDefinition = definition;
+                foreach (var label in _syntaxLabels)
+                    label.style.unityFontDefinition = definition;
             }
 
             // The editable input has its own style node, so make font size and
@@ -700,9 +959,10 @@ namespace Directiva.CodeUI
 
                 if (!Mathf.Approximately(nextSize, _fontSize))
                 {
+                    CaptureZoomAnchor();
                     _fontSize = nextSize;
                     ApplyFontStyles();
-                    RefreshFontMetricsAndLayout();
+                    RequestZoomLayoutSync();
                     FontSizeChanged?.Invoke(_fontSize);
                 }
 
@@ -713,6 +973,10 @@ namespace Directiva.CodeUI
 
             if (_internalScroll == null)
                 return;
+
+            // A deliberate scroll after zoom takes priority over an outstanding
+            // anchor restoration; the scheduled geometry refresh still finishes.
+            _zoomAnchorPending = false;
 
             // Handle vertical wheel scrolling explicitly. This avoids depending on
             // which internal TextField child happens to receive the WheelEvent.
@@ -727,6 +991,125 @@ namespace Directiva.CodeUI
             evt.StopImmediatePropagation();
         }
 
+        // Measure a stable document coordinate BEFORE changing the font size.
+        // This coordinate is measured in fractional source lines, not pixels, so
+        // a partial line at the viewport center stays at the same screen position.
+        // During rapid Ctrl+wheel events keep the first anchor, since intermediate
+        // font layouts have not necessarily been committed yet.
+        private void CaptureZoomAnchor()
+        {
+            if (_zoomAnchorPending || _internalScroll == null || panel == null)
+                return;
+
+            var viewport = _internalScroll.contentViewport;
+            if (viewport == null || viewport.resolvedStyle.height <= 0f ||
+                _lineHeight <= 0f)
+                return;
+
+            var viewportTop = viewport.worldBound.yMin - _editorStack.worldBound.yMin;
+            _zoomAnchorLogicalLine = CalculateZoomAnchorLine(
+                _internalScroll.scrollOffset.y, viewportTop,
+                viewport.resolvedStyle.height, _textOriginY, _lineHeight);
+            _zoomAnchorPending = true;
+        }
+
+        // Pure helpers so the zoom anchor can be tested without a live UI panel.
+        // All viewport/origin positions use the same editor-stack coordinate space.
+        internal static float CalculateZoomAnchorLine(
+            float scrollY, float viewportTop, float viewportHeight,
+            float textOriginY, float lineHeight)
+        {
+            if (lineHeight <= 0f || viewportHeight <= 0f)
+                return 0f;
+
+            return (scrollY + viewportTop +
+                    ZoomAnchorViewportFraction * viewportHeight - textOriginY) /
+                   lineHeight;
+        }
+
+        internal static float CalculateZoomAnchoredScrollY(
+            float logicalLine, float viewportTop, float viewportHeight,
+            float textOriginY, float lineHeight, float documentHeight)
+        {
+            if (lineHeight <= 0f || viewportHeight <= 0f)
+                return 0f;
+
+            var desired = textOriginY + logicalLine * lineHeight -
+                          viewportTop - ZoomAnchorViewportFraction * viewportHeight;
+            return Mathf.Clamp(desired, 0f,
+                Mathf.Max(0f, documentHeight - viewportHeight));
+        }
+
+        private void RestoreZoomAnchor()
+        {
+            if (!_zoomAnchorPending || _internalScroll == null)
+                return;
+
+            var viewport = _internalScroll.contentViewport;
+            if (viewport == null || viewport.resolvedStyle.height <= 0f)
+                return;
+
+            var viewportTop = viewport.worldBound.yMin - _editorStack.worldBound.yMin;
+            var documentHeight = _paddingTopPx +
+                Math.Max(1, CountLines(_textField.value)) * _lineHeight +
+                _paddingBottomPx;
+            var targetY = CalculateZoomAnchoredScrollY(
+                _zoomAnchorLogicalLine, viewportTop, viewport.resolvedStyle.height,
+                _textOriginY, _lineHeight, documentHeight);
+            var current = _internalScroll.scrollOffset;
+            if (!Mathf.Approximately(current.y, targetY))
+                _internalScroll.scrollOffset = new Vector2(current.x, targetY);
+        }
+
+        private void RequestZoomLayoutSync()
+        {
+            if (panel == null)
+            {
+                _zoomAnchorPending = false;
+                return; // AttachToPanel always rebuilds layout before display.
+            }
+
+            // An immediate refresh from WheelEvent would sample TextField's old
+            // coordinates, before font reflow/scroll clamping. Reschedule rather
+            // than accumulating callbacks when several wheel ticks arrive quickly.
+            _zoomLayoutSyncPassesRemaining = 2;
+            _syntaxOverlay.style.display = DisplayStyle.None;
+            UpdateSyntaxInputAppearance(false);
+            if (_zoomLayoutSyncTask == null)
+            {
+                // schedule.Execute() defaults to a one-shot item. Calling
+                // ExecuteLater() from that item's own callback does not reliably
+                // keep it alive for a second pass. Use a repeating item and
+                // explicitly pause it after both post-layout samples.
+                _zoomLayoutSyncTask = schedule.Execute(ContinueZoomLayoutSync)
+                    .Every(ZoomLayoutFollowupMilliseconds);
+            }
+            _zoomLayoutSyncTask.ExecuteLater(1);
+        }
+
+        private void ContinueZoomLayoutSync()
+        {
+            if (panel == null || _zoomLayoutSyncPassesRemaining <= 0)
+            {
+                _zoomLayoutSyncPassesRemaining = 0;
+                _zoomAnchorPending = false;
+                _zoomLayoutSyncTask?.Pause();
+                return;
+            }
+
+            // The repeating scheduler supplies the follow-up frame; do not
+            // reschedule a one-shot callback from inside itself. Keep the native
+            // text visible during the first layout sample and restore the colored
+            // overlay on the final sample.
+            _zoomLayoutSyncPassesRemaining--;
+            if (_zoomLayoutSyncPassesRemaining == 0)
+                _zoomLayoutSyncTask?.Pause();
+
+            RefreshFontMetricsAndLayout();
+            if (_zoomLayoutSyncPassesRemaining == 0)
+                _zoomAnchorPending = false;
+        }
+
         private void RefreshFontMetricsAndLayout()
         {
             ApplyFontStyles();
@@ -737,9 +1120,11 @@ namespace Directiva.CodeUI
 
             RefreshTextOrigin();
             UpdateInternalScrollContentSize();
+            RestoreZoomAnchor();
             RebuildGutter();
             RebuildIndentGuides();
             UpdateExecutionHighlightPosition();
+            RefreshVisibleSyntaxLines();
         }
 
         private bool TryReadFontAssetMetrics()
@@ -810,36 +1195,36 @@ namespace Directiva.CodeUI
                 _lineHeight = twoLines.y / 2f;
         }
 
+        // Pure coordinate conversion, shared by syntax, line numbers and guides.
+        // IMPORTANT: "unity-text-field__input" is the STATIONARY parent of the
+        // multiline TextField's ScrollView, not its scrolling contentContainer.
+        // The native input bounds must therefore NOT be combined with scrollOffset.
+        // The actual scrolling displacement is applied exactly once by each layer
+        // when rendering (e.g. labelTop = originY + line * lineHeight - offsetY).
+        internal static Vector2 CalculateTextOrigin(
+            Rect inputWorldBounds, Rect editorStackWorldBounds,
+            float borderLeftPx, float borderTopPx, float paddingLeftPx, float paddingTopPx)
+        {
+            return new Vector2(
+                inputWorldBounds.xMin - editorStackWorldBounds.xMin +
+                borderLeftPx + paddingLeftPx,
+                inputWorldBounds.yMin - editorStackWorldBounds.yMin +
+                borderTopPx + paddingTopPx);
+        }
+
         private void RefreshTextOrigin()
         {
             var input = GetTextInput();
             if (input == null)
                 return;
 
-            var scrollOffset = _internalScroll?.scrollOffset ?? Vector2.zero;
-
-            // Convert the input's actual top-left into editor-stack content
-            // coordinates. Adding scrollOffset cancels the viewport translation,
-            // leaving a stable origin independent of current scroll position.
-            var inputX =
-                input.worldBound.xMin -
-                _editorStack.worldBound.xMin +
-                scrollOffset.x;
-
-            var inputY =
-                input.worldBound.yMin -
-                _editorStack.worldBound.yMin +
-                scrollOffset.y;
-
-            _textOriginX =
-                inputX +
-                input.resolvedStyle.borderLeftWidth +
-                _paddingLeftPx;
-
-            _textOriginY =
-                inputY +
-                input.resolvedStyle.borderTopWidth +
-                _paddingTopPx;
+            var origin = CalculateTextOrigin(
+                input.worldBound, _editorStack.worldBound,
+                input.resolvedStyle.borderLeftWidth,
+                input.resolvedStyle.borderTopWidth,
+                _paddingLeftPx, _paddingTopPx);
+            _textOriginX = origin.x;
+            _textOriginY = origin.y;
         }
 
         private void HookInternalScroll()
@@ -873,12 +1258,18 @@ namespace Directiva.CodeUI
                     _gutterContent.style.translate = new Translate(0f, -value);
                     UpdateIndentGuideTranslation();
                     UpdateExecutionHighlightPosition();
+                    RefreshVisibleSyntaxLines();
                 };
 
                 _internalScroll.horizontalScroller.valueChanged += _ =>
                 {
                     UpdateIndentGuideTranslation();
+                    RefreshVisibleSyntaxLines();
                 };
+
+                if (_internalScroll.contentViewport != null)
+                    _internalScroll.contentViewport.RegisterCallback<GeometryChangedEvent>(
+                        _ => RefreshAfterGeometryChange());
 
                 RefreshTextOrigin();
                 UpdateInternalScrollContentSize();
@@ -886,6 +1277,7 @@ namespace Directiva.CodeUI
                 RebuildIndentGuides();
                 UpdateIndentGuideTranslation();
                 UpdateExecutionHighlightPosition();
+                RefreshVisibleSyntaxLines();
             }).ExecuteLater(10);
         }
 
@@ -1026,6 +1418,13 @@ namespace Directiva.CodeUI
 
             foreach (var bp in _breakpoints.Where(x => x > lineCount).ToArray())
                 _breakpoints.Remove(bp);
+
+            // A zoom may clamp ScrollView.scrollOffset without emitting another
+            // slider callback. Rebuild the gutter at the actual committed offset,
+            // instead of keeping the translation from before the font reflow.
+            if (_internalScroll != null)
+                _gutterContent.style.translate = new Translate(
+                    0f, -_internalScroll.scrollOffset.y);
         }
 
         private void ToggleBreakpoint(int line)

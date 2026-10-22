@@ -1,12 +1,12 @@
 # DScript — gramática, frontend y backend (fases 1 y 2)
 
-**Estado (2026-10-22):** frontend, backend DScript → DIL por módulos y ejecutor de inicializadores `shared` implementados. Pendiente de ejecutar las pruebas en Unity. La integración del editor y de la simulación con el programa compilado sigue siendo trabajo del host.
+**Estado (2026-10-22):** frontend, backend DScript → DIL por módulos y ejecutor de inicializadores `shared` implementados. Pendiente de ejecutar las pruebas en Unity. El editor ahora puede compilar y ejecutar DScript; la integración con la simulación jugable sigue pendiente.
 
 ## Objetivo
 
 DScript se inspira en Python, pero no es Python. Se escriben funciones de módulo y se controlan unidades mediante código dinámicamente tipado. No hay clases, lambdas, funciones anidadas, closures, generadores, decoradores ni argumentos nombrados. Se permiten referencias a funciones compiladas y nativas como valores.
 
-Los imports usan nombres **absolutos desde la raíz lógica `DirectivaScripts`**: `utils.vectors` → `DirectivaScripts/utils/vectors.dscript`. No hay `.`/`..` relativo al importador. `math` y `random` son módulos nativos reservados, no archivos del jugador. La carpeta raíz real la selecciona el proveedor de código fuente, que se conectará con el editor/almacenamiento al integrar DScript.
+Los imports usan nombres **absolutos desde la raíz lógica `DirectivaScripts`**: `utils.vectors` → `DirectivaScripts/utils/vectors.dscript`. No hay `.`/`..` relativo al importador. `math` y `random` son módulos nativos reservados, no archivos del jugador. La carpeta raíz real la selecciona el proveedor de código fuente, que el editor ya conecta mediante WorkspaceDScriptSourceProvider.
 
 ## Ejemplo
 
@@ -170,4 +170,4 @@ Consultar `Backend/README.md` para un ejemplo de integración con el orquestador
 
 ## Fuera del alcance actual
 
-Publicación/ocultación de `.dil` por el editor, arranque de la simulación real, objetos y acciones de unidades/Nexo, depuración visual paso a paso de DScript, tipado estático e instrucciones DIB. Las pruebas del backend **sí ejecutan la VM desde DScript**, pero deben validarse dentro de Unity antes de afirmar PASS.
+Arranque de la simulación real, objetos y acciones de unidades/Nexo, stepping por sentencia DScript (actualmente Step avanza instrucciones VM), tipado estático e instrucciones DIB. El editor ya oculta `.dil`, compila `.dscript` y publica opcionalmente DIL generado sin sobrescribir archivos manuales. Las pruebas del backend **sí ejecutan la VM desde DScript**, pero deben validarse dentro de Unity antes de afirmar PASS.

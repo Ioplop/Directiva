@@ -351,7 +351,7 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 ### Evidencia disponible
 
 - Las suites de Tuple originales (8 y 13 casos) fueron **ejecutadas exitosamente por el responsable el 15-10-2026** y ahora se registran bajo `Directiva > Tests > DIL > Regression > TestEverything`.
-- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. El responsable confirmó **184/184** (15-10), **242/242** tras List, **254/254** tras Hash, **380/380** tras Set y **530/530** tras Dictionary (19-10-2026). **Miembros, funciones como valores, Range e iteradores validados (748 casos anteriores). Esta entrega añade 114 pruebas nativas (862 en total), ya ejecutadas una vez en Unity; tres expectativas incorrectas corregidas, repetir suite pendiente.** Leer `Assets/Editor/DirectivaTests/README.md`.
+- Se agregó una **suite de pruebas DIL automatizada Editor-only** (parser, VM, control de ejecución, operaciones, heap/GC, concurrencia, errores y estrés), invocable en `Directiva > Tests > DIL > TestEverything`, grupos y `Directiva > Tests > TestAll`. Cada caso exporta Markdown y cada corrida Markdown/JSON; la carpeta se configura mediante ventana Editor y **debe estar fuera del repositorio**. El responsable confirmó **184/184** (15-10), **242/242** tras List, **254/254** tras Hash, **380/380** tras Set y **530/530** tras Dictionary (19-10-2026). **Miembros, funciones como valores, Range e iteradores validados (748 casos anteriores). Esta entrega añade 116 pruebas nativas (862 en total), ya ejecutadas una vez en Unity; tres expectativas incorrectas corregidas, repetir suite pendiente.** Leer `Assets/Editor/DirectivaTests/README.md`.
 - El responsable también probó la demo DIL real de tuplas desde el editor: representación anidada, `GET`, hash, `LENGTH` y retorno `None` mostraron resultados plausibles. Las pruebas de List incluyen GC circular, OOM atómico, root auxiliar, búsqueda continuada y conflictos entre VMs.
 - **Este documento se elaboró leyendo el paquete `Assets/` más los diferenciales indicados y confirmaciones de pruebas del responsable**; no ejecuta Unity ni reemplaza una compilación/CI. No extrapolar las pruebas de Tuple a los subsistemas todavía no construidos.
 
@@ -541,3 +541,152 @@ El usuario confirmó **1063/1063 PASS** al concluir el parche de despacho dinám
 Pendiente: probar en Unity y luego conectar compilación y inicialización al
 editor/orquestador. Los límites por inicializador son configurables y no
 representan aún presupuestos de balance final.
+
+
+### 2026-10-22 — Editor DScript operativo (pendiente validación Unity)
+
+- Base: AssetsPhase1 + CallMethod_TypeDispatch + Backend_Phase2 + CS0136 fix.
+- `FileSystemScriptStorage.ScriptExtension` restaurado a `.dscript`; backups
+  `.dscript.back` y sidecars `.dscript.editor`. `.dil` antiguos quedan intactos
+  y ocultos del árbol (no se renombran automáticamente: podrían contener DIL).
+- `WorkspaceDScriptSourceProvider` usa el buffer activo o las copias `.back` de
+  todos los módulos, con validación de rutas/capitalización/enlaces de FS.
+- `DScriptEditorRunPipeline` llama a DScriptCompiler (lexer/parser/binder,
+  DIL emitter, DIL parser en memoria) y valida la función `fn: main` sin
+  argumentos antes de ejecutar bootstrap `shared` sobre un VMMemoryContext
+  nuevo por ejecución. Fallos de inicializadores se reportan y continúa la
+  ejecución principal. No se reutiliza memoria entre equipos/partidas.
+- Editor mantiene Play/Pause/Stop/Step, métricas y consola; DEBUG_* siempre
+  emite metadatos originales; breakpoints y resaltado usan rutas relativas
+  `carpeta/archivo.dscript`, no nombres de módulo con puntos. Step sigue siendo
+  por instrucción de VM, no por sentencia DScript.
+- `GeneratedDILCache` persiste `.dil` junto a `.dscript` tras compilación
+  correcta únicamente, **nunca ejecuta** esos archivos, omite bootstrap,
+  jamás sobrescribe `.dil` manual sin marca de generado; advertencias no
+  impiden ejecutar CodeContext recién compilado.
+- 20 pruebas nuevas: `Directiva/Tests/DScript/EditorIntegration/TestEverything`.
+  Total esperado **1137** (1117 previas + 20). No probado en Unity en este
+  entorno: compilar y ejecutar TestAll después de aplicar ZIP.
+- Sin eliminar ni renombrar archivos de Assets. No incluye integración final
+  con Nexo/unidades/simulación ni depuración de pasos por sentencia DScript.
+
+### 2026-10-22 — Syntax highlighting del editor DScript (v1.17)
+
+- `CodeEditorView` conserva el `TextField` original para edicion, caret, seleccion,
+  undo/redo, zoom, scrollbar y depuracion. Agrega una capa de `Label` con rich text
+  no-interactiva, que dibuja solo las lineas/columnas visibles y se sincroniza con
+  el scroll y el modelo de coordenadas existente. No cambia los archivos DScript.
+- `DScriptSyntaxHighlighter` utiliza `DScriptLexer` y los `SourceSpan` sin tocar el
+  frontend. Colorea palabras clave, True/False/None, numeros, strings, operadores,
+  funciones/llamadas, modulos/imports, variables, shared y comentarios (`#`).
+  Funciona con sintaxis incompleta; los roles de identificadores son heuristicas
+  visuales, no resolucion semantica ni inferencia de tipos.
+- `DirectivaUITheme.codeSyntaxColors` expone paleta editable (estilo VS Code Dark+),
+  incluye toggle `enabled` y se copia por valor para ajustes futuros del usuario.
+  `DirectivaCodeUIController.ApplySyntaxColors(colors)` y
+  `SetSyntaxHighlightingEnabled(enabled)` aplican preferencias en runtime sin
+  mutar el asset, pero no se incorporaron aun controles de opciones ni persistencia.
+- Nuevo grupo `DScript/SyntaxHighlight` (+21 pruebas, total previsto 1158).
+  Pruebas de clasificacion, strings/comentarios, formateo seguro, fuente intacta,
+  variaciones CRLF, codigo incompleto, lineas largas y clonacion de opciones.
+  Ejecutar en Unity junto a `TestAll`; sin Editor Unity en este entorno.
+- Archivos a eliminar/renombrar: ninguno. Riesgo visual pendiente de verificar
+  en Unity: alineacion fina de texto en el panel de juego, caret/seleccion y zoom.
+
+### 2026-10-22 — Corrección de `fn:` vacío en editor DScript
+
+- La integración original del editor establecía `main` como entrada predeterminada; era un error respecto del contrato acordado. Ahora un campo `fn:` vacío, solo espacios o `null` selecciona la **primera declaración de función** del módulo DScript activo según el orden de `DScriptAnalysis.Modules[entryModule].Statements`, sin seleccionar imports ni funciones de bootstrap.
+- La selección explícita (`fn: nombre`) continúa teniendo prioridad; el editor sigue exigiendo cero parámetros. Si el archivo seleccionado no declara funciones, muestra error antes de crear `VMMemoryContext` o ejecutar inicializadores `shared`.
+- `TopBarView` y `EditorDocumentMetadata` usan string vacío para los documentos nuevos, falta de sidecar y metadatos nulos. Sidecars anteriores con un valor explícito como `main` conservan el nombre: el usuario puede borrarlo para volver al modo automático. Al cerrar el documento activo, el campo se vacía.
+- Se agregan ocho regresiones a `DScript/EditorIntegration`, con total esperado **1166** considerando las 1158 previas. No se modifican instrucciones DIL, VM, frontend, compilador, caché DIL ni el formato de metadatos. Unity deberá verificar la compilación y pruebas. Sin renombres ni eliminaciones.
+
+### 2026-10-22 — Escape TextCore del resaltado DScript (corrección posterior)
+
+- El resaltado original sustituía `<`, `>` y `&` por entidades HTML, que
+  UI Toolkit `Label.text` muestra literalmente: `&lt;`, `&gt;`, `&amp;`.
+- `DScriptSyntaxDocument.FormatLine` ahora protege **solo** cada `<` mediante
+  `<noparse><</noparse>`; `>` y `&` se insertan literalmente. El marcado fuente
+  nunca puede abrir ni cerrar una etiqueta TextCore, incluso con `</noparse>`.
+  Se conserva un carácter visible por carácter original, sin modificar el
+  documento, el lexer ni la paleta de `DirectivaUITheme`.
+- `DScriptSyntaxHighlightTests.RichTextEscape` actualizado y **6 pruebas**
+  añadidas para comparaciones, secuencias HTML literales, escapes maliciosos,
+  Unicode, recorte horizontal y coloreado plano. `TestAll`: **1172 esperado**
+  (1166 + 6); ejecutar `DScript/SyntaxHighlight/TestEverything` y `TestAll` en Unity.
+  Las pruebas de strings no garantizan la apariencia de una fuente concreta.
+- Diferencial de este fix: los 4 archivos `Assets/DIRECTIVA_CONTEXT.md`,
+  `Assets/Editor/DirectivaTests/README.md`, `Assets/Editor/DirectivaTests/DScript/DScriptSyntaxHighlightTests.cs`
+  y `Assets/Scripts/UI/CodeEditor/DScriptSyntaxHighlighter.cs`.
+  Ningún cambio en `.meta`, VM, compilador, UITheme, archivos almacenados o parser.
+  No hay renombres ni eliminaciones.
+
+### 2026-10-22 — Corrección zoom/selección del resaltador DScript
+
+- Informe visual del usuario: después de zoom considerable (Ctrl+rueda), el
+  resaltado coloreado de `CodeEditorView` dejaba de coincidir con la selección
+  nativa del `TextField`; redimensionar Output o Solution corregía la alineación.
+- Causa probable identificada en código: `OnWheel()` ejecutaba
+  `RefreshFontMetricsAndLayout()` inmediatamente tras `ApplyFontStyles()`, antes
+  del layout nativo de Unity. La geometría interna puede cambiar sin disparar
+  `GeometryChangedEvent` en el mismo elemento, dejando `_textOriginX/Y` obsoletos.
+- Fix: `RequestZoomLayoutSync` agenda dos pasadas reprogramables después del
+  zoom (también cuando se llama `SetFontSize`). Mientras la geometría no está
+  estable, el overlay se oculta y el texto real vuelve a ser visible, preservando
+  el caret y la selección. `ContinueZoomLayoutSync` muestra nuevamente el overlay
+  al concluir, luego de actualizar métricas, gutter, guías y línea de ejecución.
+- `RefreshAfterGeometryChange` ahora se usa tanto para el input como para el
+  viewport interno; `CalculateTextOrigin` concentra la conversión que cancela
+  scroll y deja testear su aritmética.
+- 4 tests nuevos de `DScriptSyntaxHighlightTests`, 1176 tests totales previstos.
+  Solo revisión estática desde este entorno; ejecutar en Unity
+  `Directiva > Tests > DScript > SyntaxHighlight > TestEverything`, después
+  `Directiva > Tests > TestAll`, además de comprobación visual de zoom/selección.
+- Diferencial con 4 archivos (`CodeEditorView.cs`, `DScriptSyntaxHighlightTests.cs`,
+  `Editor/DirectivaTests/README.md`, `DIRECTIVA_CONTEXT.md`). Ningún `.meta`,
+  eliminación o renombre. No se requiere reconstrucción del frontend/VM.
+
+### 2026-10-22 — Hotfix: colores desaparecian tras Ctrl+rueda
+
+- El ajuste anterior dejaba a veces la capa coloreada en `DisplayStyle.None` tras
+  hacer zoom. La segunda resincronizacion se intentaba programar con
+  `ExecuteLater()` **desde el callback de una tarea de una sola ejecucion**.
+  Al finalizar esa tarea, Unity podia desprogramarla antes de la segunda pasada,
+  dejando `_zoomLayoutSyncPassesRemaining` en 1 y ocultando el resaltado.
+- `CodeEditorView.RequestZoomLayoutSync()` utiliza ahora
+  `schedule.Execute(ContinueZoomLayoutSync).Every(34)`, reprogramable con
+  `ExecuteLater(1)` en cada nuevo cambio de zoom. `ContinueZoomLayoutSync()`
+  consume las dos pasadas y llama a `Pause()` al concluir. La ultima pasada
+  restaura la capa coloreada con coordenadas actualizadas.
+- Se conserva la correccion anterior de geometria/seleccion, la paleta editable
+  y el comportamiento del TextField. No se alteran fuente, documentos DScript,
+  parser, compilador, VM ni metadatos `.meta`.
+- La regresion requiere **comprobacion visual en Play Mode**: Ctrl+rueda
+  repetidamente (sin redimensionar paneles), verificar recuperacion de colores
+  y seleccion alineada, probar zoom minimo/maximo, scroll y editar codigo.
+  Las pruebas existentes de geometria son unitarias y no ejecutan el scheduler
+  del panel, por lo que el recuento previsto permanece en **1176**.
+- Sin archivos eliminados o renombrados.
+
+### 2026-10-22 — Coordenadas de scroll corregidas en editor DScript
+
+- El bug tras zoom con scroll previo no era principalmente el scheduler: `CalculateTextOrigin` suponía incorrectamente que `unity-text-field__input` se desplaza con el scroll interno. El input es contenedor fijo del `ScrollView`. Sumar `scrollOffset` al `worldBound` sumaba desplazamiento al origen del documento, y las capas luego lo restaban una segunda vez para el render. Esto afectaba simultáneamente números de línea, color, guías y percepción del principio/final del script.
+- Se elimina `scrollOffset` del cálculo de origen (ahora referido exclusivamente al contenedor fijo). Las capas visuales restan el desplazamiento una sola vez al dibujar. `RebuildGutter` restablece su translate usando la posición efectiva de scroll tras cambios de fuente. Se conserva el scheduler de 2 pasadas para la sincronización posterior al layout.
+- Cuatro tests de geometría corregidos a la estructura real del TextField; dos tests nuevos de zoom tras scroll y última línea alcanzable. Grupo SyntaxHighlight **33** y total **1178** previstos. Probar visualmente en Unity, sin afirmar ejecución C# en este entorno.
+- No se modifican DScript, parser, compilador, VM, estilos, FontAsset ni `.meta`. No hay renombres o eliminaciones.
+
+
+### 2026-10-22 — Zoom anclado al centro del viewport
+
+- `CodeEditorView` captura antes de cambiar el tamaño de fuente la posicion
+  central de la vista expresada en lineas fraccionales de DScript; restaura el
+  `ScrollView.scrollOffset.y` tras cada pasada de layout, en coordenadas del
+  viewport real y con limites de documento. Mantiene la misma referencia durante
+  rafagas Ctrl+rueda y la cancela al abrir otro archivo o cuando el usuario
+  hace scroll sin Ctrl. `SetFontSize` desde opciones tambien utiliza el ancla.
+- No se cambia la geometria compartida entre texto, gutter, guias y resaltado,
+  ni el scheduler repetible de dos pasadas. Sigue siendo posible acceder a
+  la primera y ultima linea incluso cuando la referencia central se limite.
+- Cinco pruebas matematicas adicionales en DScript/SyntaxHighlight; total
+  previsto **1183**. Sin ejecucion Unity en este entorno. Verificar zoom en
+  Play Mode, cursor, seleccion, colores y desplazamiento al final.
+- Sin .meta, archivos eliminados o renombrados.

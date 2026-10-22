@@ -1,6 +1,6 @@
 # Directiva — DScript backend (phase 2)
 
-This folder contains the actual DScript -> DIL backend. It does **not** make the
+This folder contains the actual DScript -> DIL backend. The editor now uses it, but it does **not** make the
 player's editor execute DScript yet; the editor host integration is separate.
 
 ## Pipeline
@@ -72,3 +72,26 @@ not just string comparisons. `Directiva > Tests > TestAll` covers regressions.
 
 The execution limits here are safety defaults, not final simulation game-balancing
 settings. On any failure, export the existing Markdown test report bundle.
+
+## Editor integration (October 22, 2026)
+
+`DirectivaCodeUIController` now runs `DScriptEditorRunPipeline.Prepare` with
+`WorkspaceDScriptSourceProvider`. The provider reads the active editor buffer and
+`.dscript.back` of imported modules and validates paths with the disk source
+provider. Compilation calls the in-memory DIL parser, never any on-disk `.dil`.
+The selected zero-argument function (`fn:` defaults to `main`) runs after a new
+`VMMemoryContext` has been initialized using `DScriptBootstrapRunner`. Shared
+initializer runtime failures are displayed but do not prevent starting the VM.
+
+`GeneratedDILCache` optionally writes sibling `.dil` files **after** a fully
+successful compilation. It skips manual/unmarked `.dil` files, writes only
+generated files bearing `DIRECTIVA_GENERATED_DIL_V1`, and never persists the
+internal bootstrap. The editor tree only contains `.dscript`; old `.dil` files
+are preserved and deliberately not migrated to DScript.
+
+Source debugger paths use relative filenames (`utils/foo.dscript`); the VM
+remains at instruction granularity for Step, and Step In / Step Out are
+reserved for future source-level debugging.
+
+Run `Directiva > Tests > DScript > EditorIntegration > TestEverything` after
+updating the editor, then `Directiva > Tests > TestAll`.

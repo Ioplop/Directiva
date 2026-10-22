@@ -6,8 +6,8 @@ using UnityEngine;
 namespace Directiva.CodeUI
 {
     /// <summary>
-    /// Sidecar persisted next to a script as <c>file.dil.editor</c>.
-    /// Contains editor-only state and never participates in DIL parsing/execution.
+    /// Sidecar persisted next to a script as <c>file.dscript.editor</c>.
+    /// Contains editor-only state and never participates in DScript compilation/execution.
     /// </summary>
     [Serializable]
     internal sealed class EditorDocumentMetadata
@@ -15,7 +15,7 @@ namespace Directiva.CodeUI
         public const int CurrentVersion = 1;
 
         public int version = CurrentVersion;
-        public string entryFunction = "main";
+        public string entryFunction = string.Empty;
         public EditorUndoHistoryData undoHistory = new EditorUndoHistoryData();
     }
 
@@ -60,7 +60,7 @@ namespace Directiva.CodeUI
                 if (metadata == null || metadata.version != EditorDocumentMetadata.CurrentVersion)
                     return new EditorDocumentMetadata();
 
-                metadata.entryFunction ??= "main";
+                metadata.entryFunction ??= string.Empty;
                 metadata.undoHistory ??= new EditorUndoHistoryData();
                 metadata.undoHistory.states ??= new List<EditorUndoSnapshotData>();
                 return metadata;
@@ -81,7 +81,7 @@ namespace Directiva.CodeUI
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             metadata.version = EditorDocumentMetadata.CurrentVersion;
-            metadata.entryFunction ??= "main";
+            metadata.entryFunction ??= string.Empty;
             metadata.undoHistory ??= new EditorUndoHistoryData();
             metadata.undoHistory.states ??= new List<EditorUndoSnapshotData>();
 

@@ -17,7 +17,7 @@ namespace Directiva.CodeUI
         private readonly Button _revert;
 
         private readonly TextField _entryFunction;
-        private readonly Toggle _debugDIL;
+        private readonly Toggle _debugSource;
 
         private readonly Button _stop;
         private readonly Button _pause;
@@ -43,7 +43,7 @@ namespace Directiva.CodeUI
         public event Action<string> EntryFunctionChanged;
 
         public string EntryFunctionName => (_entryFunction.value ?? string.Empty).Trim();
-        public bool DebugDILEnabled => _debugDIL.value;
+        public bool DebugSourceEnabled => _debugSource.value;
 
         public TopBarView(
             LocalizationService locale,
@@ -85,32 +85,32 @@ namespace Directiva.CodeUI
 
             _entryFunction = new TextField
             {
-                value = "main"
+                value = string.Empty
             };
             _entryFunction.style.width = 150f;
             _entryFunction.style.minWidth = 90f;
             _entryFunction.style.maxWidth = 240f;
             _entryFunction.style.height = 24f;
-            _entryFunction.tooltip = "Nombre de la función DIL a ejecutar dentro del archivo seleccionado.";
+            _entryFunction.tooltip = "Nombre de la función DScript sin parámetros a ejecutar dentro del archivo seleccionado. Si se deja vacío, se ejecuta la primera función declarada en el archivo.";
             StyleEntryFunctionField();
             _entryFunction.RegisterCallback<AttachToPanelEvent>(_ => StyleEntryFunctionField());
             _entryFunction.RegisterValueChangedCallback(evt =>
                 EntryFunctionChanged?.Invoke((evt.newValue ?? string.Empty).Trim()));
 
-            _debugDIL = new Toggle("debug")
+            _debugSource = new Toggle("debug")
             {
                 value = false
             };
-            _debugDIL.style.height = 24f;
-            _debugDIL.style.marginLeft = 6f;
-            _debugDIL.style.marginRight = 4f;
-            _debugDIL.style.marginTop = 0f;
-            _debugDIL.style.marginBottom = 0f;
-            _debugDIL.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _debugDIL.tooltip =
-                "Inyecta metadata DEBUG_* al parsear DIL para mostrar la línea que ejecuta la VM. " +
-                "No modifica el archivo.";
-            UIIconView.SetToggle(_debugDIL, _icons?.checkedBox, _icons?.uncheckedBox);
+            _debugSource.style.height = 24f;
+            _debugSource.style.marginLeft = 6f;
+            _debugSource.style.marginRight = 4f;
+            _debugSource.style.marginTop = 0f;
+            _debugSource.style.marginBottom = 0f;
+            _debugSource.style.unityTextAlign = TextAnchor.MiddleLeft;
+            _debugSource.tooltip =
+                "Resalta en el editor la línea DScript que ejecuta la VM. " +
+                "Los metadatos DEBUG_* se generan siempre, aunque esta opción esté desactivada.";
+            UIIconView.SetToggle(_debugSource, _icons?.checkedBox, _icons?.uncheckedBox);
 
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
@@ -142,7 +142,7 @@ namespace Directiva.CodeUI
 
             execution.Add(entryLabel);
             execution.Add(_entryFunction);
-            execution.Add(_debugDIL);
+            execution.Add(_debugSource);
             execution.Add(_stop);
             execution.Add(_pause);
             execution.Add(_continue);
@@ -270,8 +270,8 @@ namespace Directiva.CodeUI
             tooltips.Register(_save, () => _locale.Get("Tooltips", "save"));
             tooltips.Register(_revert, () => _locale.Get("Tooltips", "revert"));
 
-            tooltips.Register(_debugDIL, () =>
-                "Inyectar DEBUG_* temporalmente al parsear DIL y seguir la línea actual.");
+            tooltips.Register(_debugSource, () =>
+                "Mostrar la línea original de DScript que ejecuta la VM (DEBUG_* ya se genera siempre).");
 
             tooltips.Register(_stop, () => _locale.Get("Tooltips", "stop"));
             tooltips.Register(_pause, () => _locale.Get("Tooltips", "pause"));
@@ -314,7 +314,7 @@ namespace Directiva.CodeUI
             {
                 case ScriptExecutionState.Running:
                     _entryFunction.SetEnabled(false);
-                    _debugDIL.SetEnabled(false);
+                    _debugSource.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(true);
                     _continue.SetEnabled(false);
@@ -323,7 +323,7 @@ namespace Directiva.CodeUI
 
                 case ScriptExecutionState.Paused:
                     _entryFunction.SetEnabled(false);
-                    _debugDIL.SetEnabled(false);
+                    _debugSource.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(true);
@@ -332,7 +332,7 @@ namespace Directiva.CodeUI
 
                 default:
                     _entryFunction.SetEnabled(_hasDocument);
-                    _debugDIL.SetEnabled(_hasDocument);
+                    _debugSource.SetEnabled(_hasDocument);
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);
@@ -340,8 +340,8 @@ namespace Directiva.CodeUI
                     break;
             }
 
-            // DIL is already instruction-level, so Step In / Step Out do not have a useful
-            // distinction here. Keep them reserved for future DScript debugging.
+            // Step currently advances one VM instruction; source-level Step In/Out
+            // require their own debugger and remain disabled for now.
             _stepIn.SetEnabled(false);
             _stepOut.SetEnabled(false);
         }
@@ -358,7 +358,7 @@ namespace Directiva.CodeUI
             UIIconView.SetButton(_pause, _icons?.pause);
             UIIconView.SetButton(_continue, _icons?.play);
 
-            // DIL currently supports simple single-step; Step In / Step Out remain reserved for DScript.
+            // Step advances VM instructions; source-level stepping remains future work.
             UIIconView.SetButton(_step, _icons?.step);
             UIIconView.SetButton(_stepIn, _icons?.stepIn);
             UIIconView.SetButton(_stepOut, _icons?.stepOut);

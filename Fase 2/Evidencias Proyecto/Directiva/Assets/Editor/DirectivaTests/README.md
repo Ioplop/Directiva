@@ -156,3 +156,117 @@ un `OperationId` (por ejemplo, `List.pop`/`Dict.pop` -> `Pop`, `Set.pop` -> `Set
 - Las pruebas del grupo `Backend` adjuntan fuentes originales y DIL emitido.
 - Ejecutar después `Directiva/Tests/TestAll` para comprobar regresiones de DIL
   y del frontend. No afirmar que pasaron hasta ejecutar Unity Editor.
+
+### 2026-10-22: integración editor DScript
+
+`DScript/EditorIntegration/TestEverything`: 20 pruebas nuevas de `FileSystemScriptStorage`
+con extensión `.dscript`, copias activas sin guardar, backups importados, bootstrap,
+aislamiento entre ejecuciones, diagnósticos, entry points, rutas debug y publicación
+segura de `.dil`. Todas trabajan en carpetas temporales, nunca en DirectivaScripts
+de jugadores. Después ejecutar `Directiva/Tests/TestAll`. Los resultados no se
+consideran PASS hasta ejecutarlos dentro de Unity.
+
+## DScript: resaltado de sintaxis (v1.17)
+
+- `Directiva > Tests > DScript > SyntaxHighlight > TestEverything`: pruebas del
+  coloreado lexico/contextual, manejo de codigo incompleto, comentarios, strings,
+  palabras clave, operadores, imports, `shared`, llamadas por miembro, escape de
+  texto enriquecido, recorte horizontal, CRLF y copia de paleta.
+- Estas pruebas no necesitan Play Mode ni cambian los archivos `DirectivaScripts`.
+- Prueba manual recomendada: editar `main.dscript`, escribir codigo incompleto y
+  comprobar colores, cursor, seleccion, tabulacion, undo/redo, breakpoints,
+  scroll horizontal y vertical, zoom Ctrl+rueda y cambios de documento.
+- La paleta se configura en `Resources/UI/DirectivaUITheme` > `Code Syntax Colors`;
+  el controller expone `ApplySyntaxColors` y `SetSyntaxHighlightingEnabled` para
+  conectar el futuro menu de opciones. No se persisten preferencias del jugador
+  todavia. El resaltado es visual; no altera compilacion ni la VM.
+
+### Selección de función inicial en el editor (2026-10-22)
+
+El campo `fn:` vacío selecciona la **primera declaración `def` del archivo `.dscript` abierto** según el AST (orden textual, sin tomar funciones de imports ni del módulo bootstrap). Si se indica un nombre, se usa exclusivamente ese nombre. No se omiten funciones que requieren argumentos: el editor informa el error de aridad; sin funciones locales se presenta un error antes de iniciar `shared`. Los documentos nuevos tienen selección vacía por defecto; los nombres guardados explícitamente en `.dscript.editor` se conservan.
+
+Ocho regresiones nuevas se incluyen en `Directiva > Tests > DScript > EditorIntegration > TestEverything`. Total esperado **1166** (1158 anteriores + 8).
+
+### Corrección de caracteres literales en resaltado (2026-10-22)
+
+- `Label.text` de UI Toolkit **no** interpreta las entidades HTML `&lt;`,
+  `&gt;` ni `&amp;`: aparecían escritas y desplazaban la columna visual.
+- `DScriptSyntaxHighlighter.FormatLine()` protege ahora cada `<` con
+  `<noparse><</noparse>`, que TextCore presenta como **un solo glifo**. `>` y `&`
+  quedan literales. El cierre de `noparse` que pudiera venir del jugador también
+  queda protegido, evitando que strings o comentarios inyecten etiquetas.
+- Se agregaron seis pruebas (`ComparisonAmpersand`, `LiteralHtmlEntities`,
+  `NoparseInjection`, `UnicodePreservation`, `CroppedLiteralTag`,
+  `NoColorLiteralTag`) y se actualizó `RichTextEscape`.
+  **Grupo SyntaxHighlight: 27 pruebas; TestAll esperado: 1172** (1166 + 6).
+- Revisión visual aconsejada: editar código con `<`, `>`, `&`, `áéíóú`, `¡¿`,
+  secuencias como `<color=red>`, y comprobar alineación de cursor y selección.
+  El test automatizado valida cadenas, no el rasterizado real de Unity.
+
+### 2026-10-22 — Sincronización de zoom y selección coloreada
+
+- `CodeEditorView` ya no calcula la alineación **únicamente durante** el evento
+  Ctrl+rueda: UI Toolkit puede conservar la geometría anterior hasta la siguiente
+  actualización de layout, sin producir un `GeometryChangedEvent` si el input
+  mantiene su rectángulo exterior.
+- Tras zoom de rueda o `SetFontSize`, el editor ejecuta **dos resincronizaciones
+  programadas y coalescentes**: la primera actualiza métricas/altura de contenido,
+  la segunda vuelve a muestrear posición y scroll después de otro ciclo del panel.
+  Mientras tanto se usa el texto nativo del `TextField` (no la capa potencialmente
+  desfasada), manteniendo selección y caret funcionales.
+- Se vuelve a calcular el origen también cuando cambia la geometría del viewport
+  del scroll. La función `CalculateTextOrigin` aísla la transformación de
+  coordenadas respecto del `TextField` nativo; todos los dibujos reutilizan
+  `_textOriginX` / `_textOriginY`.
+- Se añaden **4 regresiones matemáticas** al grupo `DScript/SyntaxHighlight`
+  (`NativeTextOrigin`, `OriginInvariantUnderScroll`, `ZoomReflowsInput`,
+  `ZoomScrollCaretGrid`). Total previsto: **1176** (1172 + 4).
+- Verificación manual imprescindible en Play Mode: seleccionar varias líneas,
+  hacer Ctrl+rueda hasta zoom máximo/mínimo, desplazar vertical y horizontalmente,
+  volver al zoom anterior, redimensionar paneles y confirmar que selección/caret,
+  texto coloreado, números de línea y guías de indentación coincidan.
+  Las pruebas automatizadas no renderizan UI Toolkit.
+- No se modifican fuente, DScript, VM, compilador, `.meta`, almacenamiento
+  ni preferencias de color. Sin eliminaciones ni renombres.
+
+### 2026-10-22 — Hotfix: colores desaparecian tras Ctrl+rueda
+
+- El ajuste anterior dejaba a veces la capa coloreada en `DisplayStyle.None` tras
+  hacer zoom. La segunda resincronizacion se intentaba programar con
+  `ExecuteLater()` **desde el callback de una tarea de una sola ejecucion**.
+  Al finalizar esa tarea, Unity podia desprogramarla antes de la segunda pasada,
+  dejando `_zoomLayoutSyncPassesRemaining` en 1 y ocultando el resaltado.
+- `CodeEditorView.RequestZoomLayoutSync()` utiliza ahora
+  `schedule.Execute(ContinueZoomLayoutSync).Every(34)`, reprogramable con
+  `ExecuteLater(1)` en cada nuevo cambio de zoom. `ContinueZoomLayoutSync()`
+  consume las dos pasadas y llama a `Pause()` al concluir. La ultima pasada
+  restaura la capa coloreada con coordenadas actualizadas.
+- Se conserva la correccion anterior de geometria/seleccion, la paleta editable
+  y el comportamiento del TextField. No se alteran fuente, documentos DScript,
+  parser, compilador, VM ni metadatos `.meta`.
+- La regresion requiere **comprobacion visual en Play Mode**: Ctrl+rueda
+  repetidamente (sin redimensionar paneles), verificar recuperacion de colores
+  y seleccion alineada, probar zoom minimo/maximo, scroll y editar codigo.
+  Las pruebas existentes de geometria son unitarias y no ejecutan el scheduler
+  del panel, por lo que el recuento previsto permanece en **1176**.
+- Sin archivos eliminados o renombrados.
+
+### 2026-10-22 - Correccion de origen de scroll tras zoom
+
+- La clase `unity-text-field__input` es el contenedor **fijo** del `ScrollView` de un `TextField` multilinea. Su `worldBound` no se desplaza con `scrollOffset`; sumar el offset al calcular `CalculateTextOrigin` desplazaba erróneamente el gutter, overlay y guías al hacer zoom después de bajar.
+- `CalculateTextOrigin` recibe ahora solo bounds del contenedor fijo, borde y padding; el scroll se resta una sola vez al colocar cada capa. `RebuildGutter` actualiza explícitamente la traslación vertical incluso cuando Unity limita el offset al cambiar la altura del contenido.
+- Se sustituyen las suposiciones erróneas de las 4 pruebas de coordenadas y se añaden `ZoomWhileScrolled` y `ZoomScrollEndRange`: **33** casos en SyntaxHighlight y **1178** casos esperados en TestAll.
+- Prueba manual indispensable: bajar a media página, Ctrl+rueda, scroll hasta arriba y abajo, confirmar que primera/última línea, color, gutter, cursor, selección y scrollbar están sincronizados sin mover separadores.
+- La inspección estática y las pruebas puras no equivalen a una ejecución real en Unity.
+
+### Zoom anclado al centro (2026-10-22)
+
+`DScript/SyntaxHighlight/TestEverything`: cinco pruebas de coordenadas nuevas para
+zoom alrededor de la linea central, posicion fraccional, cambios de viewport,
+limites de scroll y eventos rapidos consecutivos. Total previsto: **1183**
+(1178 previos + 5). El `TextField` y el overlay mantienen un unico scroll.
+
+Verificar manualmente en Play Mode: abrir un script largo, bajar hasta mitad,
+hacer Ctrl+rueda lento y rapido y comprobar que la misma linea permanece cerca
+del centro; probar primera/ultima linea, cursor, seleccion, gutter, colores
+y cambios de fuente desde opciones.

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Globalization;
-using DSCompilation.DIL;
+using DSCompilation.DScript;
+using DSCompilation.DScript.Backend;
+using DSCompilation.DScript.Modules;
 using DSExecution.DataTypes;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
@@ -69,6 +71,9 @@ namespace Directiva.CodeUI
         [Header("Execution")]
         [SerializeField, Min(1)] private int executionStepsPerFrame = 2000;
 
+        [Tooltip("Maximum logical VM steps for EACH shared initializer in the editor.")]
+        [SerializeField, Min(1)] private int editorInitializerStepBudget = 10000;
+
         public DirectivaUIEventHub Events { get; private set; }
         public LocalizationService Localization { get; private set; }
         public OutputService Output { get; private set; }
@@ -90,7 +95,10 @@ namespace Directiva.CodeUI
         private VMExecutionController _executionController;
         private string _runningFunctionName;
         private VMMemoryContext _runningMemory;
-        private bool _runningDILDebugEnabled;
+        private bool _runningSourceDebugEnabled;
+        private readonly DScriptLineBreakpointGate _breakpointGate = new DScriptLineBreakpointGate();
+        private readonly HashSet<string> _lastCompilationDiagnosticPaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<int>> _runningBreakpointsByModule =
             new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
 
@@ -121,6 +129,7 @@ namespace Directiva.CodeUI
             outputFontSize = Mathf.Clamp(outputFontSize, 6f, 48f);
             tooltipDelaySeconds = Mathf.Max(0f, tooltipDelaySeconds);
             executionStepsPerFrame = Mathf.Max(1, executionStepsPerFrame);
+            editorInitializerStepBudget = Mathf.Max(1, editorInitializerStepBudget);
 
             editorPaddingLeftPx = Mathf.Max(0f, editorPaddingLeftPx);
             editorPaddingTopPx = Mathf.Max(0f, editorPaddingTopPx);
@@ -197,7 +206,7 @@ namespace Directiva.CodeUI
                 FlushActiveEditorMetadata();
 
             _executionController?.Tick(executionStepsPerFrame);
-            RefreshDILDebugHighlight();
+            RefreshDScriptDebugHighlight();
 
             if (_analysisPending && Time.unscaledTime >= _analysisAt)
             {
@@ -229,6 +238,12 @@ namespace Directiva.CodeUI
                 throw new InvalidOperationException("Choose the editor theme before mounting it.");
             _theme = DirectivaUITheme.Resolve(theme);
         }
+
+        /// <summary>Runtime hooks for future user-specific syntax color preferences.</summary>
+        public void ApplySyntaxColors(DirectivaSyntaxColors colors) => _editor?.SetSyntaxColors(colors);
+
+        public void SetSyntaxHighlightingEnabled(bool enabled) =>
+            _editor?.SetSyntaxHighlightingEnabled(enabled);
 
         private void ReturnToMainMenu()
         {
@@ -346,6 +361,9 @@ namespace Directiva.CodeUI
                 editorPaddingBottomPx,
                 indentGuideFineOffsetPx,
                 _theme?.icons?.breakpoint);
+            // Inspector palette is only the default. The editor owns an independent
+            // runtime copy so a future user Options menu can override each color.
+            _editor.SetSyntaxColors(_theme?.codeSyntaxColors);
 
             right.Add(_topBar);
             right.Add(_editor);
@@ -507,7 +525,7 @@ namespace Directiva.CodeUI
             {
                 _activeMetadataPath = null;
                 _editor.ClearDocument();
-                _topBar.SetEntryFunctionName("main");
+                _topBar.SetEntryFunctionName(string.Empty);
                 _topBar.SetDocument(null, false);
                 return;
             }
@@ -535,7 +553,7 @@ namespace Directiva.CodeUI
 
             RefreshTopBar();
             ScheduleAnalysis();
-            RefreshDILDebugHighlight();
+            RefreshDScriptDebugHighlight();
         }
 
         private void OnPathChanged(string oldPath, string newPath)
@@ -790,7 +808,7 @@ namespace Directiva.CodeUI
             }
 
             if (_executionController.State == ScriptExecutionState.Stopped)
-                StartActiveDILExecution();
+                StartActiveDScriptExecution();
         }
 
         private void HandleStepRequested()
@@ -802,7 +820,7 @@ namespace Directiva.CodeUI
             }
 
             if (_executionController.State == ScriptExecutionState.Stopped &&
-                !StartActiveDILExecution(startPaused: true))
+                !StartActiveDScriptExecution(startPaused: true))
             {
                 return;
             }
@@ -810,8 +828,8 @@ namespace Directiva.CodeUI
             if (_executionController.State != ScriptExecutionState.Paused)
                 return;
 
-            _executionController.Step(skipDebugMetadata: _runningDILDebugEnabled);
-            RefreshDILDebugHighlight();
+            _executionController.Step(skipDebugMetadata: true); // DScript always emits DEBUG_* metadata.
+            RefreshDScriptDebugHighlight();
         }
 
         private void HandlePauseRequested()
@@ -833,102 +851,118 @@ namespace Directiva.CodeUI
                 _executionController.ElapsedMilliseconds);
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningDILDebugEnabled = false;
+            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
+            _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
-            Output.Write("[DIL] Ejecución detenida.");
+            Output.Write("[DScript] Ejecución detenida.");
         }
 
-        private bool StartActiveDILExecution(bool startPaused = false)
+        private bool StartActiveDScriptExecution(bool startPaused = false)
         {
             var active = _workspace.Active;
             if (active == null)
             {
-                Output.WriteError("[DIL] No hay ningún archivo seleccionado.");
+                Output.WriteError("[DScript] No hay ningún archivo seleccionado.");
                 return false;
             }
 
             if (!TryGetModuleName(active.RelativePath, out string moduleName, out string moduleError))
             {
-                Output.WriteError("[DIL] " + moduleError);
+                Output.WriteError("[DScript] " + moduleError);
                 return false;
             }
 
             try
             {
-                bool debugDIL = _topBar.DebugDILEnabled;
+                // Refresh external files that might have been edited/added outside the UI.
+                RefreshCodebase();
                 BuildRunningBreakpointMap();
+                var sourceProvider = new WorkspaceDScriptSourceProvider(
+                    Codebase, _workspace, _storage.RootPath);
+                Output.Write($"[DScript] Compilando {active.RelativePath} y parseando DIL...");
 
-                // Breakpoints need the same source metadata used by visual DIL debugging.
-                // If at least one breakpoint exists, instrument the parsed code silently even
-                // when the debug checkbox is off so breakpoints work by themselves.
-                bool generateSourceMetadata =
-                    debugDIL || _runningBreakpointsByModule.Count > 0;
+                DScriptEditorPreparedRun prepared = DScriptEditorRunPipeline.Prepare(
+                    moduleName, _topBar.EntryFunctionName, sourceProvider,
+                    editorInitializerStepBudget,
+                    onInitializerOutput: text => Output.Write(text ?? string.Empty),
+                    onInitializerError: (step, error) => Output.WriteError(
+                        $"[DScript][shared] {step.Module}.{step.Variable} " +
+                        $"({step.Span.Line}:{step.Span.Column}) falló ({error.Id}): {error.Message}"));
 
-                var provider = new WorkspaceDILSourceProvider(Codebase, _workspace);
-                var parser = new DILParser(
-                    provider,
-                    new DILParserOptions(generateDebugMetadata: generateSourceMetadata)
-                );
-                var code = parser.Parse(moduleName);
-
-                string requestedFunction = _topBar.EntryFunctionName;
-                FunctionContext entryFunction;
-
-                if (string.IsNullOrWhiteSpace(requestedFunction))
+                PublishCompilationDiagnostics(prepared.Compilation);
+                if (!prepared.Compilation.Success)
                 {
-                    entryFunction = code.GetFunction(code.EntryFunctionId);
-                }
-                else
-                {
-                    string qualifiedName = moduleName + "." + requestedFunction;
-                    entryFunction = code.Functions.FirstOrDefault(
-                        function => string.Equals(
-                            function.Name,
-                            qualifiedName,
-                            StringComparison.Ordinal));
-
-                    if (entryFunction == null)
+                    foreach (DScriptDiagnostic diagnostic in prepared.Compilation.Diagnostics)
                     {
+                        string path = diagnostic.Module.Replace('.', '/') +
+                                      FileSystemScriptStorage.ScriptExtension;
                         Output.WriteError(
-                            $"[DIL] La función '{requestedFunction}' no existe en '{active.RelativePath}'. " +
-                            "Escribe sólo el nombre local de una función declarada en ese archivo."
-                        );
-                        return false;
+                            $"[DScript] {path}:{diagnostic.Span.Line}:{diagnostic.Span.Column} " +
+                            $"{diagnostic.Code}: {diagnostic.Message}");
                     }
-                }
-
-                if (entryFunction.ParameterCount != 0)
-                {
-                    Output.WriteError(
-                        $"[DIL] No se puede ejecutar '{entryFunction.Name}' desde la interfaz: " +
-                        $"requiere {entryFunction.ParameterCount} parámetro(s). Por ahora el runner sólo admite entry points sin parámetros."
-                    );
                     return false;
                 }
 
-                var vm = new DirectivaVM(code, entryFunction.Id);
-                _runningFunctionName = entryFunction.Name;
-                _runningMemory = vm.Memory;
-                _runningDILDebugEnabled = generateSourceMetadata;
+                if (!prepared.Success)
+                {
+                    Output.WriteError("[DScript] " + prepared.Error);
+                    return false;
+                }
+
+                // Generated DIL is only a readable cache. VM always executes the just
+                // compiled CodeContext, even if cache publication fails or is blocked.
+                try
+                {
+                    foreach (string warning in GeneratedDILCache.Write(
+                        prepared.Program, _storage.RootPath))
+                        Output.WriteWarning("[DScript] " + warning);
+                }
+                catch (Exception ex)
+                {
+                    Output.WriteWarning("[DScript] No se pudo guardar el DIL generado: " + ex.Message);
+                }
+
+                _runningFunctionName = prepared.FunctionName;
+                _runningMemory = prepared.Memory;
+                _breakpointGate.Reset();
+                // Debug instructions are always present. The checkbox controls visual
+                // highlighting; breakpoints work even if the checkbox was off at Start.
+                _runningSourceDebugEnabled = _topBar.DebugSourceEnabled ||
+                                             _runningBreakpointsByModule.Count > 0;
                 _executionController.BreakpointPredicate =
                     _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
                 _editor.ClearExecutionLine();
                 _topBar.ClearExecutionMetrics();
-                _executionController.Start(vm, paused: startPaused);
-                Output.Write($"[DIL] Ejecutando {_runningFunctionName}...");
+                _executionController.Start(prepared.VM, paused: startPaused);
+                Output.Write($"[DScript] Compilación correcta ({prepared.Program.DILModules.Count - 1} módulos). " +
+                    $"Ejecutando {_runningFunctionName}...");
                 return true;
-            }
-            catch (DILParseException ex)
-            {
-                Output.WriteError("[DIL] Error de parseo: " + ex.Message);
-                return false;
             }
             catch (Exception ex)
             {
-                Output.WriteError("[DIL] No se pudo iniciar la ejecución: " + ex.Message);
+                Output.WriteError("[DScript] No se pudo iniciar la ejecución: " + ex.Message);
                 return false;
+            }
+        }
+
+        private void PublishCompilationDiagnostics(DScriptCompilationResult compilation)
+        {
+            foreach (string previousPath in _lastCompilationDiagnosticPaths)
+                _workspace.SetDiagnostics(previousPath, Array.Empty<CodeDiagnostic>());
+            _lastCompilationDiagnosticPaths.Clear();
+
+            if (compilation == null) return;
+            foreach (var group in compilation.Diagnostics.GroupBy(d =>
+                d.Module.Replace('.', '/') + FileSystemScriptStorage.ScriptExtension,
+                StringComparer.Ordinal))
+            {
+                if (!_storage.ScriptExists(group.Key)) continue;
+                _workspace.SetDiagnostics(group.Key, group.Select(d =>
+                    new CodeDiagnostic(d.Code, DiagnosticSeverity.Error,
+                        d.Span.Start, d.Span.Length, d.Message)).ToArray());
+                _lastCompilationDiagnosticPaths.Add(group.Key);
             }
         }
 
@@ -944,7 +978,7 @@ namespace Directiva.CodeUI
                 : _runningFunctionName;
 
             Output.Write(
-                $"[DIL] {functionName} retornó {FormatDataValue(returnValue, _runningMemory)}"
+                $"[DScript] {functionName} retornó {FormatDataValue(returnValue, _runningMemory)}"
             );
 
             _topBar.SetExecutionMetrics(
@@ -953,8 +987,9 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningDILDebugEnabled = false;
+            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
+            _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
         }
@@ -966,7 +1001,7 @@ namespace Directiva.CodeUI
                 : _runningFunctionName;
 
             Output.WriteError(
-                $"[DIL] {functionName} falló ({error.Id}): {error.Message}"
+                $"[DScript] {functionName} falló ({error.Id}): {error.Message}"
             );
 
             _topBar.SetExecutionMetrics(
@@ -975,8 +1010,9 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningDILDebugEnabled = false;
+            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
+            _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
         }
@@ -990,13 +1026,13 @@ namespace Directiva.CodeUI
             string file = string.IsNullOrWhiteSpace(debug.File) ? "?" : debug.File;
             string line = debug.Line >= 0 ? (debug.Line + 1).ToString(CultureInfo.InvariantCulture) : "?";
 
-            Output.Write($"[DIL] Breakpoint alcanzado en {file}:{line}.");
-            RefreshDILDebugHighlight();
+            Output.Write($"[DScript] Breakpoint alcanzado en {file}:{line}.");
+            RefreshDScriptDebugHighlight();
         }
 
-        private void RefreshDILDebugHighlight()
+        private void RefreshDScriptDebugHighlight()
         {
-            if (!_runningDILDebugEnabled ||
+            if (!_runningSourceDebugEnabled ||
                 _executionController == null ||
                 _executionController.CurrentVM == null)
             {
@@ -1006,8 +1042,8 @@ namespace Directiva.CodeUI
 
             DirectivaVM vm = _executionController.CurrentVM;
 
-            // DEBUG_FILE, DEBUG_LINE and DEBUG_SPAN still consume separate Advance() calls in this
-            // iteration. If a frame budget ends immediately after DEBUG_FILE, File has changed but
+            // DEBUG_FILE, DEBUG_LINE and DEBUG_SPAN are separate Advance() calls even
+            // though their logical cost is zero. If a frame ends after DEBUG_FILE, File has changed but
             // Line still belongs to the previous source location. Keep the previous highlight until
             // DEBUG_LINE has executed so the UI never displays that transient mismatched pair.
             if (vm.CurrentFunction != null &&
@@ -1032,9 +1068,11 @@ namespace Directiva.CodeUI
                 return;
             }
 
-            // DEBUG_FILE injected by the DIL parser uses the canonical dot-qualified module name.
-            // We only highlight when that module is the document currently visible in the editor.
-            if (!string.Equals(activeModule, debug.File, StringComparison.Ordinal))
+            // Compiled DScript uses relative source paths, e.g. utils/vector.dscript.
+            // Only highlight if the current document matches that exact original file.
+            string activeSourcePath = activeModule.Replace('.', '/') +
+                                      FileSystemScriptStorage.ScriptExtension;
+            if (!string.Equals(activeSourcePath, debug.File, StringComparison.Ordinal))
             {
                 _editor?.ClearExecutionLine();
                 return;
@@ -1125,7 +1163,7 @@ namespace Directiva.CodeUI
                     FileSystemScriptStorage.ScriptExtension,
                     StringComparison.OrdinalIgnoreCase))
             {
-                error = "El archivo seleccionado no es un script .dil válido.";
+                error = "El archivo seleccionado no es un script .dscript válido.";
                 return false;
             }
 
@@ -1138,55 +1176,20 @@ namespace Directiva.CodeUI
                 .Replace('\\', '.')
                 .Replace('/', '.');
 
-            if (!DILParser.IsValidQualifiedName(moduleName))
+            string canonicalPath = moduleName.Replace('.', '/') +
+                                   FileSystemScriptStorage.ScriptExtension;
+            if (!DScriptModuleLoader.IsValidName(moduleName) ||
+                !string.Equals(canonicalPath, relativeScriptPath.Replace('\\', '/'),
+                    StringComparison.Ordinal))
             {
                 error =
-                    $"La ruta '{relativeScriptPath}' no puede convertirse en un nombre de módulo DIL. " +
-                    "Usa sólo identificadores válidos en nombres de carpetas y archivos.";
+                    $"La ruta '{relativeScriptPath}' no corresponde a un módulo DScript válido. " +
+                    "Usa identificadores sin puntos en cada carpeta y nombre de archivo.";
                 moduleName = string.Empty;
                 return false;
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Exposes the editor's current working copies to the DIL parser, including .back content,
-        /// while preserving exact case-sensitive module lookup.
-        /// </summary>
-        private sealed class WorkspaceDILSourceProvider : IDILSourceProvider
-        {
-            private readonly DirectivaCode _codebase;
-            private readonly ScriptWorkspace _workspace;
-
-            public WorkspaceDILSourceProvider(
-                DirectivaCode codebase,
-                ScriptWorkspace workspace)
-            {
-                _codebase = codebase ?? throw new ArgumentNullException(nameof(codebase));
-                _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-            }
-
-            public bool TryReadModule(string moduleName, out string sourceText)
-            {
-                string expectedPath = moduleName.Replace('.', '/') +
-                                      FileSystemScriptStorage.ScriptExtension;
-
-                var script = _codebase.Scripts.FirstOrDefault(
-                    candidate => string.Equals(
-                        candidate.RelativePath,
-                        expectedPath,
-                        StringComparison.Ordinal));
-
-                if (script == null)
-                {
-                    sourceText = string.Empty;
-                    return false;
-                }
-
-                sourceText = _workspace.GetWorkingContent(script.RelativePath);
-                return true;
-            }
         }
 
         private void ScheduleAnalysis()
@@ -1220,77 +1223,62 @@ namespace Directiva.CodeUI
         private void BuildRunningBreakpointMap()
         {
             _runningBreakpointsByModule.Clear();
-
             foreach (var pair in _breakpoints)
             {
                 if (pair.Value == null || pair.Value.Count == 0)
                     continue;
-
                 if (!TryGetModuleName(pair.Key, out string moduleName, out _))
                     continue;
-
-                _runningBreakpointsByModule[moduleName] = new HashSet<int>(pair.Value);
+                string sourcePath = moduleName.Replace('.', '/') +
+                                    FileSystemScriptStorage.ScriptExtension;
+                _runningBreakpointsByModule[sourcePath] = new HashSet<int>(pair.Value);
             }
         }
 
         private void UpdateRunningBreakpoint(string path, int line, bool added)
         {
-            // If this execution was parsed without DEBUG_* metadata, a breakpoint added after
-            // execution started cannot become source-aware until the next run. Existing runs that
-            // already have metadata (debug checkbox or pre-existing breakpoints) can update live.
-            if (!_runningDILDebugEnabled ||
-                _executionController == null ||
+            // Every compiled DScript instruction already carries source metadata, so
+            // breakpoints may also be added after execution has started.
+            if (_executionController == null ||
                 _executionController.State == ScriptExecutionState.Stopped ||
                 !TryGetModuleName(path, out string moduleName, out _))
             {
                 return;
             }
 
-            if (!_runningBreakpointsByModule.TryGetValue(moduleName, out var lines))
+            string sourcePath = moduleName.Replace('.', '/') +
+                                FileSystemScriptStorage.ScriptExtension;
+            if (!_runningBreakpointsByModule.TryGetValue(sourcePath, out var lines))
             {
                 if (!added)
                     return;
 
                 lines = new HashSet<int>();
-                _runningBreakpointsByModule[moduleName] = lines;
+                _runningBreakpointsByModule[sourcePath] = lines;
             }
 
             if (added)
+            {
                 lines.Add(line);
+                _breakpointGate.Reset();
+            }
             else
             {
                 lines.Remove(line);
                 if (lines.Count == 0)
-                    _runningBreakpointsByModule.Remove(moduleName);
+                    _runningBreakpointsByModule.Remove(sourcePath);
             }
 
             _executionController.BreakpointPredicate =
                 _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
+            _runningSourceDebugEnabled = _topBar.DebugSourceEnabled ||
+                                         _runningBreakpointsByModule.Count > 0;
+            RefreshDScriptDebugHighlight();
         }
 
         private bool ShouldPauseAtBreakpoint(DirectivaVM vm)
         {
-            if (vm == null ||
-                vm.CurrentFunction == null ||
-                vm.Debug.Line < 0 ||
-                string.IsNullOrWhiteSpace(vm.Debug.File))
-            {
-                return false;
-            }
-
-            // DEBUG_* describes the source instruction that follows it. Do not stop while the
-            // metadata itself is still being consumed; pause immediately before the real DIL/VM
-            // instruction executes.
-            if (vm.CurrentFunction.TryGetInstruction(vm.InstructionPointer, out Instruction instruction) &&
-                (instruction.Id == InstructionId.DebugFile ||
-                 instruction.Id == InstructionId.DebugLine ||
-                 instruction.Id == InstructionId.DebugSpan))
-            {
-                return false;
-            }
-
-            return _runningBreakpointsByModule.TryGetValue(vm.Debug.File, out var lines) &&
-                   lines.Contains(vm.Debug.Line + 1);
+            return _breakpointGate.ShouldPause(vm, _runningBreakpointsByModule);
         }
 
         private HashSet<int> GetBreakpoints(string path)

@@ -53,6 +53,31 @@ namespace Directiva.UI
     }
 
     /// <summary>
+    /// Inspector-editable, runtime-copyable DScript syntax palette (VS Code Dark+ inspired).
+    /// The editor never mutates the ScriptableObject when user options change.
+    /// In the future, serialized user settings can supply an overridden copy.
+    /// </summary>
+    [Serializable]
+    public sealed class DirectivaSyntaxColors
+    {
+        public bool enabled = true;
+        public Color plain = new Color32(212, 212, 212, 255);
+        public Color keyword = new Color32(197, 134, 192, 255);
+        public Color literal = new Color32(86, 156, 214, 255);
+        public Color number = new Color32(181, 206, 168, 255);
+        public Color stringLiteral = new Color32(206, 145, 120, 255);
+        public Color comment = new Color32(106, 153, 85, 255);
+        public Color operation = new Color32(212, 212, 212, 255);
+        public Color variable = new Color32(156, 220, 254, 255);
+        public Color sharedVariable = new Color32(78, 201, 176, 255);
+        public Color function = new Color32(220, 220, 170, 255);
+        public Color module = new Color32(79, 193, 255, 255);
+        public Color member = new Color32(220, 220, 170, 255);
+
+        public DirectivaSyntaxColors Copy() => (DirectivaSyntaxColors)MemberwiseClone();
+    }
+
+    /// <summary>
     /// Shared, inspector-editable appearance for MainMenu, Simulation and CodeEditor.
     /// Assign an explicit asset on a controller, or edit Resources/UI/DirectivaUITheme
     /// to change the default used by all three without editing scenes.
@@ -67,6 +92,10 @@ namespace Directiva.UI
         public FontAsset codeFont;
         [Tooltip("Reserved for bold code glyphs; the editor currently uses one font for its text surface.")]
         public FontAsset codeBoldFont;
+
+        [Header("DScript syntax highlighting (future user options)")]
+        [Tooltip("Default syntax colors. The editor copies this palette; runtime overrides do not edit this asset.")]
+        public DirectivaSyntaxColors codeSyntaxColors = new DirectivaSyntaxColors();
 
         [Header("Main Menu Branding")]
         [Tooltip("Optional title image for the main menu. None keeps the existing text title.")]

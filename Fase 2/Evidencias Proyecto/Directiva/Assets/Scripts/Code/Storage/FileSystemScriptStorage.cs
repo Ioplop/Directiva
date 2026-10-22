@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DSCompilation.DScript.Modules;
 
 namespace Directiva.CodeUI
 {
@@ -11,7 +12,7 @@ namespace Directiva.CodeUI
     /// </summary>
     public sealed class FileSystemScriptStorage : IScriptStorage
     {
-        public const string ScriptExtension = ".dil";
+        public const string ScriptExtension = ".dscript";
         public const string BackupSuffix = ".back";
         public const string EditorSuffix = ".editor";
 
@@ -90,13 +91,11 @@ namespace Directiva.CodeUI
 
         public string CreateScript(string relativeFolder, string baseName, string initialContent = "")
         {
-            baseName = ValidateSimpleName(baseName);
+            baseName = ValidateModuleSegment(baseName, acceptScriptExtension: true);
             var folder = ToFullDirectory(relativeFolder);
             Directory.CreateDirectory(folder);
 
-            var fileName = baseName.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
-                ? baseName
-                : baseName + ScriptExtension;
+            var fileName = baseName + ScriptExtension;
 
             var full = EnsureInsideRoot(Path.Combine(folder, fileName));
             if (File.Exists(full))
@@ -108,7 +107,7 @@ namespace Directiva.CodeUI
 
         public string CreateFolder(string relativeFolder, string folderName)
         {
-            folderName = ValidateSimpleName(folderName);
+            folderName = ValidateModuleSegment(folderName, acceptScriptExtension: false);
             var full = EnsureInsideRoot(Path.Combine(ToFullDirectory(relativeFolder), folderName));
 
             if (Directory.Exists(full))
@@ -130,6 +129,7 @@ namespace Directiva.CodeUI
                 File.Delete(backup);
             if (File.Exists(editor))
                 File.Delete(editor);
+            TryRemoveGeneratedCache(relativeScriptPath);
         }
 
         public void DeleteFolder(string relativeFolderPath)
@@ -141,15 +141,13 @@ namespace Directiva.CodeUI
 
         public string RenameScript(string relativeScriptPath, string newBaseName)
         {
-            newBaseName = ValidateSimpleName(newBaseName);
+            newBaseName = ValidateModuleSegment(newBaseName, acceptScriptExtension: true);
             var oldFull = ToFullScript(relativeScriptPath);
             var oldBackup = ToFullBackup(relativeScriptPath);
             var oldEditor = ToFullEditor(relativeScriptPath);
             var directory = Path.GetDirectoryName(oldFull)!;
 
-            var fileName = newBaseName.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
-                ? newBaseName
-                : newBaseName + ScriptExtension;
+            var fileName = newBaseName + ScriptExtension;
 
             var newFull = EnsureInsideRoot(Path.Combine(directory, fileName));
             var newBackup = newFull + BackupSuffix;
@@ -163,12 +161,13 @@ namespace Directiva.CodeUI
             if (File.Exists(oldEditor))
                 File.Move(oldEditor, newEditor);
 
+            TryRemoveGeneratedCache(relativeScriptPath);
             return ToRelative(newFull);
         }
 
         public string RenameFolder(string relativeFolderPath, string newName)
         {
-            newName = ValidateSimpleName(newName);
+            newName = ValidateModuleSegment(newName, acceptScriptExtension: false);
             var oldFull = ToFullDirectory(relativeFolderPath);
             var parent = Path.GetDirectoryName(oldFull)!;
             var newFull = EnsureInsideRoot(Path.Combine(parent, newName));
@@ -203,6 +202,7 @@ namespace Directiva.CodeUI
             if (File.Exists(oldEditor))
                 File.Move(oldEditor, newEditor);
 
+            TryRemoveGeneratedCache(relativeScriptPath);
             return ToRelative(newFull);
         }
 
@@ -229,13 +229,11 @@ namespace Directiva.CodeUI
 
         public string DuplicateScript(string relativeScriptPath, string desiredBaseName, string contentToDuplicate)
         {
-            desiredBaseName = ValidateSimpleName(desiredBaseName);
+            desiredBaseName = ValidateModuleSegment(desiredBaseName, acceptScriptExtension: true);
             var source = ToFullScript(relativeScriptPath);
             var folder = Path.GetDirectoryName(source)!;
 
-            var fileName = desiredBaseName.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase)
-                ? desiredBaseName
-                : desiredBaseName + ScriptExtension;
+            var fileName = desiredBaseName + ScriptExtension;
 
             var target = EnsureInsideRoot(Path.Combine(folder, fileName));
             if (File.Exists(target))
@@ -247,7 +245,7 @@ namespace Directiva.CodeUI
 
         public string DuplicateFolder(string relativeFolderPath, string desiredName)
         {
-            desiredName = ValidateSimpleName(desiredName);
+            desiredName = ValidateModuleSegment(desiredName, acceptScriptExtension: false);
             var source = ToFullDirectory(relativeFolderPath);
             var parent = Path.GetDirectoryName(source)!;
             var target = EnsureInsideRoot(Path.Combine(parent, desiredName));
@@ -275,6 +273,15 @@ namespace Directiva.CodeUI
                 var content = File.Exists(backup) ? File.ReadAllText(backup) : File.ReadAllText(script);
                 File.WriteAllText(Path.Combine(target, Path.GetFileName(script)), content);
             }
+        }
+
+        // Generated DIL is optional. Failure to clean it up must never turn a
+        // successful save/rename/move of authoritative DScript into a UI error.
+        private void TryRemoveGeneratedCache(string relativeScriptPath)
+        {
+            try { GeneratedDILCache.DeleteOwnedSibling(RootPath, relativeScriptPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private string ToFullScript(string relativePath)
@@ -321,6 +328,20 @@ namespace Directiva.CodeUI
             }
 
             return full;
+        }
+
+        // Module lookup is dot-qualified: each on-disk file/folder segment must
+        // be a single valid identifier without dots or spaces. Older paths are not
+        // renamed automatically, but the editor won't create more invalid paths.
+        private static string ValidateModuleSegment(string name, bool acceptScriptExtension)
+        {
+            name = ValidateSimpleName(name);
+            if (acceptScriptExtension && name.EndsWith(ScriptExtension, StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(0, name.Length - ScriptExtension.Length);
+
+            if (name.Contains(".") || !DScriptModuleLoader.IsValidName(name))
+                throw new DirectivaLocalizedException("Storage", "invalid_name", name);
+            return name;
         }
 
         private static string ValidateSimpleName(string name)

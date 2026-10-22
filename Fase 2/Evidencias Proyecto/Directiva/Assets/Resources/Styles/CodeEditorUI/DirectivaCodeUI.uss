@@ -1093,3 +1093,29 @@ Toggle {
 .toolbar-row {
     flex-wrap: wrap;
 }
+
+
+/* -------------------------------------------------------------------------
+   v1.17: DScript syntax preview (caret and selection remain native TextField)
+   ------------------------------------------------------------------------- */
+
+.code-text-field > .unity-text-field__input {
+    --unity-cursor-color: rgb(237, 241, 247);
+    --unity-selection-color: rgba(75, 127, 185, 0.47);
+}
+
+.code-syntax-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+.code-syntax-line {
+    position: absolute;
+    white-space: nowrap;
+    -unity-text-align: upper-left;
+    margin: 0;
+    padding: 0;
+}

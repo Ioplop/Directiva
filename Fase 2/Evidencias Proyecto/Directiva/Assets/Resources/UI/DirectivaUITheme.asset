@@ -15,6 +15,20 @@ MonoBehaviour:
   interfaceFont: {fileID: 11400000, guid: aa6721b0de8afe1449c57f6d3a195d46, type: 2}
   codeFont: {fileID: 11400000, guid: f4b366fb6be080948920b12b52d9a1f7, type: 2}
   codeBoldFont: {fileID: 11400000, guid: b60bf10205cf38248ac02089b9a2cf6c, type: 2}
+  codeSyntaxColors:
+    enabled: 1
+    plain: {r: 0.83137255, g: 0.83137255, b: 0.83137255, a: 1}
+    keyword: {r: 0.77254902, g: 0.52549020, b: 0.75294118, a: 1}
+    literal: {r: 0.33725490, g: 0.61176471, b: 0.83921569, a: 1}
+    number: {r: 0.70980392, g: 0.80784314, b: 0.65882353, a: 1}
+    stringLiteral: {r: 0.80784314, g: 0.56862745, b: 0.47058824, a: 1}
+    comment: {r: 0.41568627, g: 0.60000000, b: 0.33333333, a: 1}
+    operation: {r: 0.83137255, g: 0.83137255, b: 0.83137255, a: 1}
+    variable: {r: 0.61176471, g: 0.86274510, b: 0.99607843, a: 1}
+    sharedVariable: {r: 0.30588235, g: 0.78823529, b: 0.69019608, a: 1}
+    function: {r: 0.86274510, g: 0.86274510, b: 0.66666667, a: 1}
+    module: {r: 0.30980392, g: 0.75686275, b: 1.00000000, a: 1}
+    member: {r: 0.86274510, g: 0.86274510, b: 0.66666667, a: 1}
   mainMenuLogo: {fileID: 21300000, guid: bd9f5f0542069fc4981a70c259cb7646, type: 3}
   mainMenuLogoHeight: 140
   mainMenuLogoMaxWidth: 720

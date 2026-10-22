@@ -136,6 +136,8 @@ namespace Directiva.EditorTests
             DScript.DScriptSemanticTests.Register(tests);
             DScript.DScriptSharedTests.Register(tests);
             DScript.DScriptBackendTests.Register(tests);
+            DScript.DScriptEditorIntegrationTests.Register(tests);
+            DScript.DScriptSyntaxHighlightTests.Register(tests);
             // Simulation tests will register here once the simulation exists.
             DirectivaTupleSmokeTests.Register(tests);
             Directiva_TupleCompletionSmokeTests.Register(tests);

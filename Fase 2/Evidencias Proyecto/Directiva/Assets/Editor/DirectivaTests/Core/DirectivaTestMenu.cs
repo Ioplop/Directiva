@@ -96,5 +96,9 @@ namespace Directiva.EditorTests
         private static void DScriptShared() => DirectivaTestRunner.StartCategory("DScript", "Shared");
         [MenuItem("Directiva/Tests/DScript/Backend/TestEverything", false, 151)]
         private static void DScriptBackend() => DirectivaTestRunner.StartCategory("DScript", "Backend");
+        [MenuItem("Directiva/Tests/DScript/EditorIntegration/TestEverything", false, 151)]
+        private static void DScriptEditorIntegration() => DirectivaTestRunner.StartCategory("DScript", "EditorIntegration");
+        [MenuItem("Directiva/Tests/DScript/SyntaxHighlight/TestEverything", false, 151)]
+        private static void DScriptSyntaxHighlight() => DirectivaTestRunner.StartCategory("DScript", "SyntaxHighlight");
     }
 }
