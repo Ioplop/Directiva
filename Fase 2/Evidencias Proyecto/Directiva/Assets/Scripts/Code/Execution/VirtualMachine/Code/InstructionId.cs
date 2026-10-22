@@ -41,6 +41,11 @@ namespace DSExecution.VirtualMachine
         SetProperty = 26,
         CallMethod = 27,
         PushFunction = 28,
-        CallIndirect = 29
+        CallIndirect = 29,
+
+        // Iterator operations. Numeric ids are append-only for future DIB compatibility.
+        Range = 30,
+        IterInit = 31,
+        IterNext = 32
     }
 }

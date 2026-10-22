@@ -75,6 +75,21 @@ namespace DSExecution.VirtualMachine
         public static Instruction Dict(int count)
             => new(InstructionId.Dict, operandA: count);
 
+        /// <summary>RANGE 1/2/3 consumes stop, start+stop, or start+stop+step.</summary>
+        public static Instruction Range(int argumentCount)
+            => new(InstructionId.Range, operandA: argumentCount);
+
+        /// <summary>Converts the top iterable to a heap-backed iteration cursor.</summary>
+        public static Instruction IterInit()
+            => new(InstructionId.IterInit);
+
+        /// <summary>
+        /// ITER_NEXT target: keeps the cursor and pushes its next item, or consumes the
+        /// cursor and jumps when exhausted. Values may themselves be None.
+        /// </summary>
+        public static Instruction IterNext(int endTarget)
+            => new(InstructionId.IterNext, operandA: endTarget);
+
         /// <summary>GET_PROPERTY name: consumes a receiver, pushes the property's value.</summary>
         public static Instruction GetProperty(string name)
             => new(InstructionId.GetProperty, textOperand: name);
@@ -177,6 +192,9 @@ namespace DSExecution.VirtualMachine
                 InstructionId.List => $"List {OperandA}",
                 InstructionId.Set => $"Set {OperandA}",
                 InstructionId.Dict => $"Dict {OperandA}",
+                InstructionId.Range => $"Range {OperandA}",
+                InstructionId.IterInit => "IterInit",
+                InstructionId.IterNext => $"IterNext {OperandA}",
                 InstructionId.GetProperty => $"GetProperty {TextOperand}",
                 InstructionId.SetProperty => $"SetProperty {TextOperand}",
                 InstructionId.CallMethod => $"CallMethod {TextOperand} {OperandA}",

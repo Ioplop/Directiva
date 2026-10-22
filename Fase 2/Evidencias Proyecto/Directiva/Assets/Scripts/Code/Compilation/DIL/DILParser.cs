@@ -6,6 +6,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using DSExecution.DataTypes;
+using DSExecution.Native;
 using DSExecution.Operations;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
@@ -163,7 +164,9 @@ namespace DSCompilation.DIL
                 ["LIST"] = DataTypeId.List,
                 ["SET"] = DataTypeId.Set,
                 ["DICT"] = DataTypeId.Dict,
-                ["FUNCTION"] = DataTypeId.Function
+                ["FUNCTION"] = DataTypeId.Function,
+                ["RANGE"] = DataTypeId.Range,
+                ["ITERATOR"] = DataTypeId.Iterator
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -187,12 +190,21 @@ namespace DSCompilation.DIL
             if (!IsValidQualifiedName(rootModuleName))
                 throw new ArgumentException($"Invalid DIL module name '{rootModuleName}'.", nameof(rootModuleName));
 
+            if (NativeLibrary.IsNativeModule(rootModuleName))
+                throw new DILParseException(rootModuleName, 0,
+                    "Native modules are reserved and cannot be DIL entry modules.");
             var modules = LoadModuleGraph(rootModuleName);
             var orderedModules = modules.Values
                 .OrderBy(module => module.Name, StringComparer.Ordinal)
                 .ToArray();
 
             var functionIds = AssignFunctionIds(orderedModules);
+            var nativeImports = new HashSet<string>(
+                orderedModules.SelectMany(m => m.Imports).Where(NativeLibrary.IsNativeModule),
+                StringComparer.Ordinal);
+            NativeFunction[] nativeFunctions = NativeLibrary.Bind(functionIds.Count, nativeImports);
+            foreach (NativeFunction native in nativeFunctions)
+                functionIds.Add(native.QualifiedName, native.Id);
             var globalSlots = AssignGlobalSlots(orderedModules);
 
             if (globalSlots.Count > options.MaxGlobalSlots)
@@ -226,7 +238,8 @@ namespace DSCompilation.DIL
             return new CodeContext(
                 defaultEntryId,
                 globalSlots.Count,
-                compiledFunctions
+                compiledFunctions,
+                nativeFunctions
             );
         }
 
@@ -262,7 +275,7 @@ namespace DSCompilation.DIL
             string moduleName,
             Dictionary<string, ModuleDefinition> modules)
         {
-            if (modules.ContainsKey(moduleName))
+            if (modules.ContainsKey(moduleName) || NativeLibrary.IsNativeModule(moduleName))
                 return;
 
             if (!IsValidQualifiedName(moduleName))
@@ -467,12 +480,16 @@ namespace DSCompilation.DIL
             Dictionary<string, int> globalSlots,
             bool generateDebugMetadata)
         {
-            int functionCount = functionIds.Count;
-            var compiled = new FunctionContext[functionCount];
+            int compiledCount = orderedModules.Sum(m => m.Functions.Count);
+            var compiled = new FunctionContext[compiledCount];
 
             var baseSymbols = new Dictionary<string, long>(StringComparer.Ordinal);
+            // Global slot operands keep their original meaning even when a native builtin
+            // happens to have the same unqualified name. PUSH_FUNCTION resolves in the
+            // separate functionIds table, so ordinary user globals can shadow builtins.
             foreach (var pair in functionIds)
-                baseSymbols.Add(pair.Key, pair.Value);
+                if (!globalSlots.ContainsKey(pair.Key))
+                    baseSymbols.Add(pair.Key, pair.Value);
             foreach (var pair in globalSlots)
                 baseSymbols.Add(pair.Key, pair.Value);
 
@@ -598,7 +615,8 @@ namespace DSCompilation.DIL
                     symbols,
                     functionIds,
                     globalCount,
-                    output.Length,
+                    functionIds.Count,
+                    module.Imports,
                     instructions!,
                     pendingJumps!
                 );
@@ -663,7 +681,8 @@ namespace DSCompilation.DIL
                 Instruction instruction = instructions[i];
                 if (instruction.Id == InstructionId.Jump ||
                     instruction.Id == InstructionId.JumpIfTrue ||
-                    instruction.Id == InstructionId.JumpIfFalse)
+                    instruction.Id == InstructionId.JumpIfFalse ||
+                    instruction.Id == InstructionId.IterNext)
                 {
                     int oldTarget = instruction.OperandA;
                     if ((uint)oldTarget >= (uint)expandedStart.Length)
@@ -694,6 +713,7 @@ namespace DSCompilation.DIL
             Dictionary<string, int> functionIds,
             int globalCount,
             int functionCount,
+            IReadOnlyCollection<string> functionImports,
             List<Instruction> instructions,
             List<PendingJump> pendingJumps)
         {
@@ -755,6 +775,20 @@ namespace DSCompilation.DIL
                     instructions.Add(Instruction.List(count));
                     return;
                 }
+
+                case "RANGE":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 1 || count > 3)
+                        Throw(moduleName, lineNumber, "RANGE requires exactly 1, 2, or 3 operands on the stack.");
+                    instructions.Add(Instruction.Range(count));
+                    return;
+                }
+
+                case "ITER_INIT":
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
+                    instructions.Add(Instruction.IterInit());
+                    return;
 
                 case "DICT":
                 {
@@ -851,10 +885,40 @@ namespace DSCompilation.DIL
                         name = name.Substring(1);
                     if (!IsValidQualifiedName(name))
                         Throw(moduleName, lineNumber, $"Invalid function name '{tokens[1]}'.");
+                    if (name.IndexOf('.') >= 0 &&
+                        NativeLibrary.IsNativeModule(name.Substring(0, name.IndexOf('.'))) &&
+                        !functionImports.Contains(name.Substring(0, name.IndexOf('.'))))
+                        Throw(moduleName, lineNumber, $"Native module for '{name}' must be imported.");
                     string qualified = name.IndexOf('.') < 0 ? moduleName + "." + name : name;
-                    if (!functionIds.TryGetValue(qualified, out int id))
+                    if (!functionIds.TryGetValue(qualified, out int id) &&
+                        !functionIds.TryGetValue(name, out id))
                         Throw(moduleName, lineNumber, $"Unknown function '{qualified}'.");
                     instructions.Add(Instruction.PushFunction(id));
+                    return;
+                }
+
+                case "PUSH_NATIVE":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
+                    string name = tokens[1];
+                    if (!IsValidQualifiedName(name))
+                        Throw(moduleName, lineNumber, $"Invalid native symbol '{name}'.");
+                    string nameModule = name.IndexOf('.') >= 0 ? name.Substring(0, name.IndexOf('.')) : "";
+                    if (nameModule.Length > 0 && NativeLibrary.IsNativeModule(nameModule) &&
+                        !functionImports.Contains(nameModule))
+                        Throw(moduleName, lineNumber, $"Native module '{nameModule}' must be imported.");
+                    if (NativeLibrary.TryGetConstant(name, out DataValue constant))
+                    {
+                        instructions.Add(Instruction.Push(constant));
+                        return;
+                    }
+                    if (functionIds.TryGetValue(name, out int nativeId) &&
+                        (name.IndexOf('.') == -1 || NativeLibrary.IsNativeModule(nameModule)))
+                    {
+                        instructions.Add(Instruction.PushFunction(nativeId));
+                        return;
+                    }
+                    Throw(moduleName, lineNumber, $"Unknown native symbol '{name}' (is its module imported?).");
                     return;
                 }
 
@@ -906,6 +970,11 @@ namespace DSCompilation.DIL
                 case "CONTEXT_END":
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
                     instructions.Add(Instruction.ContextEnd());
+                    return;
+
+                case "ITER_NEXT":
+                    ParseJump(moduleName, lineNumber, InstructionId.IterNext, mnemonic,
+                        tokens, symbols, instructions, pendingJumps);
                     return;
 
                 case "JUMP":
@@ -1042,7 +1111,8 @@ namespace DSCompilation.DIL
                 Instruction instruction = instructions[i];
                 if (instruction.Id != InstructionId.Jump &&
                     instruction.Id != InstructionId.JumpIfTrue &&
-                    instruction.Id != InstructionId.JumpIfFalse)
+                    instruction.Id != InstructionId.JumpIfFalse &&
+                    instruction.Id != InstructionId.IterNext)
                 {
                     continue;
                 }
@@ -1065,6 +1135,7 @@ namespace DSCompilation.DIL
                 InstructionId.Jump => Instruction.Jump(target),
                 InstructionId.JumpIfTrue => Instruction.JumpIfTrue(target),
                 InstructionId.JumpIfFalse => Instruction.JumpIfFalse(target),
+                InstructionId.IterNext => Instruction.IterNext(target),
                 _ => throw new ArgumentOutOfRangeException(nameof(id))
             };
         }

@@ -14,22 +14,31 @@ namespace DSExecution.VirtualMachine
         private readonly HeapMemory heap;
         private readonly List<WeakReference<DirectivaVM>> vms = new();
         private CodeContext functionProgram;
+        private ulong randomState;
+        public ulong RandomSeed { get; private set; }
+        private const ulong DefaultSeed = 0xD1EEC7A5B16C8E31UL;
 
         public int GlobalCount => globals.Length;
         public HeapMemory Heap => heap;
         public ulong GarbageCollectionCount { get; private set; }
 
         public VMMemoryContext(int globalCount)
-            : this(globalCount, new HeapMemory())
+            : this(globalCount, new HeapMemory(), DefaultSeed)
         {
         }
 
         public VMMemoryContext(int globalCount, ulong maxHeapSize)
-            : this(globalCount, new HeapMemory(maxHeapSize))
+            : this(globalCount, new HeapMemory(maxHeapSize), DefaultSeed)
         {
         }
 
         public VMMemoryContext(int globalCount, HeapMemory heap)
+            : this(globalCount, heap, DefaultSeed) { }
+
+        public VMMemoryContext(int globalCount, ulong maxHeapSize, ulong randomSeed)
+            : this(globalCount, new HeapMemory(maxHeapSize), randomSeed) { }
+
+        public VMMemoryContext(int globalCount, HeapMemory heap, ulong randomSeed)
         {
             if (globalCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(globalCount));
@@ -37,6 +46,27 @@ namespace DSExecution.VirtualMachine
             this.heap = heap ?? throw new ArgumentNullException(nameof(heap));
             globals = new DataValue[globalCount];
             ResetGlobals();
+            ReseedRandom(randomSeed);
+        }
+
+        /// <summary>Host-controlled seed; resetting mid-simulation affects all sharing VMs.</summary>
+        public void ReseedRandom(ulong seed)
+        {
+            RandomSeed = seed;
+            randomState = seed;
+        }
+
+        /// <summary>One deterministic SplitMix64 draw; shared among VMs in scheduler order.</summary>
+        internal ulong NextRandomUInt64()
+        {
+            unchecked
+            {
+                randomState += 0x9E3779B97F4A7C15UL;
+                ulong value = randomState;
+                value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9UL;
+                value = (value ^ (value >> 27)) * 0x94D049BB133111EBUL;
+                return value ^ (value >> 31);
+            }
         }
 
         /// <summary>

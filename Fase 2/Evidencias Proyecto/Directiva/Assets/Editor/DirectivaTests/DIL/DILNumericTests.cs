@@ -87,11 +87,11 @@ namespace Directiva.EditorTests.DIL
                 t.Equal("True", r.Output[2], "bool text");
                 t.Equal("None", r.Output[3], "none text");
             });
-            Add("UnsupportedStringToInt", "Current DTString does not yet support parsing to Int", t =>
+            Add("CastStringToInt", "String -> Int parses numeric text; malformed values fail clearly", t =>
             {
-                t.Note("String to numeric casts are currently not implemented in DTString; expect InvalidCast.");
+                DILTestHarness.ExpectInt(t, "PUSH STRING \"21\"\nCAST INT\nRETURN", 21);
                 DILTestHarness.ExpectFault(t, DILTestHarness.Evaluate(t,
-                    "PUSH STRING \"21\"\nCAST INT\nRETURN"), RuntimeErrorId.InvalidCast);
+                    "PUSH STRING \"not-a-number\"\nCAST INT\nRETURN"), RuntimeErrorId.InvalidCastValue);
             });
             Add("CastDecimalToInt", "Decimal -> Int truncates fractional part toward zero", t =>
                 DILTestHarness.ExpectInt(t, "PUSH DECIMAL -2.9\nCAST INT\nRETURN", -2));

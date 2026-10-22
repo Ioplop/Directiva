@@ -52,6 +52,8 @@ namespace DSExecution.DataTypes
             result[(int)DataTypeId.Set] = DTSet.Instance;
             result[(int)DataTypeId.Dict] = DTDict.Instance;
             result[(int)DataTypeId.Function] = DTFunction.Instance;
+            result[(int)DataTypeId.Range] = DTRange.Instance;
+            result[(int)DataTypeId.Iterator] = DTIterator.Instance;
             // Remaining to add...
             // Unit
             // Base

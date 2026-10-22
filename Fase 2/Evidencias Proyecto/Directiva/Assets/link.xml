@@ -1,0 +1,9 @@
+<linker>
+  <!-- NativeLibrary discovers these attributed static methods via reflection. -->
+  <assembly fullname="Assembly-CSharp">
+    <type fullname="DSExecution.Native.NativeBuiltins" preserve="all" />
+    <type fullname="DSExecution.Native.NativeMath" preserve="all" />
+    <type fullname="DSExecution.Native.NativeRandom" preserve="all" />
+    <type fullname="DSExecution.Native.DScriptNativeFunctionAttribute" preserve="all" />
+  </assembly>
+</linker>

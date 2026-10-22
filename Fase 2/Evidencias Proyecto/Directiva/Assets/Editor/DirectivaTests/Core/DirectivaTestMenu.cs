@@ -42,6 +42,20 @@ namespace Directiva.EditorTests
         private static void Functions() => DirectivaTestRunner.StartCategory("DIL", "Functions");
         [MenuItem("Directiva/Tests/DIL/FunctionConcurrency/TestEverything", false, 120)]
         private static void FunctionConcurrency() => DirectivaTestRunner.StartCategory("DIL", "FunctionConcurrency");
+        [MenuItem("Directiva/Tests/DIL/Iterators/TestEverything", false, 120)]
+        private static void Iterators() => DirectivaTestRunner.StartCategory("DIL", "Iterators");
+        [MenuItem("Directiva/Tests/DIL/Ranges/TestEverything", false, 120)]
+        private static void Ranges() => DirectivaTestRunner.StartCategory("DIL", "Ranges");
+        [MenuItem("Directiva/Tests/DIL/IteratorMemory/TestEverything", false, 120)]
+        private static void IteratorMemory() => DirectivaTestRunner.StartCategory("DIL", "IteratorMemory");
+        [MenuItem("Directiva/Tests/DIL/NativeBuiltins/TestEverything", false, 120)]
+        private static void NativeBuiltins() => DirectivaTestRunner.StartCategory("DIL", "NativeBuiltins");
+        [MenuItem("Directiva/Tests/DIL/NativeMath/TestEverything", false, 120)]
+        private static void NativeMath() => DirectivaTestRunner.StartCategory("DIL", "NativeMath");
+        [MenuItem("Directiva/Tests/DIL/NativeRandom/TestEverything", false, 120)]
+        private static void NativeRandom() => DirectivaTestRunner.StartCategory("DIL", "NativeRandom");
+        [MenuItem("Directiva/Tests/DIL/NativeLinking/TestEverything", false, 120)]
+        private static void NativeLinking() => DirectivaTestRunner.StartCategory("DIL", "NativeLinking");
         [MenuItem("Directiva/Tests/DIL/Members/TestEverything", false, 120)]
         private static void Members() => DirectivaTestRunner.StartCategory("DIL", "Members");
         [MenuItem("Directiva/Tests/DIL/Dictionaries/TestEverything", false, 120)]

@@ -25,6 +25,10 @@ namespace DSExecution.DataTypes
         // Compiled function reference. Not heap-backed and never creates runtime code.
         Function = 13,
 
+        // Lazy built-in sequences and heap-backed traversal cursors.
+        Range = 14,
+        Iterator = 15,
+
         // Simulation types
         Unit = 9,
         Base = 10,
