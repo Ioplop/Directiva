@@ -11,8 +11,10 @@ namespace DSExecution.Native
     /// <summary>Basic language builtins, available without an import statement.</summary>
     public static class NativeBuiltins
     {
-        [DScriptNativeFunction("", "print", 1, 1)]
-        public static NativeResult Print(NativeCallContext c) => c.Print(c[0]);
+        // One call, one output event. The native bridge converts each argument using
+        // the same runtime cast as str(value), without changing the compiler.
+        [DScriptNativeFunction("", "print", 0, 16)]
+        public static NativeResult Print(NativeCallContext c) => c.PrintArguments();
 
         [DScriptNativeFunction("", "range", 1, 3)]
         public static NativeResult Range(NativeCallContext c)

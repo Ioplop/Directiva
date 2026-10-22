@@ -68,8 +68,70 @@ namespace Directiva.EditorTests.DIL
             });
             Add("NativeBuiltins", "PrintReturnsNone", "print does not leave input on stack", t =>
                 Value(t, "PUSH_FUNCTION print\nPUSH INT 3\nCALL_INDIRECT 1\nIS_TRUTHY\nRETURN", DataTypeId.Bool, 0));
-            Add("NativeBuiltins", "PrintArity", "print rejects wrong argument counts", t =>
-                Error(t, Call("print", 0), RuntimeErrorId.InvalidOperation));
+            Add("NativeBuiltins", "PrintZeroArgs", "print() emits exactly one empty line and returns None", t => {
+                var r = Run(t, Call("print", 0));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.None, r.Value.dataType, "return type");
+                t.Equal(1, r.Output.Count, "event count");
+                t.Equal("", r.Output[0], "empty line");
+            });
+            Add("NativeBuiltins", "PrintMixedArguments", "print() formats mixed values separated by one space", t => {
+                var r = Run(t, Call("print", 4, "PUSH STRING \"Value:\"", "PUSH INT 42",
+                    "PUSH BOOL TRUE", "PUSH NONE"));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.None, r.Value.dataType, "return type");
+                t.Equal(1, r.Output.Count, "one event, not one per argument");
+                t.Equal("Value: 42 True None", r.Output[0], "printed values");
+            });
+            Add("NativeBuiltins", "PrintList", "print(label, List) reuses str(List) representation", t => {
+                var r = Run(t, Call("print", 2, "PUSH STRING \"Primos:\"",
+                    "PUSH INT 2\nPUSH INT 3\nPUSH INT 5\nLIST 3"));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal("Primos: [2, 3, 5]", r.Output.Single(), "list format");
+            });
+            Add("NativeBuiltins", "PrintEmptyString", "empty argument still adds its surrounding separators", t => {
+                var r = Run(t, Call("print", 3, "PUSH STRING \"a\"",
+                    "PUSH STRING \"\"", "PUSH STRING \"b\""));
+                t.Equal("a  b", r.Output.Single(), "empty middle field");
+            });
+            Add("NativeBuiltins", "PrintFromFunctionValue", "a stored print reference accepts multiple arguments", t => {
+                var r = Run(t, "PUSH_FUNCTION print\nSTORE_LOCAL 0\nLOAD_LOCAL 0\n" +
+                    "PUSH STRING \"Hola\"\nPUSH INT 17\nCALL_INDIRECT 2\nRETURN", locals: 1);
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal("Hola 17", r.Output.Single(), "indirect output");
+            });
+            Add("NativeBuiltins", "PrintCallerStack", "variadic print does not consume caller temporary values", t => {
+                var r = Run(t, "PUSH INT 10\nPUSH_FUNCTION print\nPUSH INT 1\nPUSH INT 2\n" +
+                    "CALL_INDIRECT 2\nPOP\nPUSH INT 7\nADD\nRETURN");
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal("1 2", r.Output.Single(), "one event");
+                t.Equal(17L, unchecked((long)r.Value.value), "caller stack value retained");
+            });
+            Add("NativeBuiltins", "PrintNestedCall", "nested str(print()) preserves earlier expression values", t => {
+                var r = Run(t, "PUSH STRING \"9\"\nPUSH_FUNCTION str\nPUSH_FUNCTION print\n" +
+                    "PUSH STRING \"Hola\"\nCALL_INDIRECT 1\nCALL_INDIRECT 1\n" +
+                    "ADD\nPUSH STRING \"5\"\nADD\nRETURN");
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal("Hola", r.Output.Single(), "inner print event");
+                t.Check(r.Value.TryGetHeapReference(out uint id), "string return reference");
+                t.Equal("9None5", ((StringHeapObject)r.VM.Memory.GetHeap(id)).Value, "nested return");
+            });
+            Add("NativeBuiltins", "PrintMaximumArguments", "print accepts the native limit of sixteen arguments", t => {
+                string[] arguments = Enumerable.Range(0, 16).Select(i => "PUSH INT " + i).ToArray();
+                var r = Run(t, Call("print", 16, arguments));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(string.Join(" ", Enumerable.Range(0, 16)), r.Output.Single(), "all arguments");
+            });
+            Add("NativeBuiltins", "PrintArity", "print rejects seventeen arguments (native limit is sixteen)", t =>
+                Error(t, Call("print", 17, Enumerable.Range(0, 17).Select(i => "PUSH INT " + i).ToArray()),
+                    RuntimeErrorId.InvalidOperation));
+            Add("NativeBuiltins", "PrintDirectCallRejected", "variable-arity print requires CALL_INDIRECT n", t =>
+                Error(t, "PUSH INT 3\nCALL $print\nRETURN", RuntimeErrorId.InvalidInstruction));
+            Add("NativeBuiltins", "PrintAtomicFailure", "print never emits partial output if a later cast fails", t => {
+                var r = Run(t, Call("print", 2, "PUSH INT 1", "PUSH INT 123456789"), heap: 2);
+                DILTestHarness.ExpectFault(t, r, RuntimeErrorId.OutOfMemory);
+                t.Equal(0, r.Output.Count, "no partial output");
+            });
             Add("NativeBuiltins", "PrintOOM", "print conversion observes heap limits", t =>
                 Error(t, Call("print", 1, "PUSH INT 123456789"), RuntimeErrorId.OutOfMemory, heap: 2));
             Add("NativeBuiltins", "NativeResultPreservesCallerTemporaries", "native call preserves caller's stack base", t =>

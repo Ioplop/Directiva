@@ -690,3 +690,11 @@ representan aún presupuestos de balance final.
   previsto **1183**. Sin ejecucion Unity en este entorno. Verificar zoom en
   Play Mode, cursor, seleccion, colores y desplazamiento al final.
 - Sin .meta, archivos eliminados o renombrados.
+
+
+### 2026-10-22 — print con cantidad variable de argumentos
+
+- `print()` pasa de aridad fija 1 a **0..16 argumentos**, respetando el límite ya existente de `DScriptNativeFunctionAttribute`. `NativeBuiltins.Print` despacha a `NativeCallContext.PrintArguments`; cada valor se convierte mediante el mismo cast a String que `str`, se une con un espacio, y la consola recibe un único evento por llamada. `print()` produce un evento de línea vacía y retorna None. Si una conversión falla, no se emite salida parcial.
+- Sin excepciones especiales en el compilador ni opcodes nuevos: DScript emite `CALL_INDIRECT n`; la VM consume solamente esos `n` argumentos y la referencia a la función (no todo el stack del llamador). Las referencias indirectas a `print` siguen funcionando. `CALL $print` directo DIL queda inválido por tratarse ahora de aridad variable. La instrucción DIL `PRINT` no cambia.
+- Se incorporaron pruebas para aridad cero, tipos y listas, espacios con strings vacías, n=16, rechazo de n=17, `CALL $print` directo, referencias indirectas, atomicidad en OOM, resultados None, expresiones anidadas, temporales en stack y orden de evaluación. Validar en Unity con `DIL/NativeBuiltins/TestEverything`, `DScript/Backend/TestEverything` y `TestAll`. Sin ejecución de Unity desde este entorno.
+- No hubo cambios de `.meta`, cambios de IDs de operación, renombres ni eliminaciones.

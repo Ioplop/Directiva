@@ -55,6 +55,22 @@ namespace Directiva.EditorTests.DScript
             return vm;
         }
 
+        private static DirectivaVM ExecuteCaptured(DirectivaTestContext t,
+            DScriptCompiledProgram program, out List<string> output,
+            VMMemoryContext memory = null)
+        {
+            t.Check(program.TryGetFunctionId("test.main", out int id), "Missing test.main");
+            var vm = new DirectivaVM(program.Code,
+                memory ?? new VMMemoryContext(program.Code.GlobalCount), null, id);
+            var lines = new List<string>();
+            vm.Printed += lines.Add;
+            vm.Run(50000);
+            t.Equal(VMExecutionStatus.Completed, vm.Status,
+                "Execution with print: " + vm.Error?.Message);
+            output = lines;
+            return vm;
+        }
+
         private static void CheckInt(DirectivaTestContext t, string source, long expected)
         {
             var program = Compile(t, source);
@@ -78,6 +94,41 @@ namespace Directiva.EditorTests.DScript
             void Add(string id, string description, Action<DirectivaTestContext> action)
                 => DScriptTestHarness.Add(tests, "Backend", id, description, action);
 
+            Add("PrintMultipleArguments", "DScript print(label, list) emits one formatted event", t => {
+                var p = Compile(t, "def main():\n    print(\"Primos:\", [2, 3, 5])\n");
+                t.Contains("CALL_INDIRECT 2", p.DILModules["test"], "two arguments compiled");
+                var vm = ExecuteCaptured(t, p, out List<string> output);
+                t.Equal(DataTypeId.None, vm.ReturnValue.dataType, "implicit return");
+                t.Equal(1, output.Count, "one event");
+                t.Equal("Primos: [2, 3, 5]", output[0], "text");
+            });
+            Add("PrintZeroAndEmptyArguments", "print() and empty string fields work through DScript", t => {
+                var p = Compile(t, "def main():\n    print()\n    print(\"a\", \"\", \"b\")\n");
+                ExecuteCaptured(t, p, out List<string> output);
+                t.Equal(2, output.Count, "calls produce distinct events");
+                t.Equal("", output[0], "blank print line");
+                t.Equal("a  b", output[1], "empty argument separators");
+            });
+            Add("PrintNestedExpression", "print() return is None and nested function calls preserve stack", t => {
+                var p = Compile(t, "def main():\n    a = str(4 + 5) + str(print(\"Hola\")) + \"5\"\n    return a\n");
+                var vm = ExecuteCaptured(t, p, out List<string> output);
+                t.Equal("Hola", output.Single(), "print side effect");
+                t.Check(vm.ReturnValue.TryGetHeapReference(out uint id), "string return reference");
+                t.Equal("9None5", ((StringHeapObject)vm.Memory.GetHeap(id)).Value, "nested expression");
+            });
+            Add("PrintIndirectValue", "an alias to print retains its variadic arity", t => {
+                var p = Compile(t, "def main():\n    show = print\n    show(\"Hola\", 17)\n");
+                ExecuteCaptured(t, p, out List<string> output);
+                t.Equal("Hola 17", output.Single(), "aliased print");
+            });
+            Add("PrintArgumentsEvaluatedOnce", "each print argument is evaluated left-to-right once", t => {
+                var p = Compile(t, "shared counter = 0\ndef touch(x):\n    counter += 1\n    return x\ndef main():\n    print(touch(\"uno\"), touch(2), touch(\"tres\"))\n    return counter\n");
+                var memory = Memory(t, p, out DScriptInitializationReport report);
+                t.Check(!report.HasErrors, "shared initialization");
+                var vm = ExecuteCaptured(t, p, out List<string> output, memory);
+                t.Equal("uno 2 tres", output.Single(), "ordered output");
+                t.Equal(3L, unchecked((long)vm.ReturnValue.value), "three evaluations");
+            });
             Add("ArithmeticPrecedence", "AST precedence survives DIL emission", t =>
                 CheckInt(t, "def main():\n    return 2 + 3 * 4\n", 14));
             Add("IntegerMinimum", "Signed 64-bit minimum is generated without overflow", t =>

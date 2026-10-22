@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using DSExecution.DataTypes;
 using DSExecution.Errors;
 using DSExecution.Operations;
@@ -91,14 +92,31 @@ namespace DSExecution.Native
                 $"Native operation {operation} cannot be continued in a single step."));
         }
 
-        public NativeResult Print(DataValue value)
+        /// <summary>Formats all native call arguments as a single space-separated console event.</summary>
+        public NativeResult PrintArguments() => PrintValues(Arguments);
+
+        // Preserve the existing single-value helper for other trusted native providers.
+        public NativeResult Print(DataValue value) => PrintValues(new[] { value });
+
+        private NativeResult PrintValues(IReadOnlyList<DataValue> values)
         {
-            NativeResult text = Cast(value, DataTypeId.String);
-            if (!text.IsSuccess) return text;
-            if (!text.Value.TryGetHeapReference(out uint id) ||
-                !Memory.TryGetHeap(id, out HeapObject obj) || obj is not StringHeapObject str)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("print() did not produce a valid String."));
-            output(str.Value);
+            // Do not emit partial output when a later argument cannot be converted.
+            // The VM keeps all original arguments on its evaluation stack as GC roots
+            // for the duration of this native call. Converted strings are copied to
+            // the host-side builder immediately and do not need to survive the next cast.
+            var text = new StringBuilder();
+            for (int i = 0; i < values.Count; i++)
+            {
+                NativeResult converted = Cast(values[i], DataTypeId.String);
+                if (!converted.IsSuccess) return converted;
+                if (!converted.Value.TryGetHeapReference(out uint id) ||
+                    !Memory.TryGetHeap(id, out HeapObject obj) || obj is not StringHeapObject str)
+                    return NativeResult.Failure(RuntimeError.InvalidOperation(
+                        "print() did not produce a valid String."));
+                if (i > 0) text.Append(' ');
+                text.Append(str.Value);
+            }
+            output(text.ToString());
             return NativeResult.Success(DataValue.None());
         }
     }
