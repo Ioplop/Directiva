@@ -72,6 +72,24 @@ namespace DSExecution.VirtualMachine
         public int EvaluationStackCount => evaluationStack.Count;
 
         /// <summary>
+        /// Logical cost of the next Advance. DEBUG_* metadata costs zero; ordinary
+        /// and continued instructions cost one. This does not imply zero CPU time.
+        /// </summary>
+        public int NextInstructionCost
+        {
+            get
+            {
+                if (Status != VMExecutionStatus.Running || pendingOperation != null ||
+                    CurrentFunction == null ||
+                    !CurrentFunction.TryGetInstruction(InstructionPointer, out Instruction current))
+                    return 1;
+                return current.Id == InstructionId.DebugFile ||
+                    current.Id == InstructionId.DebugLine ||
+                    current.Id == InstructionId.DebugSpan ? 0 : 1;
+            }
+        }
+
+        /// <summary>
         /// Emits text produced by the PRINT instruction. The VM itself is UI-agnostic;
         /// hosts decide where this output is displayed.
         /// </summary>
@@ -219,6 +237,7 @@ namespace DSExecution.VirtualMachine
                 throw new ArgumentOutOfRangeException(nameof(instructionBudget));
 
             int steps = 0;
+            int advances = 0;
             VMAdvanceResult lastResult = Status switch
             {
                 VMExecutionStatus.Completed => VMAdvanceResult.Completed(returnValue),
@@ -228,8 +247,10 @@ namespace DSExecution.VirtualMachine
 
             while (steps < instructionBudget && Status == VMExecutionStatus.Running)
             {
+                int cost = NextInstructionCost;
                 lastResult = Advance();
-                steps++;
+                advances++;
+                steps += cost;
             }
 
             bool budgetExhausted =
@@ -239,6 +260,7 @@ namespace DSExecution.VirtualMachine
             return new VMRunResult(
                 Status,
                 steps,
+                advances,
                 budgetExhausted,
                 lastResult.Error,
                 Status == VMExecutionStatus.Completed
@@ -831,6 +853,10 @@ namespace DSExecution.VirtualMachine
         private OperationResult DispatchMember(InstructionId kind, string name,
             DataValue[] arguments, OperationState? state, uint auxiliaryReference)
         {
+            // Resolve the name against the receiver's runtime DataType. Never translate
+            // it globally into an OperationId: List.pop, Set.pop and Dict.pop have
+            // distinct signatures and/or primitive operations. Annotated handlers
+            // decide whether to delegate to an existing native operation.
             DataType? type = DataType.GetDataType(arguments[0].dataType);
             if (type == null)
                 return OperationResult.OpError(RuntimeError.MemberNotFound(
@@ -1345,6 +1371,15 @@ namespace DSExecution.VirtualMachine
         /// <summary>
         /// Permanently faults this VM instance and exposes the runtime error to its caller.
         /// </summary>
+        /// <summary>
+        /// Stops an initializer that exhausted its logical execution budget, so
+        /// unfinished frames/continuation roots do not remain reachable by the GC.
+        /// </summary>
+        internal void Abort(RuntimeError error)
+        {
+            if (Status == VMExecutionStatus.Running) Fault(error);
+        }
+
         private VMAdvanceResult Fault(RuntimeError error)
         {
             pendingOperation = null;

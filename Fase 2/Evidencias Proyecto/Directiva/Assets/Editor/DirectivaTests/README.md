@@ -30,9 +30,9 @@
 | `ListConcurrency/TestEverything` | Listas compartidas por varias VMs, aislamiento de resultados parciales y conflictos de version |
 | `Sets/TestEverything`, `SetAlgebra`, `SetMemory`, `SetConcurrency`, `SetRobustness` | Conjuntos, hash, algebra, GC, concurrencia y estres (126 pruebas validadas en Unity) |
 | `Members/TestEverything` | Parser y ejecución de miembros DIL, herencia, getters/setters y métodos continuados (53 pruebas; validadas en Unity) |
-| `Iterators/TestEverything` | Iteración de Tuple/List/Set/Dict, None vs fin, saltos DIL y errores de cursor (40 pruebas nuevas) |
-| `Ranges/TestEverything` | Construcción `RANGE 1/2/3`, rangos perezosos, límites Int64, Length, casts y OOM (38 pruebas nuevas) |
-| `IteratorMemory/TestEverything` | Raíces GC, presión de memoria, invalidación por mutación y varias VMs (17 pruebas nuevas) |
+| `Iterators/TestEverything` | Iteración de Tuple/List/Set/Dict, None vs fin, saltos DIL y errores de cursor (39 pruebas) |
+| `Ranges/TestEverything` | Construcción `RANGE 1/2/3`, rangos perezosos, límites Int64, Length, casts y OOM (37 pruebas) |
+| `IteratorMemory/TestEverything` | Raíces GC, presión de memoria, invalidación por mutación y varias VMs (16 pruebas) |
 | `Functions/TestEverything` | Function como valor, imports, aridad, CALL_INDIRECT, hashing, colecciones y fallos esperados (63 nuevas) |
 | `FunctionConcurrency/TestEverything` | Selector global de comportamiento entre VMs, snapshots, determinismo, programa compartido y GC (10 nuevas) |
 | `Dictionaries/TestEverything` | Constructor, GET/SET/DELETE/POP_ITEM, hashing, igualdad y conversiones |
@@ -46,7 +46,7 @@
 | `Robustness/TestEverything` | Stress reproducible, cientos de operaciones muestreadas, carga GC y tuplas profundamente anidadas |
 | `Regression/TestEverything` | Las dos suites de Tuple preexistentes, ahora integradas en el catalogo y con un reporte por caso |
 
-**Limites de cobertura:** la suite cubre el **runtime DIL implementado**, no el futuro compilador DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
+**Limites de cobertura:** los casos DIL cubren el **runtime DIL implementado** y los casos DScript cubren **solo lexer/parser/imports/semántica**, no aún ejecución DScript, gameplay ni UI visual/escenas. `InvalidCastValue` tiene solo una prueba de contrato del error, porque todavia no existe un camino de DIL que lo produzca. Pruebas con `CodeContext`/`Instruction` manuales se identifican en los reportes y no deben confundirse con errores que un DIL bien parseado permite provocar.
 
 ## Agregar mas pruebas
 
@@ -110,5 +110,49 @@ Esta entrega fue sometida a revisiones estaticas de codigo y estructura del ZIP,
 - **Error y None:** `None` es un elemento normal. El fin de iteración se representa por el salto, nunca con un valor especial.
 - **Fuentes:** Tuple, List, Set, Dictionary (claves), Range; los mutable cambian `Version` en cada mutación efectiva. El iterador detecta cambios y devuelve `IteratorModified` antes de avanzar.
 - **GC:** los cursores residen en heap y su `GetReferences()` conserva el objeto original. Ambos tienen tamaño lógico fijo; ningún valor individual de Range se preasigna.
-- **Pruebas:** menús `DIL/Iterators`, `DIL/Ranges` y `DIL/IteratorMemory`; 40+38+17=95 nuevas, total previsto **751** partiendo de las 656 aprobadas. **No afirmar PASS hasta ejecutar Unity.**
-- **Pendiente:** la función nativa `range()` para DScript y el compilador DScript; `RANGE n` es un constructor textual de DIL para permitir pruebas independientes.
+- **Pruebas:** menús `DIL/Iterators`, `DIL/Ranges` y `DIL/IteratorMemory`; 39+37+16=92 nuevas, total real **748** partiendo de las 656 aprobadas. **No afirmar PASS hasta ejecutar Unity.**
+- **Estado:** `range()` ya está implementada como nativa en DIL y el frontend DScript reconoce `for`; falta el backend DScript → DIL para ejecutarlo. `RANGE n` continúa como constructor DIL.
+
+## DScript Frontend — primera entrega (2026-10-21)
+
+La categoría **`Directiva/Tests/DScript`** se integra en `TestAll` y se puede ejecutar por separado:
+
+- `Lexer/TestEverything`: tokens, sangría, strings, líneas, límites y errores léxicos.
+- `Parser/TestEverything`: AST, precedencia, funciones, bloques, colecciones y errores de gramática.
+- `Modules/TestEverything`: grafo de módulos, imports de usuario y nativos, `as`, `from`, wildcard, errores y provider filesystem.
+- `Semantics/TestEverything`: `shared`/locals/parámetros, nombres, slots, funciones como valores, ámbitos y errores estáticos.
+- `Shared/TestEverything`: símbolos compartidos únicos entre módulos, declaraciones e inicializadores, ciclos, orden de imports y política de recuperación prevista.
+
+El grupo `Shared` comprueba **el plan de inicialización, no su ejecución**: un error runtime de un paso deberá registrarse y no cancelar los posteriores ni la partida, cuando exista el backend/orquestador DScript.
+
+Todas las pruebas del frontend usan **fuentes `.dscript` en memoria** (excepto una prueba del provider que usa y limpia una carpeta temporal externa). No generan DIL ni ejecutan VM. Se conserva el formato y la carpeta externa de reportes existente. La gramática concreta y las limitaciones están documentadas en `Assets/Scripts/Code/Compilation/DScript/GRAMMAR.md`. Las pruebas requieren compilarse y ejecutarse en Unity antes de declararse aprobadas.
+
+## Despacho `CALL_METHOD` por tipo (2026-10-22; pendiente de Unity)
+
+El frontend DScript no necesita conocer el tipo de la variable receptora para compilar
+`obj.pop(...)`: siempre emite `CALL_METHOD pop n` para invocaciones a miembros. La VM
+resuelve el miembro en el DataType del receptor en tiempo de ejecucion. Un adaptador
+de ese tipo puede invocar su operacion nativa sin convertir el nombre globalmente a
+un `OperationId` (por ejemplo, `List.pop`/`Dict.pop` -> `Pop`, `Set.pop` -> `SetPop`).
+
+- `List.pop()` quita el ultimo elemento; `List.pop(indice)` permite indices negativos.
+- `Set.pop()` no recibe indice y devuelve un miembro segun el orden interno determinista.
+- `Dict.pop(clave)` exige clave; la variante con valor predeterminado no esta implementada.
+- `List.pop(a,b)`, `Set.pop(0)`, `Dict.pop()` y los receptores sin `pop` deben generar
+  errores de script tipificados, no excepciones internas.
+- Se agregan **21 pruebas** al grupo `DIL/Members` (antes 53, ahora 74): incluye
+  resolucion dinamica, operaciones nativas equivalentes, GC/continuaciones ya existentes
+  y un nuevo conflicto de mutacion concurrente durante `List.pop(index)`.
+- **Objetivo:** 1063 pruebas en `TestAll` sobre la linea base 1042/1042 confirmada
+  por el usuario. No hay ejecucion ni compilacion Unity desde este entorno;
+  verificar `Directiva > Tests > DIL > Members > TestEverything` y luego `TestAll`.
+
+## DScript backend — fase 2 (2026-10-22)
+
+- `Directiva/Tests/DScript/Backend/TestEverything`: compilación integral
+  DScript -> DIL -> `CodeContext` y ejecución real en la VM; verifica módulos,
+  cortocircuito, funciones, `CALL_METHOD`, propiedades, indexación, bucles,
+  depuración, memoria aislada y bootstrap `shared` con errores recuperables.
+- Las pruebas del grupo `Backend` adjuntan fuentes originales y DIL emitido.
+- Ejecutar después `Directiva/Tests/TestAll` para comprobar regresiones de DIL
+  y del frontend. No afirmar que pasaron hasta ejecutar Unity Editor.

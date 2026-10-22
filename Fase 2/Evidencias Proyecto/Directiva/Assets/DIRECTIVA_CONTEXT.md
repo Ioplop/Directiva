@@ -2,8 +2,8 @@
 
 > **Documento de orientación para agentes de IA y colaboradores.** Es un mapa del proyecto, no una especificación exhaustiva ni un reemplazo del código fuente.
 >
-> **Última actualización:** 2026-10-21 21:18:34 -0300 (America/Santiago)  
-> **Base examinada:** `Assets.tar(1).gz` (2026-10-21) + diferencial Iterators & Range aplicado al snapshot. El responsable confirmó **748/748 pruebas PASS en Unity** (656 de la base + 92 de iteradores); esta entrega añade **114 pruebas nativas nuevas: primera ejecución 859 PASS, 2 FAIL y 1 ERROR, corregidos en el código de pruebas, pendientes de repetición (862 previstas)**.  
+> **Última actualización:** 2026-10-22 02:10:45 -0300 (America/Santiago)  
+> **Base examinada:** `Assets.tar(1).gz` + `Directiva_Iterators_Range_Differential.zip` + `Directiva_NativeLibrary_Differential.zip` + `Directiva_NativeLibrary_TestFix_Differential.zip`, de los paquetes ya trabajados. La suite DIL previa tiene **862 casos** (748 anteriores + 114 nativos); el usuario indicó que las pruebas ya pasaban antes de solicitar DScript. El usuario confirmó **1000/1000 PASS en Unity** después del parche de comas finales del frontend. Esta revisión cambia `global` por `shared`, admite ciclos/imports y agrega una batería para el plan de inicialización; el nuevo total **1041 pruebas previstas**, aún por ejecutar en Unity.  
 > **Alcance:** exclusivamente el videojuego Unity **Directiva**. No cubre informes académicos, evidencias, gestión externa ni archivos que no vinieron en este paquete.  
 > **Criterio de verdad:** código, escenas y assets actuales > este resumen > documentación histórica > planes conversados. En caso de discrepancia, inspeccionar el repositorio y `git log`.
 
@@ -11,9 +11,9 @@
 
 **Directiva** es un videojuego educativo y competitivo de PC hecho con **Unity 6 / C#**, con **UI Toolkit** y recursos **URP**. El objetivo es que el jugador programe el comportamiento de **unidades** en un lenguaje textual propio, **DScript**, inspirado en Python, dentro de un entorno de simulación con un **Nexo** (base), recursos y objetivos/misiones. *Unidad* es el término del juego; evitar llamarlas «agentes» para no confundirlas con agentes de IA.
 
-**Estado al corte:** editor DIL, parser, VM, heap/GC, tipos primitivos y colecciones, miembros de tipo, funciones como valores, `Range` e `Iterator` están implementados; **748 pruebas anteriores ejecutadas satisfactoriamente en Unity** (el número 751 de la entrega anterior era un recuento estimado equivocado). Esta entrega integra una biblioteca nativa de 27 funciones (builtins + `math` + `random`). Su primer run Unity dio **859 PASS, 2 FAIL, 1 ERROR** sobre 862 casos; los tres problemas fueron de los tests y están corregidos, a la espera de reejecución. Compilador DScript → DIL, objetos externos/simulación y gameplay siguen pendientes.
+**Estado al corte:** runtime DIL/VM, heap/GC, funciones como valores, `Range`/iteradores y biblioteca nativa (`math`, `random`, builtins) implementados. El usuario confirmó **1000/1000 pruebas PASS en Unity** tras el último parche DScript. Este cambio revisa el frontend para implementar **`shared` a nivel de módulo, slots canónicos entre archivos, imports circulares y un plan determinista de inicialización con pasos independientes**. Se añaden **41 pruebas nuevas/actualizadas en catálogo** (total esperado **1041**, pendiente ejecución). El backend DScript → DIL, los inicializadores ejecutables y el orquestador todavía **NO existen**; la simulación y los objetos externos siguen pendientes.
 
-**Prioridad inmediata acordada:** repetir **862 pruebas** (748 anteriores + 114 nuevas) tras el parche de tests y, si pasan, comenzar el frontend DScript → DIL con resolución de imports, AST y análisis semántico. La conexión con simulación/objetos externos permanece pendiente.
+**Prioridad inmediata:** aplicar el ZIP diferencial de esta revisión, ejecutar `Directiva > Tests > DScript > TestEverything` y `Directiva > Tests > TestAll` (**1041 casos esperados**). Ante fallos, entregar el reporte Unity. Luego implementar el **backend DScript AST → DIL → CodeContext** y un **bootstrap que evalúe cada inicializador aislado, informe cada fallo en consola y CONTINÚE con los siguientes y con las VMs normales**. No convertir errores de runtime de inicialización en abortos de partida; los errores de sintaxis/binding sí impiden compilar.
 
 ### Estado por subsistema
 
@@ -22,18 +22,18 @@
 | Menú principal y selección de niveles | Implementado como interfaz, navegación y carga de escenas; progreso/desbloqueo real pendiente | `Scripts/UI/MainMenu/`, `Scenes/MainMenu.unity` |
 | Opciones persistentes | JSON/PlayerPrefs y aplicación de resolución, fullscreen, cursor y ejecución en segundo plano; audio/idioma sin integración global | `Scripts/Settings/`, `Documentation/MainMenu/SETTINGS.md` |
 | Editor de scripts | Funcional para **`.dil`**; árbol de archivos, edición, backups, historial undo/redo, consola, breakpoints DIL | `Scripts/UI/CodeEditor/`, `Scripts/Code/{Storage,Workspace}/` |
-| Lenguaje DScript | Diseñado conceptualmente; **sin compilador ni parser funcional** | `Scripts/Code/Compilation/` (actualmente solo `DIL/`) |
-| DIL (texto intermedio) | Parser multipaso/imports/funciones/saltos/operaciones; **748/748 PASS** incluyendo iteradores/Range; **114 tests nativos; primer run Unity 859 PASS / 2 FAIL / 1 ERROR (fallos de pruebas)** | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/` |
+| Lenguaje DScript | **Frontend revisado:** `shared` solo a nivel módulo, un único slot por nombre en todos los archivos, imports circulares y plan DFS de inicializadores. **1000/1000 PASS anterior en Unity; 1041 esperado en esta revisión, pendientes de validar**. Generador DIL y bootstrap aún pendientes. | `Scripts/Code/Compilation/DScript/`, `GRAMMAR.md`, `Editor/DirectivaTests/DScript/` |
+| DIL (texto intermedio) | Parser multipaso, VM, iteradores, funciones nativas; **862 tests registrados anteriormente** con parche de expectativas, confirmados funcionales por el usuario | `Scripts/Code/Compilation/DIL/`, `Editor/DirectivaTests/DIL/` |
 | Miembros de tipo | **Implementados y validados en Unity**: anotaciones getter/setter/método, herencia y `override`, acceso por DIL, continuaciones | `Scripts/Code/Execution/Types/DataTypes/{DScriptMemberAttributes.cs,DataType.Members.cs}`; `DirectivaVM`, `DILParser` |
 | Funciones como valores | **Implementadas y validadas en Unity (748/748)**: `PUSH_FUNCTION`, `CALL_INDIRECT n`, `DTFunction`; ID compartido por `CodeContext` | `Code/Execution/Types/DataTypes/DTValues/DTFunction.cs`, `DirectivaVM`, `DILParser` |
 | Iteración y rangos | **Implementados y validados en Unity:** `RANGE n` (constructor DIL), `ITER_INIT`, `ITER_NEXT destino`, Range/Iterator en heap; List/Tuple/Set/Dict y Range iterables | `Code/Execution/VirtualMachine/Memory/{IteratorHeapObject,RangeHeapObject}.cs` |
-| Biblioteca nativa | **Integrada y probada parcialmente en Unity; repetir suite tras las correcciones:** 11 builtins (`print`, `range`, `len`, `abs`, `min`, `max`, `clamp`, `int`, `decimal`, `str`, `bool`), 13 funciones `math`, 3 `random`; `PUSH_NATIVE`, `PUSH_FUNCTION` y `CALL_INDIRECT` comparten referencias | `Scripts/Code/Execution/Native/` |
+| Biblioteca nativa | **Integrada; pruebas corregidas y posteriormente confirmadas por el usuario:** 11 builtins (`print`, `range`, `len`, `abs`, `min`, `max`, `clamp`, `int`, `decimal`, `str`, `bool`), 13 funciones `math`, 3 `random`; `PUSH_NATIVE`, `PUSH_FUNCTION` y `CALL_INDIRECT` comparten referencias | `Scripts/Code/Execution/Native/` |
 | Máquina virtual | Ejecuta `CodeContext`: stack, llamadas, locals, globals, saltos, operaciones, casts, print y límites | `Scripts/Code/Execution/VirtualMachine/` |
 | Heap y GC | Heap con límites lógicos; **mark-and-sweep lazy** al fallar una reserva, referencias anidadas y compartidas | `Scripts/Code/Execution/VirtualMachine/Memory/` |
 | Tipos | `None`, `Uninitialized`, `Bool`, `Int`, `Decimal`, `String`, `Tuple`, `List`, `Set`, `Dict`, `Function` (no heap), **Range e Iterator (heap)**; simulación pendiente | `Scripts/Code/Execution/Types/` |
 | Interfaz de simulación | HUD y editor acoplables; controles de simulación **solo visuales** | `Scripts/UI/Simulation/`, `Scenes/BaseSimulation.unity` |
 | Simulación jugable y misiones | **No implementadas**: lógica de unidades, combate, minería, Nexo, recursos, victoria, tutorial | Crear subsistemas de simulación y orquestación |
-| Análisis/refactorización DScript | Interfaces/diagnósticos preparados; implementaciones **NoOp** | `Scripts/Code/{Analysis,Refactoring,Core}/` |
+| Análisis/refactorización DScript | Frontend (AST y símbolos) nuevo e independiente; interfaces de análisis del editor y refactorización **siguen NoOp**, sin conexión aún a la UI | `Scripts/Code/{Analysis,Refactoring,Core}/` |
 | Debug de código | DIL: breakpoints, línea activa y step simple; depurador DScript y Step In/Out pendientes | `VMExecutionController`, `DirectivaCodeUIController` |
 | DIB binario | Nombre/formato futuro acordado; sin serializador/cargador binario en este paquete | Diseño posterior, no asumir implementado |
 
@@ -51,9 +51,11 @@
 ### Pipeline previsto y situación real
 
 ```text
-[FUTURO] Código DScript del jugador (.dscript)
+[EXISTE] Código fuente DScript (.dscript)
                 |
-[FUTURO] Lexer / Parser / AST / análisis / compilador DScript
+[EXISTE, NUEVO] Lexer / Parser / AST / imports / análisis semántico
+                |
+[FUTURO] Generación DIL (entrega 2)
                 v
 [EXISTE] DIL textual (.dil) <--- se edita directamente por ahora
                 |
@@ -323,7 +325,7 @@ La consola debe mostrar `(10, 20)` y la función debe devolver `None`.
 
 1. **Heap/colecciones:** String, Tuple, List, Set y Dict se consideran implementados y aprobados en Unity (**530/530 pruebas confirmadas**). No añadir nuevas estructuras del heap salvo necesidad justificada; preservar regresión.
 2. **Iteradores y Range:** implementación concluida, con **748/748 pruebas aprobadas en Unity**. Conservar cobertura de GC, versiones, `None`, extremos de rangos y metadatos de depuración.
-3. **Validar biblioteca nativa y comenzar DScript → DIL:** compilar y ejecutar **862 casos** (748 confirmados + 114 nativos nuevos); repetir ejecución tras corregir tres expectativas de pruebas, luego implementar frontend DScript (lexer, AST, símbolos) y generación DIL. `range()` ya está registrada como nativa, pero aún no existe `for` ni el parser DScript.
+3. **Validar frontend DScript y después generar DIL:** la suite DIL previa tiene **862 casos** y Unity registró **134** DScript (132 PASS, 2 FAIL). Este parche añade 4 casos: **1000 previstos en TestAll**. Compilar y ejecutar todos, corregir problemas y, en la segunda entrega, implementar generación DIL. `range()` ya es nativa y `for` se reconoce sintácticamente; todavía no se ejecuta código fuente DScript.
 
 ### P1 — Transformar infraestructura en juego
 
@@ -412,7 +414,7 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 - **DIL:** `RANGE 1` consume *stop*, `RANGE 2` consume *start/stop*, `RANGE 3` consume *start/stop/step* (Int64, paso distinto de cero). `ITER_INIT` convierte Tuple/List/Set/Dict/Range al iterador; aplicado a un Iterator lo conserva, sin reiniciarlo. `ITER_NEXT etiqueta` mantiene el cursor y apila el siguiente elemento, o consume el cursor y salta a `etiqueta` cuando se acaba. Es perfectamente válido iterar un elemento `None`; no es sentinela de fin.
 - **Iteración:** tuplas y listas en orden; diccionarios por claves en orden de inserción; sets en orden interno determinista pero no garantizado. `Range` genera números sin materializar la secuencia, incluso para límites Int64 grandes. `LENGTH`/`.length` de Range se calcula en O(1), con `Overflow` si supera el entero soportado.
 - **Concurrencia y mutabilidad:** una List, Set o Dict modificada después de crear el iterador produce `IteratorModified` al avanzar; las VMs que compartan el *mismo iterador* comparten su progreso en el orden determinista del scheduler. `ITER_NEXT` consume un paso de presupuesto, como cualquier instrucción. Se agregan los errores `NotIterable`, `InvalidIterator` e `IteratorModified` sin desplazar IDs anteriores.
-- **Compilador futuro:** `for x in iterable` podrá traducirse a `ITER_INIT` + `ITER_NEXT etiqueta` + cuerpo + `JUMP`, con reglas explícitas de limpieza de stack para `break`/`continue`/`return`. La función nativa `range()` ya se agregó en la entrega posterior de biblioteca nativa (por validar en Unity). Aún no existe parser DScript; `RANGE n` continúa disponible.
+- **Backend DScript futuro:** `for x in iterable` podrá traducirse a `ITER_INIT` + `ITER_NEXT etiqueta` + cuerpo + `JUMP`, con reglas explícitas de limpieza de stack para `break`/`continue`/`return`. La función nativa `range()` ya se agregó en la entrega posterior de biblioteca nativa (por validar en Unity). Ya existe parser/frontend DScript sin codegen; `RANGE n` continúa disponible.
 - **Pruebas nuevas:** 92 casos en `DIL/Iterators`, `DIL/Ranges` y `DIL/IteratorMemory`. **748/748 aprobadas en Unity**, según confirmó el responsable el 2026-10-21. Casos cubren tipos, None, grafos de referencias/GC, errores, saltos con debug, rangos extremos, conflictos de versiones y varias VMs.
 
 ---
@@ -423,13 +425,31 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 - **Builtins (sin import):** `print(value)` (emite `Printed`, devuelve None), `range(stop|start,stop|start,stop,step)` (heap Range perezoso), `len(value)`, `abs(value)`, `min(a,b)`, `max(a,b)`, `clamp(x,min,max)`, `int(x)`, `decimal(x)`, `str(x)`, `bool(x)`. `min/max/clamp` aceptan exclusivamente números en esta primera entrega. `print` acepta exactamente un argumento por ahora. String agrega cast `String->Int/Decimal` en cultura invariante, con `InvalidCastValue` frente a entrada malformada y truthiness correcta para cadena vacía.
 - **math:** `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2(y,x)`, `sqrt`, `hypot`, `floor`, `ceil`, `degrees`, `radians`; constantes `math.pi`, `math.tau`, `math.e`. Ángulos en radianes. Funciones trigonométricas y matemáticas utilizan `System.Math` y convierten resultados al `DTDecimal` de cuatro cifras decimales; **la equivalencia bit a bit entre plataformas para funciones trascendentes aún no está garantizada** y merece revisión si el replay exige ese nivel de determinismo. Los resultados no finitos se rechazan como error de script, los no representables como Overflow.
 - **random:** `random.random()`, `random.randint(a,b)` (ambos extremos incluidos), `random.uniform(a,b)` (intervalo semiabierto). PRNG SplitMix64 propio con semilla host (`VMMemoryContext.RandomSeed`/`ReseedRandom`), estado único del contexto compartido; el orden de avance depende del scheduler determinista. Sin `UnityEngine.Random`, sin estado global del proceso. Valores `Decimal` cuantizados a 0.0001. El intervalo entero completo Int64 está soportado.
-- **DIL/enlace:** `# IMPORT : math` y `# IMPORT : random` son módulos reservados y no requieren archivos `.dil`; nombres completamente calificados (`PUSH_FUNCTION math.sin`) y nueva forma `PUSH_NATIVE math.pi` o `PUSH_NATIVE math.sin` para constantes/referencias. La instrucción `PUSH_NATIVE` se **expande** a `PUSH`/`PUSH_FUNCTION` durante el parseo y no añade opcodes. La infraestructura de import/símbolos también se expondrá al futuro frontend de DScript. Una importación de módulo nativo debe declararse en cada archivo DIL que use sus miembros.
+- **DIL/enlace:** `# IMPORT : math` y `# IMPORT : random` son módulos reservados y no requieren archivos `.dil`; nombres completamente calificados (`PUSH_FUNCTION math.sin`) y nueva forma `PUSH_NATIVE math.pi` o `PUSH_NATIVE math.sin` para constantes/referencias. La instrucción `PUSH_NATIVE` se **expande** a `PUSH`/`PUSH_FUNCTION` durante el parseo y no añade opcodes. La infraestructura de import/símbolos se consume ya desde el frontend DScript mediante `NativeLibrary.GetFunctionNames/GetConstantNames`. Una importación de módulo nativo debe declararse en cada archivo DIL que use sus miembros.
 - **GC/presupuestos:** los argumentos permanecen en el stack como raíces GC mientras se ejecuta la llamada nativa. La invocación nativa ocupa un paso VM, no abre CallFrame y debe estar limitada a trabajo acotado. Los proveedores no reciben acceso al stack ni a las escenas Unity. El protocolo actual **no admite nativas continuadas**: algoritmos potencialmente grandes requerirán una extensión en el futuro.
 - **Pruebas nuevas:** `DIL/NativeBuiltins` (59), `NativeLinking` (18), `NativeMath` (24), `NativeRandom` (13): **114 casos nuevos, 862 registrados; primera ejecución de Unity: 859 PASS, 2 FAIL, 1 ERROR; tres fallos corregidos en pruebas, reejecución pendiente**. Incluye conversiones, funciones como valores, errores, OOM, GC, imports, aridad, algoritmos matemáticos y semillas compartidas.
 - **Preservación de proveedores en builds:** `Assets/link.xml` protege métodos C# descubiertos por reflexión frente a code stripping (Assembly-CSharp). Actualizarla al añadir nuevos proveedores de biblioteca.
-- **Todavía no implementado:** sintaxis DScript `import`, llamadas al nivel fuente, objetos externos, APIs de simulación, `random.choice`, iteración genérica de String, funciones nativas de múltiples pasos, objetos de módulo como valores de primera clase. El usuario podrá escribir `math.sin` en DScript cuando exista el compilador; por ahora se valida mediante DIL.
+- **Todavía no implementado:** **generación/ejecución DScript desde su AST** (aunque `import` y llamadas sí se parsean/resuelven), objetos externos, APIs de simulación, `random.choice`, iteración genérica de String, funciones nativas de múltiples pasos, objetos de módulo como valores de primera clase. El frontend ya resuelve `math.sin` como símbolo nativo, pero su ejecución desde DScript espera la entrega del backend; mientras tanto se valida mediante DIL.
 
 ---
+
+
+---
+
+## Frontend DScript — entrega 1 (2026-10-21, registro histórico previo a `shared`)
+
+> **ATENCIÓN:** las descripciones originales de `global` por módulo, rechazo de ciclos e inicializadores de módulo de este apartado han quedado **SUSTITUIDAS** por «Revisión frontend `shared`» al final de este documento y por `GRAMMAR.md`. Conservar solo como historial de lo entregado antes del cambio de semántica.
+
+**Estado: implementado y compilado en Unity según el reporte del responsable; 134 casos DScript ejecutados, 132 PASS y 2 FAIL de parser. Este parche corrige ambos y añade 4 pruebas. Pendiente confirmar la nueva ejecución.** Archivos nuevos bajo `Assets/Scripts/Code/Compilation/DScript/`, documento `GRAMMAR.md`, y 134 casos originalmente ejecutados bajo `Assets/Editor/DirectivaTests/DScript/` (Lexer 21, Parser 34, Modules 27, Semantics 52), más 4 casos de regresión añadidos en este parche (Parser 38, total DScript 138). Menús `Directiva/Tests/DScript/TestEverything` y subgrupos; `TestAll` incluye ambos lenguajes (862 DIL existentes + 138 DScript tras parche = 1000).
+
+- **API de entrada:** `DSCompilation.DScript.DScriptFrontend.Analyze(entryModule, IDScriptSourceProvider, DScriptFrontendOptions)` → `DScriptAnalysis`. `Success`/`Diagnostics`, AST por módulo, `DependenciesFirst`, tablas de imports/exports, símbolos globales y locales, bindings de cada expresión y variables destino de `for`.
+- **Lexer:** tokens con `SourceSpan` (offset UTF-16 + línea/columna 1-based), comentarios `#`, indent/dedent por espacios, continuidad dentro de brackets, String con escapes, Int64/Decimal fijo 4 posiciones, límite tamaño/nesting/diagnósticos. Error DS1xxx.
+- **Parser:** AST orientado a objetos (Statement/Expression) para `def`, `global`, imports (`as`, `from`, `*`), `return`, `if/elif/else`, `while`, `for`, `break`/`continue`/`pass`, asignaciones y operaciones, colecciones, llamadas, índices/miembros; sin closures/clases/kwargs/comprehensions. Error DS2xxx. Gramática detallada en `GRAMMAR.md`.
+- **Módulos:** provider en memoria o `FileSystemDScriptSourceProvider` que valida segmentos y **capitalización exacta**. Grafo DFS, ciclos rechazados; módulos nativos `math` y `random` reconocidos desde `NativeLibrary` sin archivos. Imports de usuario referencian nombres únicos `modulo.funcion`; `from m import *` solo incluye exports públicos directos. Error DS3xxx.
+- **Análisis semántico:** registro de funciones/globals de todos los módulos ANTES de examinar cuerpos, incluyendo declaraciones `global` dentro de las funciones; parámetros primero y locales por primer binding; las globales se ordenan por nombre completamente calificado. `DScriptSymbol.DILGlobalName` aplica mangling sin colisiones para ser compatible con `DILParser` (que solo permite `# GLOBAL : identifier`); el backend **deberá emitir globales en orden compatible**. Tipado sigue siendo dinámico; solo valida nombres, ámbitos, colisiones, break/continue, aridad de funciones DScript conocidas, función como valor, nombres nativos. Error DS4xxx.
+- **Módulos y memoria compartida:** `import shared; shared.action = worker` asigna un global del módulo importado; las VMs del mismo `CodeContext` conservarán el almacenamiento compartido existente. Un simple `global action` siempre se refiere al módulo **actual**, no a todos los módulos por accidente.
+- **Fuente de verdad de límites:** `GRAMMAR.md`. El módulo solo acepta imports, definiciones, globals y asignación simple en nivel superior; estos últimos requerirán **inicializadores DIL en la entrega 2**. No hay aún runtime DScript, ni modificación a opcodes, DataType, heap o VM en esta entrega.
+- **QA entregado:** auditoría estática de estructura y ZIP. Unity ejecutó 996 pruebas (994 PASS / 2 FAIL / 0 ERROR), con los 2 fallos de comas finales de listas; este parche requiere repetir las 1000 pruebas previstas. Los errores de compilación/interacción que aparezcan serán corregidos sobre un nuevo diferencial.
 
 **Fin del snapshot.** Si otro agente detecta una contradicción con código/escena/git posterior, debe reportarla y actualizar el documento con hechos verificables; no asumir que el resumen es infalible.
 
@@ -440,3 +460,84 @@ Estas prioridades son **orientativas**; contrastar con backlog y compromisos má
 - `DIL.NativeLinking.MissingModuleName`: el parser identifica correctamente al módulo ausente (`nonexistent`) en el diagnóstico. Se corrigió la expectativa que lo confundía con el módulo de origen (`test`).
 - `DIL.Numeric.UnsupportedStringToInt`: la nueva versión de `DTString` permite parsear texto numérico; el test ahora se llama `DIL.Numeric.CastStringToInt`, comprueba `"21" -> Int(21)` y que el texto inválido produce `InvalidCastValue`.
 - **Alcance de la corrección:** solo dos archivos de pruebas y este documento; **ninguna modificación a VM, compilador, biblioteca nativa, `.meta` ni GUID**. Candidata a 862/862, aún pendiente de ejecución en Unity.
+
+## Corrección DScript: comas finales opcionales (2026-10-22)
+
+- **Reporte:** `run_20261022_004159_347_36ed08` — 996 ejecutadas, 994 PASS, 2 FAIL, 0 ERROR. Únicos fallos: `DScript.Parser.Collections` y `DScript.Parser.MultilineList`. Todo DIL, Lexer, Modules y Semantics pasó.
+- **Causa:** `ReadElements` consultaba el delimitador de cierre antes de consumir la coma. Un literal `[1, 2,]` intentaba interpretar `]` como una nueva expresión (`DS2005`); la prueba multilínea también disparó un `DS2003` secundario durante la recuperación.
+- **Cambio:** `ReadElements`, `ReadFunction` (lista de parámetros) y `ReadPostfix` (argumentos de llamada) consumen comas y detectan correctamente el delimitador final. Se mantiene el rechazo de comas duplicadas y de expresiones faltantes.
+- **Regresión agregada:** `TrailingCommaParameters`, `TrailingCommaArguments`, `TrailingCommaNestedCollections`, `RepeatedCommaInListRejected` (4 nuevos). Total esperado: 862 DIL + 138 DScript = **1000**. **Aún no verificado por Unity tras la corrección.**
+- **Archivos modificados:** `DScriptParser.cs`, `DScriptParserTests.cs`, `GRAMMAR.md`, `DIRECTIVA_CONTEXT.md`. Se conservan GUIDs y `.meta`. Sin cambios en VM, DIL, lexer, AST, semántica ni catálogo de tests.
+
+
+## Revisión frontend `shared` (2026-10-22; CONTRATO VIGENTE)
+
+**Motivo:** se descubrió que copiar la semántica de `global` de Python contradice el modelo de almacenamiento de Directiva. El usuario confirmó que **las 1000 pruebas antiguas pasaron en Unity**, pero esas reglas antiguas se reemplazan aquí.
+
+**Cambios implementados en C#:**
+
+- `shared name` y `shared name = expression` son declaraciones **exclusivas de módulo** (`SharedStatement`). Ya no se acepta `global` de Python, ni ejecución libre al nivel superior (solo imports, `shared` y `def`). `shared` dentro de una función/bloque genera un diagnóstico sintáctico. Es una declaración por variable.
+- Todas las declaraciones de **un mismo nombre `shared`** en módulos alcanzables se refieren a **un solo `DScriptSymbol` y un solo slot** en la memoria compartida de todas las VMs. Slots en orden ordinal por **nombre compartido**, sin prefijo de módulo. `SymbolKind.Global`/`GlobalSlots` se conservan internamente para representar las instrucciones y almacenamiento de DIL; su `QualifiedName` canónico tiene la forma `shared.action`.
+- Repetir declaraciones sin inicializador es válido. **Más de un inicializador por nombre** es error de frontend `DS4018`. Una asignación a un shared declarado en el módulo se vincula automáticamente, sin repetir `shared` en la función. Parámetro de función con ese nombre: `DS4006`.
+- Imports **absolutos desde `DirectivaScripts`**, incluidos `math` y `random` como nativos. **Imports circulares permitidos**: se descubre cada módulo una sola vez, se declaran todos los símbolos y se enlazan las referencias después. El `FileSystemDScriptSourceProvider` rechaza rutas con segmentos inválidos y entradas con `ReparsePoint` dentro de su raíz (symlink/junction); falta conexión con el editor.
+- `DScriptAnalysis.SharedDeclarations`: mapa AST → símbolo canónico. `DScriptAnalysis.SharedInitializers`: lista **plana y ordenada** de pasos con `Order`, `Module`, `Symbol`, `Expression`, `Span` y declaración origen. La lista se construye recorriendo imports **en su posición textual** (DFS inlined, una visita por módulo). Los slots ya están resueltos antes de crear la lista. Dependencias circulares no afectan los slots. Ejemplos A primero `a→b→c`, B primero `b→a→c` dependen de dónde aparece `import` respecto a cada inicializador; ver casos de prueba.
+- **Nueva política de recuperación solicitada:** si un inicializador falla **en runtime** (p. ej. acceso a `Uninitialized`), la consola mostrará un error con nombre, módulo y línea; **se intentarán los inicializadores siguientes** y **no se bloqueará el arranque de las VMs normales** por esta clase de fallo. El orquestador deberá aislar cada elemento de `SharedInitializers` en invocaciones independientes (los errores no capturados detienen actualmente la VM); no se garantiza rollback de efectos laterales anteriores al error. **ESTO ESTÁ DOCUMENTADO/PREPARADO, PERO NO SE EJECUTA TODAVÍA: falta backend DIL y bootstrap**.
+
+**Pruebas:** anteriormente 862 DIL + 138 DScript = **1000/1000 PASS reportado por el usuario en Unity**. Esta revisión conserva la suite y cambia expectativas antiguas de `global`/ciclos, añade 31 casos `DScript.Shared`, 2 fixtures léxicos y 8 casos de gramática/AST: **179 casos DScript esperados + 862 DIL = 1041 en `TestAll`**. No afirmar PASS hasta ejecución en Unity. Menú: `Directiva/Tests/DScript/Shared/TestEverything`.
+
+**Archivos y próximos pasos:** `DScriptFrontend.cs`, AST, lexer/token, parser, module loader/provider, binder y símbolos, pruebas y `GRAMMAR.md`. No se cambiaron VM, opcodes, DataTypes ni el enlazador DIL. El segundo backend debe consumir los slots `GlobalSlots` y el plan `SharedInitializers`, compilar cada paso como función independiente, ejecutarlos sobre **un único `VMMemoryContext` compartido** registrando errores y sin cancelar la simulación cuando falla un paso. Los **errores estáticos** de parsing/importación/binding siguen bloqueando la compilación, diferenciados de fallos runtime de inicialización.
+
+
+## Parche de pruebas Shared — 2026-10-22
+
+- **Reporte real:** `run_20261022_021533_213_6b8c9b`, Unity 6000.3.23f1: **1039 PASS, 2 FAIL, 0 ERROR, 1041 ejecutadas**. Solo fallaron `DScript.Shared.ImportInterleaving` y `DScript.Shared.CycleEntrypointChangesOrder`.
+- **Causa:** ambas fixtures utilizaban simultáneamente `import b` y `shared b` en el módulo `test`; el frontend emitió correctamente `DS4004` porque ambos símbolos compartirían el identificador desnudo `b`. No es un error del parser, linker ni DFS de inicialización.
+- **Corrección:** las dos fixtures usan `import b as module_b`. Se añadió una aserción de que `b` en `shared c = b + 5` sigue resolviendo a `shared.b`, y una nueva prueba `SharedModuleNameCollision` verifica que el uso ambiguo sin alias devuelve `DS4004`. El frontend y la VM no cambian.
+- **Estado:** la suite pasa de **1041 a 1042 pruebas registradas** (862 DIL + 180 DScript), resultado previsto y **pendiente de ejecutar en Unity**.
+- **Sin eliminaciones, renombres ni cambios de GUID/.meta.**
+
+---
+
+## DScript: despacho por miembro y operaciones internas (2026-10-22, parche previo al backend fase 2)
+
+- **Contrato de compilacion:** una llamada DScript `obj.metodo(a, ...)` se debe convertir a `CALL_METHOD metodo n`, sin elegir el `OperationId` por nombre textual. La VM busca el miembro en el `DataType` real del receptor; solo el adaptador C# del tipo decide si llama a `Operate(OperationId.X, call)` o a otra implementacion propia. Los operadores sintacticos (`+`, `-`, etc.) siguen generando opcodes de operacion. Los metodos vinculados como valores (`f = obj.pop`) siguen pendientes/no admitidos en este MVP.
+- **Despacho resuelto:** `List.pop()` y `List.pop(index)` llaman a `OperationId.Pop`; la variante sin argumentos aporta internamente el indice -1. `Set.pop()` llama a `OperationId.SetPop` sin indice. `Dictionary.pop(key)` llama al mismo `OperationId.Pop` que List, pero la implementacion real pertenece a `DTDict`; no hay `pop(key, default)` todavia. Un tipo que no declare `pop` produce `MemberNotFound` y nunca se intenta una sustitucion basada solo en el nombre.
+- **Aridades:** `[DScriptMethod("nombre", minArgs, maxArgs)]` permite un intervalo cerrado, ademas de la forma anterior con un arity exacto o `-1` variadico. Las aridades invalidas se comprueban al registrar miembros y las llamadas erroneas dan `InvalidMemberArgumentCount` con limites descriptivos. Se conserva la propiedad publica `ArgumentCount` del atributo como API de compatibilidad (valor -1 en el overload de rango).
+- **Reutilizacion:** los adaptadores de List/Set/Dict redirigen sus miembros nativos por `DataType.Operate(OperationId, OperationCall)`. No se cambian codigos DIL ya existentes, semantica de primitivas, ni funcionamiento de continuaciones/GC. La VM ya mantiene el receptor original, los argumentos, el estado y la raiz auxiliar cuando un miembro retorna `Continued`.
+- **Validacion:** 21 pruebas nuevas en `DIL/Members`: `pop` dinamico sobre List/Set/Dict, indices opcionales, errores, aridad, sensibilidad a mayusculas, equivalencia frente a opcode nativo, continuacion larga y conflicto de version bajo concurrencia. Linea base confirmada por el usuario antes del parche: **1042/1042**. Con este cambio se esperan **1063** pruebas totales; **no han sido ejecutadas en Unity en este entorno**. Ejecutar `Directiva > Tests > DIL > Members > TestEverything` y despues `Directiva > Tests > TestAll`.
+- **Pendiente:** fase 2 DScript -> DIL, depuracion en origen y presupuesto 0 de debug. `str.strip` sigue sin existir. Ninguna implementacion de los metodos descritos implica que los miembros DScript sean funciones de primera clase.
+
+
+## DScript fase 2 — backend + bootstrap (2026-10-22; pruebas Unity pendientes)
+
+El usuario confirmó **1063/1063 PASS** al concluir el parche de despacho dinámico
+`CALL_METHOD`. En la fase 2 se añadió `DSCompilation.DScript.Backend`:
+
+- `DScriptCompiler.Compile(entryModule, provider)` analiza, emite un módulo
+  `.dil` por cada `.dscript` y un módulo bootstrap, comprueba todo con
+  `DILParser` y devuelve `DScriptCompiledProgram` inmutable (CodeContext,
+  fuentes generadas, tabla de funciones y pasos inicializadores). Los archivos
+  no se escriben aún en DirectivaScripts; el editor/host puede publicarlos
+  solo después de una compilación exitosa.
+- `# GLOBAL` se emite exclusivamente en el bootstrap, siguiendo los slots
+  semánticos alfabéticos; cada inicializador es una función independiente.
+  `DScriptBootstrapRunner.Initialize` usa VMs efímeras sobre UN `VMMemoryContext`
+  por equipo y partida, guarda errores y ejecuta los pasos siguientes incluso
+  después de un fallo o agotamiento de presupuesto. Bloquea un segundo bootstrap.
+- DScript `obj.metodo(...)` emite siempre `CALL_METHOD`; operaciones aritméticas
+  y de contenedores que tienen sintaxis propia generan operaciones DIL.
+  `and/or` devuelven el operando con cortocircuito. `for` limpia iteradores
+  al hacer break y conserva cursor en continue. Las referencias a funciones
+  y natives se emiten con `PUSH_FUNCTION`/`PUSH_NATIVE` y `CALL_INDIRECT`.
+- `DEBUG_FILE`, `DEBUG_LINE`, `DEBUG_SPAN` explícitos por instrucción apuntan
+  al código DScript, no a los offsets DIL. Coste lógico 0 en `Run` y controlador
+  de ejecución; `.AdvancesExecuted` conserva el número físico de avances de VM.
+  DIL escrito manualmente conserva la inyección automática opcional.
+- Se añadieron 54 casos en `Directiva/Tests/DScript/Backend/TestEverything`,
+  para un **total previsto de 1117** en TestAll. Revisados estáticamente;
+  **sin ejecución de Unity en este entorno**. Menú, gramática, README y metas
+  actualizados.
+
+Pendiente: probar en Unity y luego conectar compilación y inicialización al
+editor/orquestador. Los límites por inicializador son configurables y no
+representan aún presupuestos de balance final.

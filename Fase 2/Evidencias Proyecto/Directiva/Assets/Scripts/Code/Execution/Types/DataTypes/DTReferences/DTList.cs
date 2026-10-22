@@ -19,19 +19,36 @@ namespace DSExecution.DataTypes
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
         [DScriptMethod("append", 1)]
-        public OperationResult AppendMember(OperationCall call) => Append(call);
+        public OperationResult AppendMember(OperationCall call) => Operate(OperationId.Append, call);
 
         [DScriptMethod("insert", 2)]
-        public OperationResult InsertMember(OperationCall call) => Insert(call);
+        public OperationResult InsertMember(OperationCall call) => Operate(OperationId.Insert, call);
 
         [DScriptMethod("extend", 1)]
-        public OperationResult ExtendMember(OperationCall call) => Extend(call);
+        public OperationResult ExtendMember(OperationCall call) => Operate(OperationId.Extend, call);
 
         [DScriptMethod("contains", 1)]
-        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+        public OperationResult ContainsMember(OperationCall call) => Operate(OperationId.Contains, call);
 
         [DScriptMethod("indexOf", 1)]
-        public OperationResult IndexOfMember(OperationCall call) => IndexOf(call);
+        public OperationResult IndexOfMember(OperationCall call) => Operate(OperationId.IndexOf, call);
+
+        /// <summary>
+        /// List.pop() removes the last element; List.pop(index) removes that index.
+        /// Both forms delegate to the native two-operand List Pop. In particular,
+        /// the no-argument form supplies -1 instead of defining a new VM opcode.
+        /// </summary>
+        [DScriptMethod("pop", 0, 1)]
+        public OperationResult PopMember(OperationCall call)
+        {
+            if (call.Arguments.Length == 2)
+                return Operate(OperationId.Pop, call);
+            Span<DataValue> args = stackalloc DataValue[2];
+            args[0] = call.Arguments[0];
+            args[1] = DataValue.FromInt(-1);
+            return Operate(OperationId.Pop, new OperationCall(args, 0, call.Memory,
+                call.State, call.AuxiliaryReference));
+        }
 
         public static DTList Instance { get; } = new DTList();
         private DTList() { }

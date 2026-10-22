@@ -19,16 +19,20 @@ namespace DSExecution.DataTypes
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
         [DScriptMethod("keys", 0)]
-        public OperationResult KeysMember(OperationCall call) => DictKeys(call);
+        public OperationResult KeysMember(OperationCall call) => Operate(OperationId.DictKeys, call);
 
         [DScriptMethod("values", 0)]
-        public OperationResult ValuesMember(OperationCall call) => DictValues(call);
+        public OperationResult ValuesMember(OperationCall call) => Operate(OperationId.DictValues, call);
 
         [DScriptMethod("items", 0)]
-        public OperationResult ItemsMember(OperationCall call) => DictItems(call);
+        public OperationResult ItemsMember(OperationCall call) => Operate(OperationId.DictItems, call);
 
         [DScriptMethod("contains", 1)]
-        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+        public OperationResult ContainsMember(OperationCall call) => Operate(OperationId.Contains, call);
+
+        // Dictionary.pop(key) removes a key and returns its value using native Pop.
+        [DScriptMethod("pop", 1)]
+        public OperationResult PopMember(OperationCall call) => Operate(OperationId.Pop, call);
 
         public static DTDict Instance { get; } = new DTDict();
         private DTDict() { }

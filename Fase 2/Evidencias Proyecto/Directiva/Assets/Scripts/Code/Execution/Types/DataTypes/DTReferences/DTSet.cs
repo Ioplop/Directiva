@@ -18,16 +18,20 @@ namespace DSExecution.DataTypes
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
         [DScriptMethod("add", 1)]
-        public OperationResult AddMember(OperationCall call) => SetAdd(call);
+        public OperationResult AddMember(OperationCall call) => Operate(OperationId.SetAdd, call);
 
         [DScriptMethod("discard", 1)]
-        public OperationResult DiscardMember(OperationCall call) => SetDiscard(call);
+        public OperationResult DiscardMember(OperationCall call) => Operate(OperationId.SetDiscard, call);
 
         [DScriptMethod("remove", 1)]
-        public OperationResult RemoveMember(OperationCall call) => SetRemove(call);
+        public OperationResult RemoveMember(OperationCall call) => Operate(OperationId.SetRemove, call);
 
         [DScriptMethod("contains", 1)]
-        public OperationResult ContainsMember(OperationCall call) => Contains(call);
+        public OperationResult ContainsMember(OperationCall call) => Operate(OperationId.Contains, call);
+
+        // The public method name is the same as List.pop, but dispatches to SetPop.
+        [DScriptMethod("pop", 0)]
+        public OperationResult PopMember(OperationCall call) => Operate(OperationId.SetPop, call);
 
         public static DTSet Instance { get; } = new DTSet();
         private DTSet() { }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DSExecution.DataTypes;
 using DSExecution.Errors;
 using DSExecution.Operations;
@@ -173,6 +174,174 @@ namespace Directiva.EditorTests.DIL
                     "CALL_METHOD discard 1\nPOP\nLOAD_LOCAL 0\nGET_PROPERTY length\nRETURN", locals: 1);
                 t.Equal(0L, unchecked((long)r.Value.value), "set length after discard");
             });
+            // These cases guard the distinction between a DScript method name and a
+            // DIL primitive. The method name is resolved only after the VM knows
+            // the runtime DataType of the receiver (List / Set / Dictionary).
+            Add("ListPopDefault", "List.pop() maps to native Pop with an implicit -1", t =>
+            {
+                var r = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 3\nPUSH INT 8\nLIST 2\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nCALL_METHOD pop 0\nSTORE_LOCAL 1\n" +
+                    "LOAD_LOCAL 0\nGET_PROPERTY length\nPRINT\nLOAD_LOCAL 1\nRETURN",
+                    locals: 2);
+                t.Equal(8L, unchecked((long)r.Value.value), "removed tail");
+                t.Equal("1", r.Output[0], "original list shrunk");
+            });
+            Add("ListPopIndexed", "List.pop(index) retains the native indexed removal semantics", t =>
+            {
+                var r = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 3\nPUSH INT 8\nPUSH INT 12\nLIST 3\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nPUSH INT 1\nCALL_METHOD pop 1\nSTORE_LOCAL 1\n" +
+                    "LOAD_LOCAL 0\nPRINT\nLOAD_LOCAL 1\nRETURN", locals: 2);
+                t.Equal(8L, unchecked((long)r.Value.value), "removed middle element");
+                t.Equal("[3, 12]", r.Output[0], "remaining list");
+            });
+            Add("ListPopNegativeIndex", "List.pop(-2) uses normal negative index resolution", t =>
+                DILTestHarness.ExpectInt(t,
+                    "PUSH INT 4\nPUSH INT 5\nPUSH INT 6\nLIST 3\nPUSH INT -2\n" +
+                    "CALL_METHOD pop 1\nRETURN", 5));
+            Add("ListPopEmpty", "List.pop() on empty List is an indexed-removal error", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "LIST 0\nCALL_METHOD pop 0\nRETURN"),
+                    RuntimeErrorId.IndexOutOfRange));
+            Add("ListPopOutOfRange", "List.pop(index) rejects out-of-range indices", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "PUSH INT 7\nLIST 1\nPUSH INT 2\nCALL_METHOD pop 1\nRETURN"),
+                    RuntimeErrorId.IndexOutOfRange));
+            Add("ListPopBadIndexType", "Invalid List.pop(index) type is a script error", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t,
+                        "PUSH INT 7\nLIST 1\nPUSH STRING \"wrong\"\nCALL_METHOD pop 1\nRETURN"),
+                    RuntimeErrorId.InvalidOperation));
+            Add("ListPopTooManyArgs", "List.pop accepts 0..1 arguments, not 2", t =>
+            {
+                var r = DILTestHarness.Evaluate(t,
+                    "LIST 0\nPUSH INT 1\nPUSH INT 2\nCALL_METHOD pop 2\nRETURN");
+                DILTestHarness.ExpectFault(t, r, RuntimeErrorId.InvalidMemberArgumentCount);
+                t.Contains("between 0 and 1", r.Error.Message, "accurate arity range");
+            });
+            Add("ListPopLongContinuation", "Indexed List.pop preserves continued operations and original values", t =>
+            {
+                string values = string.Join("\n",
+                    System.Linq.Enumerable.Range(0, 65).Select(i => "PUSH INT " + i));
+                var r = DILTestHarness.ExpectCompleted(t,
+                    values + "\nLIST 65\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nPUSH INT 17\nCALL_METHOD pop 1\nSTORE_LOCAL 1\n" +
+                    "LOAD_LOCAL 0\nGET_PROPERTY length\nPRINT\nLOAD_LOCAL 1\nRETURN",
+                    locals: 2, budget: 300);
+                t.Equal(17L, unchecked((long)r.Value.value), "removed value");
+                t.Equal("64", r.Output[0], "mutated length");
+                t.Check(r.Steps > 75, "long removal consumes continuation steps");
+            });
+            Add("SetPop", "Set.pop() dispatches to native SetPop, not List/Dict Pop", t =>
+            {
+                var r = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 29\nSET 1\nSTORE_LOCAL 0\nLOAD_LOCAL 0\n" +
+                    "CALL_METHOD pop 0\nSTORE_LOCAL 1\n" +
+                    "LOAD_LOCAL 0\nGET_PROPERTY length\nPRINT\nLOAD_LOCAL 1\nRETURN",
+                    locals: 2);
+                t.Equal(29L, unchecked((long)r.Value.value), "removed set element");
+                t.Equal("0", r.Output[0], "set shrunk");
+            });
+            Add("SetPopEmpty", "Set.pop() on empty Set reports the set-specific error", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "SET 0\nCALL_METHOD pop 0\nRETURN"),
+                    RuntimeErrorId.InvalidOperation));
+            Add("SetPopNoIndex", "Set.pop(index) rejects arguments instead of falling back to List Pop", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "PUSH INT 3\nSET 1\nPUSH INT 0\nCALL_METHOD pop 1\nRETURN"),
+                    RuntimeErrorId.InvalidMemberArgumentCount));
+            Add("DictPop", "Dictionary.pop(key) delegates to native dictionary Pop", t =>
+            {
+                var r = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 2\nPUSH INT 90\nDICT 1\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nPUSH INT 2\nCALL_METHOD pop 1\nSTORE_LOCAL 1\n" +
+                    "LOAD_LOCAL 0\nGET_PROPERTY length\nPRINT\nLOAD_LOCAL 1\nRETURN",
+                    locals: 2);
+                t.Equal(90L, unchecked((long)r.Value.value), "removed dictionary value");
+                t.Equal("0", r.Output[0], "dictionary entry removed");
+            });
+            Add("DictPopMissing", "Dictionary.pop on missing key returns native key-not-found error", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t,
+                        "PUSH INT 1\nPUSH INT 3\nDICT 1\nPUSH INT 4\nCALL_METHOD pop 1\nRETURN"),
+                    RuntimeErrorId.InvalidOperation));
+            Add("DictPopRequiresKey", "Dictionary.pop() requires a key even though Set.pop() does not", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "DICT 0\nCALL_METHOD pop 0\nRETURN"),
+                    RuntimeErrorId.InvalidMemberArgumentCount));
+            Add("DictPopTooManyArgs", "Dictionary.pop does not silently accept unsupported defaults", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t,
+                        "DICT 0\nPUSH INT 1\nPUSH INT 2\nCALL_METHOD pop 2\nRETURN"),
+                    RuntimeErrorId.InvalidMemberArgumentCount));
+            Add("DynamicPopReceiver", "The same member name dispatches by actual receiver type in one function", t =>
+            {
+                var r = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 3\nLIST 1\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nCALL_METHOD pop 0\nSTORE_LOCAL 1\n" +
+                    "PUSH INT 5\nSET 1\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nCALL_METHOD pop 0\nSTORE_LOCAL 2\n" +
+                    "PUSH INT 7\nPUSH INT 11\nDICT 1\nSTORE_LOCAL 0\n" +
+                    "LOAD_LOCAL 0\nPUSH INT 7\nCALL_METHOD pop 1\n" +
+                    "LOAD_LOCAL 1\nADD\nLOAD_LOCAL 2\nADD\nRETURN", locals: 3);
+                t.Equal(19L, unchecked((long)r.Value.value), "List 3 + Set 5 + Dict 11");
+            });
+            Add("PopUnknownReceiver", "A number does not acquire pop merely because other types expose it", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "PUSH INT 1\nCALL_METHOD pop 0\nRETURN"),
+                    RuntimeErrorId.MemberNotFound));
+            Add("PopCaseSensitive", "Method pop is case-sensitive even across multiple container types", t =>
+                DILTestHarness.ExpectFault(t,
+                    DILTestHarness.Evaluate(t, "PUSH INT 1\nSET 1\nCALL_METHOD Pop 0\nRETURN"),
+                    RuntimeErrorId.MemberNotFound));
+            Add("MemberVsNativePop", "Member dispatch preserves native List.pop(index) result", t =>
+            {
+                var native = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 1\nPUSH INT 5\nLIST 2\nPUSH INT 0\nPOP_ITEM\nRETURN");
+                var member = DILTestHarness.ExpectCompleted(t,
+                    "PUSH INT 1\nPUSH INT 5\nLIST 2\nPUSH INT 0\nCALL_METHOD pop 1\nRETURN");
+                t.Equal(native.Value.dataType, member.Value.dataType, "same result type");
+                t.Equal(native.Value.value, member.Value.value, "same result payload");
+            });
+            Add("ListPopContinuedConflict", "Concurrent mutation invalidates a continued member Pop", t =>
+            {
+                string module = "# GLOBAL : dst\n" +
+                    DILTestHarness.Function("LOAD_GLOBAL $dst\nPUSH INT 0\nCALL_METHOD pop 1\nRETURN") +
+                    DILTestHarness.Function("LOAD_GLOBAL $dst\nPUSH INT 100\nCALL_METHOD append 1\nRETURN",
+                        functionName: "writer");
+                var code = DILTestHarness.ParseModules(t, "test",
+                    new Dictionary<string, string> { ["test"] = module });
+                var memory = new VMMemoryContext(1, 200);
+                var list = new ListHeapObject(
+                    System.Linq.Enumerable.Range(0, 48).Select(i => DataValue.FromInt(i)).ToArray());
+                memory.SetGlobal(0, DataValue.FromListReference(memory.AllocHeap(list)));
+                var reader = DILTestHarness.MakeVM(code, memory: memory);
+                int writerId = -1;
+                foreach (var function in code.Functions)
+                    if (function.Name.EndsWith(".writer", StringComparison.Ordinal)) writerId = function.Id;
+                t.Check(writerId >= 0, "writer exists");
+                var writer = DILTestHarness.MakeVM(code, memory: memory, entryFunctionId: writerId);
+                reader.Advance(); reader.Advance(); reader.Advance(); // pop builds auxiliary state
+                t.Equal(VMExecutionStatus.Running, reader.Status, "pop is pending");
+                t.Equal(VMExecutionStatus.Completed, DILTestHarness.Run(t, writer).Status,
+                    "concurrent writer completed");
+                DILTestHarness.ExpectFault(t, DILTestHarness.Run(t, reader), RuntimeErrorId.InvalidOperation);
+                t.Equal(49, list.Count, "writer append was not overwritten");
+                t.Equal(100L, unchecked((long)list.GetElement(48).value), "writer value preserved");
+            });
+            Add("MemberRangeRegistration", "Malformed [DScriptMethod] range is rejected during registration", t =>
+            {
+                bool caught = false;
+                try { new InvalidRangeProbe(); }
+                catch (InvalidOperationException ex)
+                {
+                    caught = true;
+                    t.Contains("invalid DScript method argument range", ex.Message, "range error");
+                }
+                t.Check(caught, "bad range should reject registration");
+            });
+
             Add("StringMemberOOM", "A member receiver remains protected during garbage collection", t =>
             {
                 var r = DILTestHarness.Evaluate(t,
@@ -417,6 +586,12 @@ namespace Directiva.EditorTests.DIL
         {
             [DScriptGetter("foo")]
             public void Invalid() { }
+        }
+
+        private sealed class InvalidRangeProbe : DataType
+        {
+            [DScriptMethod("broken", 2, 1)]
+            public OperationResult Broken(OperationCall call) => OperationResult.Success(DataValue.None());
         }
         private sealed class VariadicProbe : DataType
         {

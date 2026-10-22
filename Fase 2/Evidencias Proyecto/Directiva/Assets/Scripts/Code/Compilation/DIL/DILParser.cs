@@ -561,7 +561,13 @@ namespace DSCompilation.DIL
                                 pendingJumps!
                             );
 
-                            Instruction[] finalInstructions = generateDebugMetadata
+                            // A DScript-generated function already owns its source map.
+                            // Never overwrite it with offsets into generated DIL.
+                            bool hasExplicitDebug = instructions!.Any(item =>
+                                item.Id == InstructionId.DebugFile ||
+                                item.Id == InstructionId.DebugLine ||
+                                item.Id == InstructionId.DebugSpan);
+                            Instruction[] finalInstructions = generateDebugMetadata && !hasExplicitDebug
                                 ? InjectDebugMetadata(
                                     module.Name,
                                     instructions!,
@@ -743,6 +749,35 @@ namespace DSCompilation.DIL
 
             switch (mnemonic)
             {
+                case "DEBUG_FILE":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
+                    string file = ParseStringLiteral(moduleName, lineNumber, tokens[1]);
+                    if (string.IsNullOrWhiteSpace(file))
+                        Throw(moduleName, lineNumber, "DEBUG_FILE requires a non-empty file path.");
+                    instructions.Add(Instruction.DebugFile(file));
+                    return;
+                }
+
+                case "DEBUG_LINE":
+                {
+                    int debugLine = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (debugLine < 0) Throw(moduleName, lineNumber, "DEBUG_LINE requires a non-negative, zero-based line.");
+                    instructions.Add(Instruction.DebugLine(debugLine));
+                    return;
+                }
+
+                case "DEBUG_SPAN":
+                {
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 3);
+                    int start = ResolveInt32(moduleName, lineNumber, tokens[1], symbols);
+                    int end = ResolveInt32(moduleName, lineNumber, tokens[2], symbols);
+                    if (start < 0 || end < start)
+                        Throw(moduleName, lineNumber, "DEBUG_SPAN requires a valid half-open offset range.");
+                    instructions.Add(Instruction.DebugSpan(start, end));
+                    return;
+                }
+
                 case "PASS":
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
                     instructions.Add(Instruction.Nop());

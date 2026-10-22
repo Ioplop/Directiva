@@ -130,7 +130,13 @@ namespace Directiva.EditorTests
             DIL.DILConcurrencyTests.Register(tests);
             DIL.DILErrorTests.Register(tests);
             DIL.DILRobustnessTests.Register(tests);
-            // A future DScript/Simulation suite registers here with its own Category.
+            DScript.DScriptLexerTests.Register(tests);
+            DScript.DScriptParserTests.Register(tests);
+            DScript.DScriptModulesTests.Register(tests);
+            DScript.DScriptSemanticTests.Register(tests);
+            DScript.DScriptSharedTests.Register(tests);
+            DScript.DScriptBackendTests.Register(tests);
+            // Simulation tests will register here once the simulation exists.
             DirectivaTupleSmokeTests.Register(tests);
             Directiva_TupleCompletionSmokeTests.Register(tests);
             var unique = new HashSet<string>(StringComparer.Ordinal);

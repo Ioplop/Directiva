@@ -82,5 +82,19 @@ namespace Directiva.EditorTests
         private static void Robustness() => DirectivaTestRunner.StartCategory("DIL", "Robustness");
         [MenuItem("Directiva/Tests/DIL/Regression/TestEverything", false, 120)]
         private static void Regression() => DirectivaTestRunner.StartCategory("DIL", "Regression");
+        [MenuItem("Directiva/Tests/DScript/TestEverything", false, 150)]
+        private static void DScriptAll() => DirectivaTestRunner.StartCategory("DScript");
+        [MenuItem("Directiva/Tests/DScript/Lexer/TestEverything", false, 151)]
+        private static void DScriptLexing() => DirectivaTestRunner.StartCategory("DScript", "Lexer");
+        [MenuItem("Directiva/Tests/DScript/Parser/TestEverything", false, 151)]
+        private static void DScriptParsing() => DirectivaTestRunner.StartCategory("DScript", "Parser");
+        [MenuItem("Directiva/Tests/DScript/Modules/TestEverything", false, 151)]
+        private static void DScriptModules() => DirectivaTestRunner.StartCategory("DScript", "Modules");
+        [MenuItem("Directiva/Tests/DScript/Semantics/TestEverything", false, 151)]
+        private static void DScriptSemantics() => DirectivaTestRunner.StartCategory("DScript", "Semantics");
+        [MenuItem("Directiva/Tests/DScript/Shared/TestEverything", false, 151)]
+        private static void DScriptShared() => DirectivaTestRunner.StartCategory("DScript", "Shared");
+        [MenuItem("Directiva/Tests/DScript/Backend/TestEverything", false, 151)]
+        private static void DScriptBackend() => DirectivaTestRunner.StartCategory("DScript", "Backend");
     }
 }

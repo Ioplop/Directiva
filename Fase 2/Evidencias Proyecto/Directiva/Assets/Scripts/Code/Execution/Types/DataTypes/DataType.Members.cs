@@ -19,7 +19,8 @@ namespace DSExecution.DataTypes
             internal OperationHandler? Method;
             internal OperationHandler? Getter;
             internal OperationHandler? Setter;
-            internal int MethodArity = -1;
+            internal int MethodMinArity;
+            internal int MethodMaxArity = -1; // -1 permits any count >= minimum.
         }
 
         private readonly Dictionary<string, MemberGroup> members =
@@ -59,9 +60,13 @@ namespace DSExecution.DataTypes
                 if (!IsValidMemberName(name))
                     throw new InvalidOperationException(type.Name + "." + method.Name +
                         " has an invalid DScript member name '" + name + "'.");
-                if (methodAttribute != null && methodAttribute.ArgumentCount < -1)
+                if (methodAttribute != null &&
+                    (methodAttribute.MinimumArgumentCount < 0 ||
+                     methodAttribute.MaximumArgumentCount < -1 ||
+                     (methodAttribute.MaximumArgumentCount >= 0 &&
+                      methodAttribute.MaximumArgumentCount < methodAttribute.MinimumArgumentCount)))
                     throw new InvalidOperationException(type.Name + "." + method.Name +
-                        " has an invalid DScript method argument count.");
+                        " has an invalid DScript method argument range.");
 
                 if (!members.TryGetValue(name, out MemberGroup? group))
                 {
@@ -83,7 +88,8 @@ namespace DSExecution.DataTypes
                 {
                     case DScriptMemberKind.Method:
                         group.Method = handler;
-                        group.MethodArity = methodAttribute!.ArgumentCount;
+                        group.MethodMinArity = methodAttribute!.MinimumArgumentCount;
+                        group.MethodMaxArity = methodAttribute.MaximumArgumentCount;
                         break;
                     case DScriptMemberKind.Getter:
                         group.Getter = handler;
@@ -127,15 +133,22 @@ namespace DSExecution.DataTypes
                 return OperationResult.OpError(RuntimeError.MemberNotFound(GetType().Name, name));
             }
             int actualArguments = call.Arguments.Length - 1; // The receiver is not a method argument.
-            int requiredArguments = kind switch
+            int minArguments = kind switch
             {
                 DScriptMemberKind.Getter => 0,
                 DScriptMemberKind.Setter => 1,
-                _ => group.MethodArity
+                _ => group.MethodMinArity
             };
-            if (actualArguments < 0 || requiredArguments >= 0 && requiredArguments != actualArguments)
+            int maxArguments = kind switch
+            {
+                DScriptMemberKind.Getter => 0,
+                DScriptMemberKind.Setter => 1,
+                _ => group.MethodMaxArity
+            };
+            if (actualArguments < minArguments ||
+                (maxArguments >= 0 && actualArguments > maxArguments))
                 return OperationResult.OpError(RuntimeError.InvalidMemberArgumentCount(
-                    GetType().Name, name, requiredArguments, actualArguments));
+                    GetType().Name, name, minArguments, maxArguments, actualArguments));
 
             OperationResult result = handler(call);
             return result.Status == OperationStatus.NotImplemented

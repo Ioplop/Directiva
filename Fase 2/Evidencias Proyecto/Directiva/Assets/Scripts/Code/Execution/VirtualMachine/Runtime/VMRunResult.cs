@@ -11,7 +11,10 @@ namespace DSExecution.VirtualMachine
     public readonly struct VMRunResult
     {
         public VMExecutionStatus Status { get; }
+        /// <summary>Logical budget units consumed; DEBUG_* instructions count as zero.</summary>
         public int StepsExecuted { get; }
+        /// <summary>Actual calls to Advance, including DEBUG_* instructions.</summary>
+        public int AdvancesExecuted { get; }
         public bool BudgetExhausted { get; }
         public RuntimeError? Error { get; }
         public DataValue ReturnValue { get; }
@@ -20,12 +23,14 @@ namespace DSExecution.VirtualMachine
         internal VMRunResult(
             VMExecutionStatus status,
             int stepsExecuted,
+            int advancesExecuted,
             bool budgetExhausted,
             RuntimeError? error,
             DataValue returnValue)
         {
             Status = status;
             StepsExecuted = stepsExecuted;
+            AdvancesExecuted = advancesExecuted;
             BudgetExhausted = budgetExhausted;
             Error = error;
             ReturnValue = returnValue;

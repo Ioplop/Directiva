@@ -67,10 +67,19 @@ namespace DSExecution.Errors
                 $"Property '{name}' on {type} is write-only. TODO: Localize!");
 
         public static RuntimeError InvalidMemberArgumentCount(string type, string name, int expected, int actual)
-            => new(RuntimeErrorId.InvalidMemberArgumentCount,
-                $"Member '{name}' on {type} expected " +
-                (expected < 0 ? "a valid argument count" : expected.ToString() + " argument(s)") +
-                $", got {actual}. TODO: Localize!");
+            => InvalidMemberArgumentCount(type, name, expected, expected, actual);
+
+        public static RuntimeError InvalidMemberArgumentCount(
+            string type, string name, int minimum, int maximum, int actual)
+        {
+            string expected = maximum < 0
+                ? (minimum == 0 ? "any non-negative number of arguments" :
+                    $"at least {minimum} argument(s)")
+                : minimum == maximum ? $"{minimum} argument(s)" :
+                    $"between {minimum} and {maximum} argument(s)";
+            return new RuntimeError(RuntimeErrorId.InvalidMemberArgumentCount,
+                $"Member '{name}' on {type} expected {expected}, got {actual}. TODO: Localize!");
+        }
 
         public static RuntimeError NotIterable(DataTypeId sourceType)
             => new(RuntimeErrorId.NotIterable,

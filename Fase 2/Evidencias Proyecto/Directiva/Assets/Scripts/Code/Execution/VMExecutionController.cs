@@ -170,7 +170,7 @@ namespace Directiva.CodeUI
             if (BreakpointPredicate == null)
             {
                 VMRunResult result = _vm.Run(instructionBudget);
-                TotalAdvances += result.StepsExecuted;
+                TotalAdvances += result.AdvancesExecuted;
 
                 if (result.Status == VMExecutionStatus.Completed)
                 {
@@ -201,7 +201,8 @@ namespace Directiva.CodeUI
                 return;
             }
 
-            for (int i = 0; i < instructionBudget; i++)
+            int logicalCost = 0;
+            while (logicalCost < instructionBudget)
             {
                 if (State != ScriptExecutionState.Running || _vm == null)
                     return;
@@ -209,8 +210,10 @@ namespace Directiva.CodeUI
                 if (TryPauseAtBreakpoint())
                     return;
 
+                int cost = _vm.NextInstructionCost;
                 if (!AdvanceOnce())
                     return;
+                logicalCost += cost;
             }
         }
 

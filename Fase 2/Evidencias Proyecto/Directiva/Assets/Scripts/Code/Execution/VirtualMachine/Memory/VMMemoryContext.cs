@@ -14,6 +14,7 @@ namespace DSExecution.VirtualMachine
         private readonly HeapMemory heap;
         private readonly List<WeakReference<DirectivaVM>> vms = new();
         private CodeContext functionProgram;
+        private bool bootstrapStarted;
         private ulong randomState;
         public ulong RandomSeed { get; private set; }
         private const ulong DefaultSeed = 0xD1EEC7A5B16C8E31UL;
@@ -86,6 +87,17 @@ namespace DSExecution.VirtualMachine
             }
 
             return ReferenceEquals(functionProgram, code);
+        }
+
+        /// <summary>
+        /// A memory context is bootstrapped at most once per simulation/team.
+        /// Shared function values must belong to the same CodeContext as its VMs.
+        /// </summary>
+        internal bool TryBeginBootstrap(CodeContext code)
+        {
+            if (bootstrapStarted || !TryBindFunctionProgram(code)) return false;
+            bootstrapStarted = true;
+            return true;
         }
 
         internal void RegisterVM(DirectivaVM vm)
