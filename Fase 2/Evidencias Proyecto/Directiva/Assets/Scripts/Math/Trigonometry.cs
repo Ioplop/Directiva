@@ -1,4 +1,4 @@
-using Unity.VisualScripting;
+using System;
 
 namespace DMath
 {
@@ -33,7 +33,97 @@ namespace DMath
         {
             int index = IndexFromFixed(a);
             index = (index + QuarterTurn) % TableSize;
-            return new Fixed(sines[IndexFromFixed(index)], raw: true);
+            return new Fixed(sines[index], raw: true);
+        }
+
+        /// <summary>
+        /// Devuelve el ángulo del vector (x, y) en grados.
+        /// Rango: [0, 360). Resolución: 0.25 grados.
+        /// </summary>
+        public static Fixed Atan2(Fixed y, Fixed x)
+        {
+            if (x == 0 && y == 0)
+                throw new ArgumentException("Atan2 no está definido para el vector cero.");
+
+            // Casos sobre los ejes.
+            if (y == 0)
+                return x > 0 ? 0 : 180;
+
+            if (x == 0)
+                return y > 0 ? 90 : 270;
+
+            // Trabajamos en el primer cuadrante.
+            long vx = Fixed.Abs(x).RawValue;
+            long vy = Fixed.Abs(y).RawValue;
+
+            // Reducir magnitudes grandes para evitar overflow
+            // al compararlas con los valores de la tabla.
+            long limit = long.MaxValue / (2 * Constants.FixedScale);
+
+            while (vx > limit || vy > limit)
+            {
+                vx >>= 1;
+                vy >>= 1;
+            }
+
+            // Búsqueda binaria entre 0° y 90°.
+            int low = 0;
+            int high = QuarterTurn;
+
+            while (high - low > 1)
+            {
+                int mid = (low + high) / 2;
+
+                if (CompareAngle(vx, vy, mid) > 0)
+                    low = mid;
+                else
+                    high = mid;
+            }
+
+            // Elegir el índice angular más cercano.
+            int quarterIndex = CompareAngle(vx, vy, low)
+                >= -CompareAngle(vx, vy, high)
+                ? high : low;
+
+            // Reconstruir el cuadrante original.
+            int index;
+
+            if (x > 0)
+                index = y > 0
+                    ? quarterIndex
+                    : TableSize - quarterIndex;
+            else
+                index = y > 0
+                    ? TableSize / 2 - quarterIndex
+                    : TableSize / 2 + quarterIndex;
+
+            index %= TableSize;
+
+            // Cada índice equivale a 0.25 grados.
+            return new Fixed(
+                index * (Constants.FixedScale / 4),
+                raw: true
+            );
+        }
+
+        /// <summary>
+        /// Devuelve el ángulo del vector en grados.
+        /// </summary>
+        public static Fixed Atan2(FixedVector2 vector)
+        {
+            return Atan2(vector.Y, vector.X);
+        }
+
+        /// <summary>
+        /// Compara el vector con una dirección de la tabla,
+        /// dentro del primer cuadrante.
+        /// </summary>
+        private static long CompareAngle(long x, long y, int index)
+        {
+            return checked(
+                y * sines[index + QuarterTurn]
+                - x * sines[index]
+            );
         }
     }
 }
