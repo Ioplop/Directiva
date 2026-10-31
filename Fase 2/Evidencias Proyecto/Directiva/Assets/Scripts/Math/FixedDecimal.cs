@@ -274,5 +274,65 @@ namespace DMath
             if (-decimalPart >= Constants.FixedScale / 2) return --integerPart;
             return integerPart;
         }
+
+
+        /// <summary>
+        /// Redondea hacia infinito positivo.
+        /// Para valores negativos no enteros, esto equivale a acercarse a cero.
+        /// </summary>
+        public Fixed Ceil()
+        {
+            return Ceil(this);
+        }
+
+        /// <summary>
+        /// Redondea hacia infinito positivo.
+        /// Para valores negativos no enteros, esto equivale a acercarse a cero.
+        /// </summary>
+        public static Fixed Ceil(Fixed value)
+        {
+            return CeilToLong(value);
+        }
+
+        /// <summary>
+        /// Redondea hacia infinito positivo.
+        /// Para valores negativos no enteros, esto equivale a acercarse a cero.
+        /// </summary>
+        /// <returns>Parte entera como long</returns>
+        public static long CeilToLong(Fixed value)
+        {
+            long decimalPart = value.RawValue % Constants.FixedScale;
+            long integerPart = value.RawValue / Constants.FixedScale;
+
+            return (decimalPart > 0) ? integerPart + 1 : decimalPart;
+        }
+
+        /// <summary>
+        /// Redondea hacia infinito negativo.
+        /// </summary>
+        public Fixed Floor()
+        {
+            return Floor(this);
+        }
+
+        /// <summary>
+        /// Redondea hacia infinito negativo.
+        /// </summary>
+        public static Fixed Floor(Fixed value)
+        {
+            return FloorToLong(value);
+        }
+
+        /// <summary>
+        /// Redondea hacia infinito negativo.
+        /// </summary>
+        /// <returns>Parte entera como long</returns>
+        public static long FloorToLong(Fixed value)
+        {
+            long integerPart = value.RawValue / Constants.FixedScale;
+            long decimalPart = value.RawValue % Constants.FixedScale;
+
+            return decimalPart < 0 ? integerPart - 1 : integerPart;
+        }
     }
 }
