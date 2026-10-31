@@ -7,6 +7,15 @@ namespace DMath
         private ulong state;
         private readonly ulong increment;
 
+        public DeterministicRandom(DeterministicRandom other) 
+        {
+            if (other is null)
+                throw new ArgumentNullException(nameof(other));
+
+            state = other.state;
+            increment = other.increment;
+        }
+
         public DeterministicRandom(ulong seed, ulong sequence = 54UL)
         {
             state = 0;
@@ -88,6 +97,12 @@ namespace DMath
             );
 
             return new Fixed(raw, raw: true);
+        }
+
+        // Copies the object in its current state for possible future usages where one might want to create a copy of a running simulation.
+        public DeterministicRandom Copy()
+        {
+            return new DeterministicRandom(this);
         }
     }
 }
