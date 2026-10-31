@@ -11,9 +11,7 @@ namespace SSimulation
         public int id { get; private set; }
         public bool alive { get; protected set; }
         public FixedVector2 Position { get; internal set; }
-        public FixedVector2 Velocity { get; protected set; }
         public Fixed Rotation { get; protected set; }
-        public Fixed AngularVelocity { get; protected set; }
         public Fixed Radius {  get; protected set; }
         public bool Collides { get; protected set; }
         public int CollisionPriority { get; protected set; }
@@ -43,8 +41,7 @@ namespace SSimulation
         /// <param name="delta">The amount of time since the last Update call.</param>
         internal virtual void Update(Fixed delta)
         {
-            // Update position and rotation!
-            // Do something!
+            // Do something every tick!
         }
 
         /// <summary>
