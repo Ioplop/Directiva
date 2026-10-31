@@ -10,14 +10,20 @@ namespace SSimulation
         public Simulation simulation { get; private set; }
         public int id { get; private set; }
         public bool alive { get; protected set; }
-        public FixedVector2 Position { get; protected set; }
-        public FixedVector2 velocity { get; protected set; }
-        public Fixed rotation { get; protected set; }
-        public Fixed angularVelocity { get; protected set; }
+        public FixedVector2 Position { get; internal set; }
+        public FixedVector2 Velocity { get; protected set; }
+        public Fixed Rotation { get; protected set; }
+        public Fixed AngularVelocity { get; protected set; }
+        public Fixed Radius {  get; protected set; }
+        public bool Collides { get; protected set; }
+        public int CollisionPriority { get; protected set; }
 
-        public SBEntity()
+        public SBEntity(Fixed radius)
         {
             alive = true;
+            Radius = radius;
+            Collides = true;
+            CollisionPriority = 0;
         }
 
         internal void Register(Simulation simulation, int id)
