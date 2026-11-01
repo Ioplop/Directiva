@@ -304,7 +304,7 @@ namespace DMath
             long decimalPart = value.RawValue % Constants.FixedScale;
             long integerPart = value.RawValue / Constants.FixedScale;
 
-            return (decimalPart > 0) ? integerPart + 1 : decimalPart;
+            return (decimalPart > 0) ? integerPart + 1 : integerPart;
         }
 
         /// <summary>
