@@ -1,7 +1,5 @@
 using System;
 using System.Globalization;
-using JetBrains.Annotations;
-using UnityEditorInternal;
 
 namespace DMath
 {
