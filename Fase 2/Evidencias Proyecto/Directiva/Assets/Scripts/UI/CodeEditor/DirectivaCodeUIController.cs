@@ -781,8 +781,11 @@ namespace Directiva.CodeUI
                 return;
             }
             var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
-            if (!DScriptLocalRename.TryFind(module, provider, caret, out string oldName,
-                out error))
+            var allModules = Codebase.Scripts.Select(script =>
+                script.RelativePath.Substring(0, script.RelativePath.Length -
+                    FileSystemScriptStorage.ScriptExtension.Length).Replace('/', '.')).ToArray();
+            if (!DScriptSymbolRename.TryFind(module, provider, allModules, caret,
+                out string oldName, out error))
             {
                 Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", error)));
                 return;
@@ -799,16 +802,70 @@ namespace Directiva.CodeUI
                             StringComparison.OrdinalIgnoreCase) ||
                         PreventLockedSourceMutation(originalPath)) return;
                     var liveProvider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
-                    if (!DScriptLocalRename.TryRename(module, liveProvider, caret, newName,
-                        out var plan, out string failure))
+                    var currentModules = Codebase.Scripts.Select(script =>
+                        script.RelativePath.Substring(0, script.RelativePath.Length -
+                            FileSystemScriptStorage.ScriptExtension.Length).Replace('/', '.')).ToArray();
+                    // The snapshot is regenerated after the dialog closes. All files
+                    // are checked again before the workspace commits any working copy.
+                    if (!DScriptSymbolRename.TryRename(module, liveProvider, currentModules,
+                        caret, newName, out var plan, out string failure))
                     {
                         Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", failure)));
                         return;
                     }
+                    if (!string.Equals(plan.OldName, oldName, StringComparison.Ordinal))
+                    {
+                        Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed",
+                            Localization.Get("Dialogs", "rename_stale_source")));
+                        return;
+                    }
                     if (plan.Count == 0) return;
-                    if (_editor.ApplyRefactoredContent(plan.Content, plan.Caret))
-                        Output.Write(Localization.Get("Dialogs", "rename_symbol_success",
-                            plan.OldName, plan.NewName, plan.Count));
+                    if (plan.Changes.Keys.Any(path => _executionSourceLock.IsFileLocked(path)))
+                    {
+                        Output.WriteWarning(Localization.Get("ScriptExplorer", "locked_action_blocked"));
+                        return;
+                    }
+                    if (!_workspace.TryApplyRefactoring(plan.Originals, plan.Changes,
+                        plan.Caret, _editor.ApplyRefactoredContent, out failure))
+                    {
+                        Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", failure)));
+                        return;
+                    }
+                    // An explicitly selected entry function is editor metadata, not
+                    // a DScript reference. Keep it aligned even when its defining
+                    // module is currently closed in the editor.
+                    if (plan.Kind == "function")
+                    {
+                        string ownerPath = plan.OwnerModule.Replace('.', '/') +
+                            FileSystemScriptStorage.ScriptExtension;
+                        if (string.Equals(ownerPath, _workspace.Active.RelativePath,
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.Equals(_topBar.EntryFunctionName, plan.OldName,
+                                StringComparison.Ordinal))
+                            {
+                                _topBar.SetEntryFunctionName(plan.NewName);
+                                MarkActiveEditorMetadataDirty();
+                            }
+                        }
+                        else
+                        {
+                            var metadata = _editorMetadataStore.Load(ownerPath);
+                            if (string.Equals(metadata.entryFunction, plan.OldName,
+                                StringComparison.Ordinal))
+                            {
+                                metadata.entryFunction = plan.NewName;
+                                try { _editorMetadataStore.Save(ownerPath, metadata); }
+                                catch (Exception ex)
+                                {
+                                    Output.WriteWarning(Localization.Get("Dialogs",
+                                        "rename_metadata_warning", ex.Message));
+                                }
+                            }
+                        }
+                    }
+                    Output.Write(Localization.Get("Dialogs", "rename_symbol_success",
+                        plan.OldName, plan.NewName, plan.Count));
                 }),
                 Localization.Get("Dialogs", "rename_symbol_action"),
                 Localization.Get("Common", "cancel"));

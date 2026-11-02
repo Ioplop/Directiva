@@ -9,8 +9,8 @@
 [duplicate_title]: Duplicate
 [duplicate_message]: Name for the copy of {{1}}.
 [rename_symbol_action]: Rename symbol
-[rename_symbol_title]: Rename variable
-[rename_symbol_message]: New name for {{1}} (local variables and parameters only).
+[rename_symbol_title]: Rename symbol
+[rename_symbol_message]: New name for {{1}}. Its references will be updated in the relevant files.
 [rename_symbol_failed]: Cannot rename: {{1}}
 [rename_symbol_success]: Renamed {{1}} to {{2}} in {{3}} references.
 [rename_invalid_identifier]: Name must be a valid DScript identifier, not a keyword.
@@ -19,5 +19,10 @@
 [rename_unavailable_module]: Cannot read the active module.
 [rename_result_invalid]: The new name would make the program invalid.
 [rename_fix_errors]: Fix compilation errors before renaming.
-[rename_only_local]: Place the cursor on a local variable or parameter. Function and shared renames are separate stages.
-[rename_stale_source]: Cannot identify all references in the current source.
+[rename_only_local]: Place the caret on a variable, parameter, function or shared symbol (not an explicit import alias).
+[rename_stale_source]: Source changed after preparing the rename, or its references are no longer valid.
+[rename_no_symbol]: Place the caret on a variable, parameter, function or shared symbol (not an explicit import alias).
+[rename_collision_shared]: Another shared variable already has that name; they cannot be merged.
+[rename_binding_changed]: The new name would change which symbols some references resolve to.
+[rename_apply_failed]: Could not finish modifying the working copies.
+[rename_metadata_warning]: Could not update the editor entry function: {{1}}

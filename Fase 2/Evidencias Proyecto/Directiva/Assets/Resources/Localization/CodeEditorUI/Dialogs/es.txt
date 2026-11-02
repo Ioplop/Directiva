@@ -9,8 +9,8 @@
 [duplicate_title]: Duplicar
 [duplicate_message]: Nombre para la copia de {{1}}.
 [rename_symbol_action]: Renombrar símbolo
-[rename_symbol_title]: Renombrar variable
-[rename_symbol_message]: Nuevo nombre para {{1}} (solo variables locales y parámetros).
+[rename_symbol_title]: Renombrar símbolo
+[rename_symbol_message]: Nuevo nombre para {{1}}. Se actualizarán sus referencias en los archivos correspondientes.
 [rename_symbol_failed]: No se pudo renombrar: {{1}}
 [rename_symbol_success]: Se renombró {{1}} a {{2}} en {{3}} referencias.
 [rename_invalid_identifier]: El nombre debe ser un identificador DScript válido y no puede ser una palabra reservada.
@@ -19,5 +19,10 @@
 [rename_unavailable_module]: No se pudo leer el módulo activo.
 [rename_result_invalid]: El nuevo nombre haría inválido el programa.
 [rename_fix_errors]: Corrige los errores de compilación antes de renombrar.
-[rename_only_local]: Coloca el cursor sobre una variable local o un parámetro. Las funciones y las variables shared tendrán su propia fase.
-[rename_stale_source]: No se pudieron identificar todas las referencias en el archivo actual.
+[rename_only_local]: Coloca el cursor sobre una variable, parámetro, función o shared (no sobre un alias explícito).
+[rename_stale_source]: El código cambió desde que se preparó el renombrado o sus referencias dejaron de ser válidas.
+[rename_no_symbol]: Coloca el cursor sobre una variable, parámetro, función o shared (no sobre un alias explícito).
+[rename_collision_shared]: Ya existe otra variable shared con ese nombre; no pueden fusionarse.
+[rename_binding_changed]: El nuevo nombre cambiaría a qué símbolos apuntan algunas referencias.
+[rename_apply_failed]: No se pudo completar la modificación de las copias de trabajo.
+[rename_metadata_warning]: No se pudo actualizar la función inicial del editor: {{1}}

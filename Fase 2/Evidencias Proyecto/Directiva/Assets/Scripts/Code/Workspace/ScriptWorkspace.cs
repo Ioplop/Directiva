@@ -171,6 +171,83 @@ namespace Directiva.CodeUI
             return _storage.ReadSaved(relativeScriptPath);
         }
 
+        /// <summary>
+        /// Commit a previously validated multi-script rename to working copies only.
+        /// Saved .dscript files are NEVER overwritten. Inactive scripts receive .back
+        /// copies; the active buffer is applied last through the editor's undo mechanism.
+        /// All sources are checked for intervening edits before changing anything.
+        /// </summary>
+        public bool TryApplyRefactoring(IReadOnlyDictionary<string, string> originals,
+            IReadOnlyDictionary<string, string> changes, int caret,
+            Func<string, int, bool> applyActive, out string error)
+        {
+            error = null;
+            if (changes == null || changes.Count == 0) return true;
+            if (originals == null || Active == null || applyActive == null ||
+                !changes.ContainsKey(Active.RelativePath))
+            { error = "rename_stale_source"; return false; }
+
+            var paths = changes.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray();
+            foreach (string path in paths)
+            {
+                if (!originals.TryGetValue(path, out var expected) ||
+                    !_storage.ScriptExists(path) ||
+                    !string.Equals(NormalizeNewlines(GetWorkingContent(path)), expected,
+                        StringComparison.Ordinal))
+                { error = "rename_stale_source"; return false; }
+            }
+
+            var previousBackups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var withoutBackup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var modified = new List<string>();
+            try
+            {
+                foreach (string path in paths)
+                {
+                    if (string.Equals(path, Active.RelativePath, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (_storage.BackupExists(path))
+                        previousBackups.Add(path, _storage.ReadBackup(path));
+                    else withoutBackup.Add(path);
+                    modified.Add(path);
+                    if (string.Equals(NormalizeNewlines(_storage.ReadSaved(path)),
+                        changes[path], StringComparison.Ordinal))
+                        _storage.DeleteBackup(path);
+                    else
+                        _storage.WriteBackup(path, changes[path]);
+                }
+                if (!applyActive(changes[Active.RelativePath], caret))
+                { error = "rename_apply_failed"; RestoreBackups(); return false; }
+            }
+            catch
+            {
+                RestoreBackups();
+                error = "rename_apply_failed";
+                return false;
+            }
+            foreach (string path in modified)
+                ScriptStateChanged?.Invoke(path);
+            return true;
+
+            void RestoreBackups()
+            {
+                // Best effort rollback if storage failed partway through the batch.
+                foreach (string path in modified)
+                {
+                    try
+                    {
+                        if (withoutBackup.Contains(path)) _storage.DeleteBackup(path);
+                        else if (previousBackups.TryGetValue(path, out var old))
+                            _storage.WriteBackup(path, old);
+                    }
+                    catch { /* The original exception is already reported. */ }
+                }
+            }
+        }
+
+        private static string NormalizeNewlines(string text) =>
+            (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+
         public void Save(string relativeScriptPath)
         {
             relativeScriptPath = Normalize(relativeScriptPath);
