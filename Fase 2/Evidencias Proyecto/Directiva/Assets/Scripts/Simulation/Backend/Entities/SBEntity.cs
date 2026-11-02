@@ -1,6 +1,6 @@
 using DMath;
 
-namespace SSimulation
+namespace DSimulation
 {
     /// <summary>
     /// Representa cualquier entidad existente dentro de una simulacion de partida: Edificios, Unidades, Recursos

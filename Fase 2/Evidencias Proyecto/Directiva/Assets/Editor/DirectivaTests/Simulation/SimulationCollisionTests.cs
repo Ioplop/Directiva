@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using DMath;
-using SSimulation;
-using World = SSimulation.Simulation;
+using DSimulation;
+using World = DSimulation.Simulation;
 
 namespace Directiva.EditorTests.SimulationTests
 {

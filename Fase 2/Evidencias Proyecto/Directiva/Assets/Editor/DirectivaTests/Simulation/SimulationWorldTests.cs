@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DMath;
-using World = SSimulation.Simulation;
+using World = DSimulation.Simulation;
 
 namespace Directiva.EditorTests.SimulationTests
 {
