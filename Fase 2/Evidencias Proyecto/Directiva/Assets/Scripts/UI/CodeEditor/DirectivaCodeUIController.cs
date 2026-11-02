@@ -184,7 +184,8 @@ namespace Directiva.CodeUI
             _executionController.Completed += OnExecutionCompleted;
             _executionController.Faulted += OnExecutionFaulted;
             _executionController.BreakpointHit += OnBreakpointHit;
-            _executionController.Printed += OnExecutionPrinted;
+            _executionController.PrintedWithDebug += OnExecutionPrinted;
+            _executionController.StateChanged += OnExecutionStateChanged;
 
             Localization.LocalizationWarning += message => Output.WriteWarning(message);
 
@@ -857,6 +858,8 @@ namespace Directiva.CodeUI
                 return;
 
             _executionController.Step(skipDebugMetadata: true); // DScript always emits DEBUG_* metadata.
+            if (_executionController.State == ScriptExecutionState.Paused)
+                RefreshExecutionMetrics();
             RefreshDScriptDebugHighlight();
         }
 
@@ -874,9 +877,7 @@ namespace Directiva.CodeUI
             }
 
             _executionController.Stop();
-            _topBar.SetExecutionMetrics(
-                _executionController.TotalAdvances,
-                _executionController.ElapsedMilliseconds);
+            RefreshExecutionMetrics();
             _runningFunctionName = null;
             _runningMemory = null;
             _runningSourceDebugEnabled = false;
@@ -909,12 +910,11 @@ namespace Directiva.CodeUI
                 BuildRunningBreakpointMap();
                 var sourceProvider = new WorkspaceDScriptSourceProvider(
                     Codebase, _workspace, _storage.RootPath);
-                Output.Write(Localization.Get("Console", "compile_start", active.RelativePath));
-
                 DScriptEditorPreparedRun prepared = DScriptEditorRunPipeline.Prepare(
                     moduleName, _topBar.EntryFunctionName, sourceProvider,
                     editorInitializerStepBudget,
-                    onInitializerOutput: text => Output.Write(text ?? string.Empty),
+                    onInitializerOutputWithDebug: (text, debug) =>
+                        Output.Write(text ?? string.Empty, OutputSourceLocation.FromDebug(debug)),
                     onInitializerErrorWithDebug: (step, error, debug) =>
                     {
                         // Shared initializers execute on temporary VMs. Prefer the
@@ -977,8 +977,6 @@ namespace Directiva.CodeUI
                 _editor.ClearExecutionLine();
                 _topBar.ClearExecutionMetrics();
                 _executionController.Start(prepared.VM, paused: startPaused);
-                Output.Write(Localization.Get("Console", "compile_success",
-                    prepared.Program.DILModules.Count - 1, _runningFunctionName));
                 return true;
             }
             catch (Exception ex)
@@ -1031,9 +1029,24 @@ namespace Directiva.CodeUI
             }
         }
 
-        private void OnExecutionPrinted(string text)
+        private void OnExecutionPrinted(string text, VMDebugState debug)
         {
-            Output.Write(text ?? string.Empty);
+            Output.Write(text ?? string.Empty, OutputSourceLocation.FromDebug(debug));
+        }
+
+        private void OnExecutionStateChanged(ScriptExecutionState state)
+        {
+            // StateChanged fires for manual Pause, initial paused starts, and
+            // breakpoints. Capture metrics at the moment of the pause.
+            if (state == ScriptExecutionState.Paused)
+                RefreshExecutionMetrics();
+        }
+
+        private void RefreshExecutionMetrics()
+        {
+            if (_executionController != null)
+                _topBar?.SetExecutionMetrics(_executionController.TotalLogicalSteps,
+                    _executionController.ElapsedMilliseconds);
         }
 
         private void OnExecutionCompleted(DataValue returnValue)
@@ -1045,9 +1058,7 @@ namespace Directiva.CodeUI
             Output.Write(Localization.Get("Console", "completed", functionName,
                 FormatDataValue(returnValue, _runningMemory)));
 
-            _topBar.SetExecutionMetrics(
-                _executionController.TotalAdvances,
-                _executionController.ElapsedMilliseconds);
+            RefreshExecutionMetrics();
 
             _runningFunctionName = null;
             _runningMemory = null;
@@ -1072,9 +1083,7 @@ namespace Directiva.CodeUI
             Output.WriteError(Localization.Get("Console", "faulted", functionName,
                 error.Id, DirectivaLocalization.Format(error)) + locationSuffix, source);
 
-            _topBar.SetExecutionMetrics(
-                _executionController.TotalAdvances,
-                _executionController.ElapsedMilliseconds);
+            RefreshExecutionMetrics();
 
             _runningFunctionName = null;
             _runningMemory = null;

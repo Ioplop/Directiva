@@ -49,7 +49,8 @@ namespace DSCompilation.DScript.Backend
             VMOptions options = null,
             Action<DScriptCompiledInitializer, RuntimeError> onError = null,
             Action<string> onOutput = null,
-            Action<DScriptCompiledInitializer, RuntimeError, VMDebugState> onErrorWithDebug = null)
+            Action<DScriptCompiledInitializer, RuntimeError, VMDebugState> onErrorWithDebug = null,
+            Action<string, VMDebugState> onOutputWithDebug = null)
         {
             if (program == null) throw new ArgumentNullException(nameof(program));
             if (memory == null) throw new ArgumentNullException(nameof(memory));
@@ -66,8 +67,13 @@ namespace DSCompilation.DScript.Backend
             {
                 var vm = new DirectivaVM(program.Code, memory, options, step.FunctionId);
                 if (onOutput != null) vm.Printed += onOutput;
+                Action<string> captureOutput = null;
+                if (onOutputWithDebug != null)
+                    captureOutput = text => onOutputWithDebug(text, vm.Debug.Snapshot());
+                if (captureOutput != null) vm.Printed += captureOutput;
                 VMRunResult result = vm.Run(logicalBudgetPerInitializer);
                 if (onOutput != null) vm.Printed -= onOutput;
+                if (captureOutput != null) vm.Printed -= captureOutput;
                 RuntimeError error = result.Error;
                 if (result.Status == VMExecutionStatus.Running)
                 {

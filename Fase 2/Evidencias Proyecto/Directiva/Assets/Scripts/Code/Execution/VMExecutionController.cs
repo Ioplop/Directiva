@@ -8,7 +8,7 @@ namespace Directiva.CodeUI
 {
     /// <summary>
     /// Drives one DirectivaVM from the UI without blocking the Unity main thread.
-    /// Execution advances by a bounded instruction budget on each Tick call.
+    /// Execution advances by a bounded logical-step budget on each Tick call.
     /// </summary>
     public sealed class VMExecutionController : IScriptExecutionStateProvider
     {
@@ -20,7 +20,10 @@ namespace Directiva.CodeUI
         public ScriptExecutionState State { get; private set; } = ScriptExecutionState.Stopped;
         public DirectivaVM CurrentVM => _vm;
         public VMDebugState LastFaultDebug { get; private set; }
+        /// <summary>Number of Advance calls, including zero-cost DEBUG_* metadata.</summary>
         public long TotalAdvances { get; private set; }
+        /// <summary>Actual VM logical budget spent; DEBUG_* costs zero.</summary>
+        public long TotalLogicalSteps { get; private set; }
         public double ElapsedMilliseconds => _executionTimer.Elapsed.TotalMilliseconds;
 
         /// <summary>
@@ -34,6 +37,11 @@ namespace Directiva.CodeUI
         public event Action<RuntimeError> Faulted;
         public event Action<DirectivaVM> BreakpointHit;
         public event Action<string> Printed;
+        /// <summary>
+        /// PRINT with a snapshot of the source location at emission time. Consumers
+        /// of the original text-only event remain unaffected.
+        /// </summary>
+        public event Action<string, VMDebugState> PrintedWithDebug;
 
         public void Start(DirectivaVM vm, bool paused = false)
         {
@@ -44,6 +52,7 @@ namespace Directiva.CodeUI
             LastFaultDebug = null;
             _vm.Printed += OnVMPrinted;
             TotalAdvances = 0;
+            TotalLogicalSteps = 0;
             ClearBreakpointSuppression();
             _executionTimer.Restart();
             SetState(paused ? ScriptExecutionState.Paused : ScriptExecutionState.Running);
@@ -125,8 +134,11 @@ namespace Directiva.CodeUI
             if (_vm == null)
                 return false;
 
+            // Read cost before Advance changes IP or enters/completes a continuation.
+            int cost = _vm.NextInstructionCost;
             VMAdvanceResult result = _vm.Advance();
             TotalAdvances++;
+            TotalLogicalSteps += cost;
 
             if (result.Status == VMExecutionStatus.Completed)
             {
@@ -175,6 +187,7 @@ namespace Directiva.CodeUI
             {
                 VMRunResult result = _vm.Run(instructionBudget);
                 TotalAdvances += result.AdvancesExecuted;
+                TotalLogicalSteps += result.StepsExecuted;
 
                 if (result.Status == VMExecutionStatus.Completed)
                 {
@@ -256,7 +269,11 @@ namespace Directiva.CodeUI
 
         private void OnVMPrinted(string text)
         {
+            // The VM may advance (or be stopped by another subscriber) immediately
+            // after this callback. Keep the DEBUG_* position from the PRINT itself.
+            VMDebugState source = _vm?.Debug.Snapshot();
             Printed?.Invoke(text);
+            PrintedWithDebug?.Invoke(text, source);
         }
 
         private void ClearBreakpointSuppression()

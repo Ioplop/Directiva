@@ -4,6 +4,7 @@
 [pause]: Pause
 [continue]: Continue
 [step]: Step
+[execution_steps]: Steps
 [step_in]: Step In
 [step_out]: Step Out
 [back]: Back

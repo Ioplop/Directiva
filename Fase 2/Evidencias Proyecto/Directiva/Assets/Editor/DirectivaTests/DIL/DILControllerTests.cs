@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Directiva.CodeUI;
 using DSCompilation.DIL;
 using DSExecution.DataTypes;
@@ -28,6 +29,7 @@ namespace Directiva.EditorTests.DIL
                 t.Equal(ScriptExecutionState.Paused, controller.State, "initial paused state");
                 controller.Tick(50);
                 t.Equal(0L, controller.TotalAdvances, "paused Tick must not execute");
+                t.Equal(0L, controller.TotalLogicalSteps, "paused Tick consumes no budget");
                 controller.Continue();
                 controller.Tick(1);
                 t.Equal(ScriptExecutionState.Running, controller.State, "budgeted running state");
@@ -36,6 +38,7 @@ namespace Directiva.EditorTests.DIL
                 t.Equal(1, completed, "completed event count");
                 t.Equal(5L, unchecked((long)result.value), "completed value");
                 t.Equal(2L, controller.TotalAdvances, "exact instructions executed");
+                t.Equal(2L, controller.TotalLogicalSteps, "two logical steps executed");
             });
             Add("StepByStep", "Paused Step executes precisely one VM instruction", t =>
             {
@@ -45,6 +48,7 @@ namespace Directiva.EditorTests.DIL
                 controller.Step(false);
                 t.Equal(1, vm.InstructionPointer, "first IP");
                 t.Equal(1L, controller.TotalAdvances, "single step advances");
+                t.Equal(1L, controller.TotalLogicalSteps, "one logical step");
                 t.Equal(ScriptExecutionState.Paused, controller.State, "remains paused");
                 controller.Step(false);
                 t.Equal(2, vm.InstructionPointer, "second IP");
@@ -62,8 +66,109 @@ namespace Directiva.EditorTests.DIL
                 t.Equal(1, vm.EvaluationStackCount, "one source PUSH executed");
                 t.Equal(ScriptExecutionState.Paused, controller.State, "debug step remains paused");
                 t.Check(controller.TotalAdvances >= 4, "metadata steps should be transparently consumed");
+                t.Equal(1L, controller.TotalLogicalSteps, "DEBUG metadata has zero cost");
                 controller.Step(true);
                 t.Equal(ScriptExecutionState.Stopped, controller.State, "source RETURN completes");
+                t.Equal(2L, controller.TotalLogicalSteps, "PUSH and RETURN each cost one");
+            });
+            Add("TenStepLogicalBudget", "Tick(10) reports exactly ten VM logical steps even with DEBUG metadata", t =>
+            {
+                var body = string.Concat(System.Linq.Enumerable.Repeat("PASS\n", 12)) + "PUSH INT 9\nRETURN";
+                var vm = DILTestHarness.MakeVM(t, body,
+                    parserOptions: new DILParserOptions(generateDebugMetadata: true));
+                var controller = new VMExecutionController();
+                controller.Start(vm);
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Running, controller.State, "budget leaves program running");
+                t.Equal(10L, controller.TotalLogicalSteps, "ten steps must be exactly ten");
+                t.Equal(40L, controller.TotalAdvances, "each instruction has three zero-cost debug entries");
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "program completed");
+                t.Equal(14L, controller.TotalLogicalSteps, "12 PASS + PUSH + RETURN");
+                t.Equal(56L, controller.TotalAdvances, "all debug instructions still execute");
+            });
+            Add("ManualDebugSteps", "Step(false) counts DEBUG metadata as advances but not logical steps", t =>
+            {
+                var vm = DILTestHarness.MakeVM(t,
+                    "DEBUG_FILE \"main.dscript\"\nDEBUG_LINE 2\nDEBUG_SPAN 0 5\nPUSH INT 7\nRETURN");
+                var controller = new VMExecutionController();
+                controller.Start(vm, paused: true);
+                for (int i = 1; i <= 3; i++)
+                {
+                    controller.Step(false);
+                    t.Equal((long)i, controller.TotalAdvances, "debug advance " + i);
+                    t.Equal(0L, controller.TotalLogicalSteps, "debug cost is always zero");
+                }
+                controller.Step(false);
+                t.Equal(1L, controller.TotalLogicalSteps, "PUSH costs one");
+                controller.Step(false);
+                t.Equal(2L, controller.TotalLogicalSteps, "RETURN costs one");
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "completed");
+            });
+            Add("BreakpointLogicalSteps", "Breakpoints report cost of executed instructions, not debug metadata", t =>
+            {
+                var vm = DILTestHarness.MakeVM(t,
+                    "DEBUG_FILE \"main.dscript\"\nDEBUG_LINE 2\nDEBUG_SPAN 0 5\nPUSH INT 7\nRETURN");
+                var controller = new VMExecutionController();
+                long stepsAtPause = -1;
+                controller.StateChanged += state =>
+                {
+                    if (state == ScriptExecutionState.Paused)
+                        stepsAtPause = controller.TotalLogicalSteps;
+                };
+                controller.BreakpointPredicate = current => current.InstructionPointer == 4;
+                controller.Start(vm);
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Paused, controller.State, "paused before RETURN");
+                t.Equal(1L, stepsAtPause, "only PUSH has consumed a logical step");
+                t.Equal(4L, controller.TotalAdvances, "three DEBUG entries and PUSH executed");
+                controller.Continue();
+                controller.Tick(10);
+                t.Equal(2L, controller.TotalLogicalSteps, "one more step after continue");
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "finished on return");
+            });
+            Add("LogicalCounterResets", "Starting a different VM resets both counters", t =>
+            {
+                var controller = new VMExecutionController();
+                controller.Start(DILTestHarness.MakeVM(t, "PUSH INT 1\nRETURN"));
+                controller.Tick(10);
+                t.Equal(2L, controller.TotalLogicalSteps, "first run");
+                controller.Start(DILTestHarness.MakeVM(t,
+                    "DEBUG_FILE \"main.dscript\"\nPUSH NONE\nRETURN"), paused: true);
+                t.Equal(0L, controller.TotalLogicalSteps, "new run resets logical counter");
+                t.Equal(0L, controller.TotalAdvances, "new run resets advance counter");
+                controller.Step(false);
+                t.Equal(0L, controller.TotalLogicalSteps, "metadata stays free");
+                controller.Stop();
+                t.Equal(0L, controller.TotalLogicalSteps, "Stop preserves final count");
+            });
+            Add("ContinuationLogicalBudget", "Continued COPY consumes its real budget, excluding DEBUG metadata", t =>
+            {
+                string elements = string.Join("\n", System.Linq.Enumerable.Range(0, 24)
+                    .Select(i => "PUSH INT " + i));
+                var code = DILTestHarness.Parse(t,
+                    elements + "\nLIST 24\nCOPY\nRETURN",
+                    options: new DILParserOptions(generateDebugMetadata: true));
+                var reference = DILTestHarness.MakeVM(code);
+                var controller = new VMExecutionController();
+                controller.Start(DILTestHarness.MakeVM(code));
+                long referenceSteps = 0;
+                long referenceAdvances = 0;
+                for (int i = 0; i < 30 && reference.Status == VMExecutionStatus.Running; i++)
+                {
+                    var batch = reference.Run(7);
+                    referenceSteps += batch.StepsExecuted;
+                    referenceAdvances += batch.AdvancesExecuted;
+                    controller.Tick(7);
+                    t.Equal(referenceSteps, controller.TotalLogicalSteps,
+                        "logical cost agrees with VM.Run after batch " + i);
+                    t.Equal(referenceAdvances, controller.TotalAdvances,
+                        "advances agree with VM.Run after batch " + i);
+                }
+                t.Equal(VMExecutionStatus.Completed, reference.Status, "reference VM completed");
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "controlled VM completed");
+                t.Check(referenceSteps > 27, "COPY should require continuation steps");
+                t.Check(referenceAdvances > referenceSteps, "DEBUG metadata should remain zero-cost");
             });
             Add("PrintedAndFaultedEvents", "Adapter forwards PRINT and runtime failure events", t =>
             {

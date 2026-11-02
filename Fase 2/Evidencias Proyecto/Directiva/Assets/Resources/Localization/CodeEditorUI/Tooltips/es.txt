@@ -17,4 +17,4 @@
 [clear_output]: Limpiar Output
 [entry_function]: Nombre de la función DScript sin parámetros. Si se deja vacío, se ejecuta la primera función del archivo.
 [debug_source]: Resalta la línea DScript que ejecuta la VM. Los metadatos DEBUG_* se generan siempre.
-[execution_metrics]: Advances ejecutados y tiempo real transcurrido, incluidas las pausas. DEBUG_* cuenta como Advances.
+[execution_metrics]: Pasos lógicos consumidos por el programa y tiempo real transcurrido, incluidas las pausas.

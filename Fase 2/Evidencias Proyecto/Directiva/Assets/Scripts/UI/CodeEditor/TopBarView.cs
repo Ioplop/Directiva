@@ -26,6 +26,9 @@ namespace Directiva.CodeUI
         private readonly Button _stepIn;
         private readonly Button _stepOut;
         private readonly Label _executionMetrics;
+        private long _lastLogicalSteps;
+        private double _lastElapsedMilliseconds;
+        private bool _hasExecutionMetrics;
 
         private readonly Button _back;
         private readonly Button _options;
@@ -282,15 +285,25 @@ namespace Directiva.CodeUI
 
         public void ClearExecutionMetrics()
         {
+            _hasExecutionMetrics = false;
             _executionMetrics.text = string.Empty;
             _executionMetrics.style.display = DisplayStyle.None;
         }
 
-        public void SetExecutionMetrics(long advances, double elapsedMilliseconds)
+        public void SetExecutionMetrics(long logicalSteps, double elapsedMilliseconds)
         {
-            _executionMetrics.text =
-                $"{advances:N0} Advances · {elapsedMilliseconds:0.##} ms";
+            _lastLogicalSteps = logicalSteps;
+            _lastElapsedMilliseconds = elapsedMilliseconds;
+            _hasExecutionMetrics = true;
+            UpdateExecutionMetricsLabel();
             _executionMetrics.style.display = DisplayStyle.Flex;
+        }
+
+        private void UpdateExecutionMetricsLabel()
+        {
+            string steps = _locale.Get("Common", "execution_steps");
+            _executionMetrics.text =
+                $"{_lastLogicalSteps:N0} {steps} · {_lastElapsedMilliseconds:0.##} ms";
         }
 
         public void SetDocument(string path, bool isDirty)
@@ -350,6 +363,8 @@ namespace Directiva.CodeUI
             _entryFunction.tooltip = _locale.Get("Tooltips", "entry_function");
             _debugSource.tooltip = _locale.Get("Tooltips", "debug_source");
             _executionMetrics.tooltip = _locale.Get("Tooltips", "execution_metrics");
+            if (_hasExecutionMetrics)
+                UpdateExecutionMetricsLabel();
             _save.tooltip = _locale.Get("Common", "save");
             _revert.tooltip = _locale.Get("Common", "revert");
 

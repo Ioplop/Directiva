@@ -47,7 +47,8 @@ namespace Directiva.CodeUI
             IDScriptSourceProvider provider, int initializerBudget = 10000,
             Action<string> onInitializerOutput = null,
             Action<DScriptCompiledInitializer, RuntimeError> onInitializerError = null,
-            Action<DScriptCompiledInitializer, RuntimeError, VMDebugState> onInitializerErrorWithDebug = null)
+            Action<DScriptCompiledInitializer, RuntimeError, VMDebugState> onInitializerErrorWithDebug = null,
+            Action<string, VMDebugState> onInitializerOutputWithDebug = null)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
             if (initializerBudget <= 0) throw new ArgumentOutOfRangeException(nameof(initializerBudget));
@@ -96,7 +97,8 @@ namespace Directiva.CodeUI
             var memory = new VMMemoryContext(compilation.Program.Code.GlobalCount);
             DScriptInitializationReport initialization = DScriptBootstrapRunner.Initialize(
                 compilation.Program, memory, initializerBudget, onError: onInitializerError,
-                onOutput: onInitializerOutput, onErrorWithDebug: onInitializerErrorWithDebug);
+                onOutput: onInitializerOutput, onErrorWithDebug: onInitializerErrorWithDebug,
+                onOutputWithDebug: onInitializerOutputWithDebug);
             var vm = new DirectivaVM(compilation.Program.Code, memory, null, functionId);
             return new DScriptEditorPreparedRun(compilation, memory, initialization, vm, qualified, null);
         }

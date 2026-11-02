@@ -33,6 +33,7 @@ namespace Directiva.CodeUI
         private const float MinimumFontSize = 6f;
         private const float MaximumFontSize = 48f;
         private const float ZoomStep = 1f;
+        private const float ReferenceFontSize = 14f;
 
         private float _fontSize;
         private HoverTooltipController _tooltips;
@@ -218,6 +219,55 @@ namespace Directiva.CodeUI
             _newFolder.style.fontSize = _fontSize;
         }
 
+        // The USS gives rows a fixed 28 px height. Override it on each rebuild:
+        // changing only fontSize leaves large labels overlapping adjacent rows.
+        private float RowHeight => Mathf.Max(20f, _fontSize * 1.5f + 7f);
+
+        private float Scaled(float pixels, float minimum) =>
+            Mathf.Max(minimum, pixels * _fontSize / ReferenceFontSize);
+
+        private void ApplyRowHeight(VisualElement row)
+        {
+            row.style.height = RowHeight;
+            row.style.minHeight = RowHeight;
+            row.style.flexShrink = 0f;
+        }
+
+        private void ApplyStateSize(VisualElement state)
+        {
+            var size = Scaled(7f, 4f);
+            state.style.width = size;
+            state.style.minWidth = size;
+            state.style.height = size;
+            state.style.marginRight = Scaled(4f, 2f);
+            state.style.borderTopLeftRadius = size / 2f;
+            state.style.borderTopRightRadius = size / 2f;
+            state.style.borderBottomLeftRadius = size / 2f;
+            state.style.borderBottomRightRadius = size / 2f;
+            state.style.flexShrink = 0f;
+        }
+
+        private void ApplyTypeIconSize(Image icon)
+        {
+            var size = Scaled(18f, 11f);
+            icon.style.width = size;
+            icon.style.minWidth = size;
+            icon.style.height = size;
+            icon.style.marginRight = Scaled(3f, 2f);
+            icon.style.flexShrink = 0f;
+        }
+
+        private void ApplyRowButtonSize(Button button, float width, float height)
+        {
+            var buttonWidth = Scaled(width, 16f);
+            var buttonHeight = Mathf.Min(RowHeight - 2f, Scaled(height, 16f));
+            button.style.width = buttonWidth;
+            button.style.minWidth = buttonWidth;
+            button.style.height = buttonHeight;
+            button.style.minHeight = buttonHeight;
+            button.style.flexShrink = 0f;
+        }
+
         private void RefreshLocale()
         {
             UIIconView.SetButton(_newScript, _icons?.addScript);
@@ -240,6 +290,7 @@ namespace Directiva.CodeUI
             row.AddToClassList("tree-row");
             row.AddToClassList("root-row");
             row.style.fontSize = _fontSize;
+            ApplyRowHeight(row);
             row.userData = new NodeInfo
             {
                 Path = string.Empty,
@@ -252,9 +303,12 @@ namespace Directiva.CodeUI
 
             var spacer = new VisualElement();
             spacer.AddToClassList("tree-root-spacer");
+            spacer.style.width = Scaled(20f, 16f);
+            spacer.style.minWidth = Scaled(20f, 16f);
 
             var state = new VisualElement();
             state.AddToClassList("tree-state");
+            ApplyStateSize(state);
 
             var hasError = HasErrorRecursive(string.Empty, true);
             var dirty = HasDirtyRecursive(string.Empty, true);
@@ -271,6 +325,7 @@ namespace Directiva.CodeUI
             typeIcon.AddToClassList("tree-type-icon");
             typeIcon.style.fontSize = _fontSize;
             typeIcon.AddToClassList("folder-icon");
+            ApplyTypeIconSize(typeIcon);
             typeIcon.tooltip = _locale.Get("ScriptExplorer", "root");
 
             var label = new Label("/");
@@ -331,7 +386,9 @@ namespace Directiva.CodeUI
 
             toggle.AddToClassList("tree-toggle");
             UIIconView.SetButton(toggle,
-                _expanded.Contains(path) ? _icons?.arrowDown : _icons?.arrowRight, 13f);
+                _expanded.Contains(path) ? _icons?.arrowDown : _icons?.arrowRight,
+                Scaled(13f, 10f));
+            ApplyRowButtonSize(toggle, 20f, 22f);
 
             _tooltips?.Register(
                 toggle,
@@ -362,12 +419,14 @@ namespace Directiva.CodeUI
             if (_workspace.IsDirty(path))
             {
                 var save = new Button(() => SaveQuickRequested?.Invoke(path));
-                UIIconView.SetButton(save, _icons?.save, 15f);
+                UIIconView.SetButton(save, _icons?.save, Scaled(15f, 10f));
                 save.AddToClassList("tree-mini-button");
+                ApplyRowButtonSize(save, 24f, 22f);
 
                 var revert = new Button(() => RevertQuickRequested?.Invoke(path));
-                UIIconView.SetButton(revert, _icons?.revert, 15f);
+                UIIconView.SetButton(revert, _icons?.revert, Scaled(15f, 10f));
                 revert.AddToClassList("tree-mini-button");
+                ApplyRowButtonSize(revert, 24f, 22f);
 
                 _tooltips?.Register(
                     save,
@@ -389,11 +448,13 @@ namespace Directiva.CodeUI
             var row = new VisualElement();
             row.AddToClassList("tree-row");
             row.style.fontSize = _fontSize;
+            ApplyRowHeight(row);
             row.style.paddingLeft = 6 + depth * 14;
             row.userData = new NodeInfo { Path = path, IsFolder = isFolder };
 
             var state = new VisualElement();
             state.AddToClassList("tree-state");
+            ApplyStateSize(state);
 
             var hasError = HasErrorRecursive(path, isFolder);
             var dirty = HasDirtyRecursive(path, isFolder);
@@ -410,6 +471,7 @@ namespace Directiva.CodeUI
             typeIcon.AddToClassList("tree-type-icon");
             typeIcon.style.fontSize = _fontSize;
             typeIcon.AddToClassList(isFolder ? "folder-icon" : "script-icon");
+            ApplyTypeIconSize(typeIcon);
             typeIcon.tooltip = isFolder
                 ? _locale.Get("ScriptExplorer", "folder")
                 : _locale.Get("ScriptExplorer", "script");
@@ -484,7 +546,8 @@ namespace Directiva.CodeUI
             field.AddToClassList("inline-rename");
             field.style.fontSize = _fontSize;
 
-            var renameHeight = Mathf.Max(22f, Mathf.Min(26f, _fontSize + 8f));
+            // Rename input must fit the same zoomed row as the label it replaces.
+            var renameHeight = Mathf.Max(18f, RowHeight - 4f);
             field.style.height = renameHeight;
             field.style.minHeight = renameHeight;
             field.style.marginTop = 0f;

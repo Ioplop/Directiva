@@ -4,6 +4,7 @@
 [pause]: Pausar
 [continue]: Continuar
 [step]: Step
+[execution_steps]: Pasos
 [step_in]: Step In
 [step_out]: Step Out
 [back]: Atrás
