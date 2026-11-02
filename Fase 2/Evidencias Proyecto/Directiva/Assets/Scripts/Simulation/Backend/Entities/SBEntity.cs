@@ -24,6 +24,12 @@ namespace DSimulation
             CollisionPriority = 0;
         }
 
+        /// <summary>
+        /// Called by Simulation to register an entity upon creation.
+        /// </summary>
+        /// <param name="simulation">Simulation to which this Entity belong.</param>
+        /// <param name="id">ID given to this entity.</param>
+        /// <exception cref="System.InvalidOperationException">The entity was already registered somewhere</exception>
         internal void Register(Simulation simulation, int id)
         {
             if (this.simulation != null)

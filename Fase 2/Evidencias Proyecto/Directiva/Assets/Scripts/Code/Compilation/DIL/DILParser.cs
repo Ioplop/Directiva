@@ -192,7 +192,7 @@ namespace DSCompilation.DIL
 
             if (NativeLibrary.IsNativeModule(rootModuleName))
                 throw new DILParseException(rootModuleName, 0,
-                    "Native modules are reserved and cannot be DIL entry modules.");
+                    "Native modules are reserved and cannot be DIL entry modules.", "native_entry_module");
             var modules = LoadModuleGraph(rootModuleName);
             var orderedModules = modules.Values
                 .OrderBy(module => module.Name, StringComparer.Ordinal)
@@ -213,7 +213,8 @@ namespace DSCompilation.DIL
                     rootModuleName,
                     0,
                     $"Program requires {globalSlots.Count} global slots, " +
-                    $"but the configured limit is {options.MaxGlobalSlots}."
+                    $"but the configured limit is {options.MaxGlobalSlots}.",
+                    "global_limit", globalSlots.Count, options.MaxGlobalSlots
                 );
             }
 
@@ -222,7 +223,8 @@ namespace DSCompilation.DIL
                 throw new DILParseException(
                     rootModuleName,
                     0,
-                    "The root DIL module must declare at least one function."
+                    "The root DIL module must declare at least one function.",
+                    "entry_requires_function"
                 );
             }
 
@@ -283,7 +285,7 @@ namespace DSCompilation.DIL
                 throw new DILParseException(
                     moduleName,
                     0,
-                    $"Invalid module name '{moduleName}'."
+                    $"Invalid module name '{moduleName}'.", "invalid_module", moduleName
                 );
             }
 
@@ -292,7 +294,7 @@ namespace DSCompilation.DIL
                 throw new DILParseException(
                     moduleName,
                     0,
-                    $"DIL module '{moduleName}' could not be found."
+                    $"DIL module '{moduleName}' could not be found.", "missing_module", moduleName
                 );
             }
 
@@ -324,11 +326,11 @@ namespace DSCompilation.DIL
                     if (annotation == "IMPORT")
                     {
                         if (currentFunction != null || !importsOpen)
-                            Throw(moduleName, sourceLine.Number, "# IMPORT annotations must appear at the beginning of the file.");
+                            Throw(moduleName, sourceLine.Number, "# IMPORT annotations must appear at the beginning of the file.", "imports_at_start");
 
                         RequireAnnotationValue(moduleName, sourceLine.Number, annotation, value);
                         if (!IsValidQualifiedName(value))
-                            Throw(moduleName, sourceLine.Number, $"Invalid import module name '{value}'.");
+                            Throw(moduleName, sourceLine.Number, $"Invalid import module name '{value}'.", "invalid_import_name", value!);
 
                         module.Imports.Add(value!);
                         continue;
@@ -339,11 +341,11 @@ namespace DSCompilation.DIL
                     if (annotation == "GLOBAL")
                     {
                         if (currentFunction != null)
-                            Throw(moduleName, sourceLine.Number, "# GLOBAL cannot appear inside a function.");
+                            Throw(moduleName, sourceLine.Number, "# GLOBAL cannot appear inside a function.", "global_in_function");
 
                         RequireAnnotationValue(moduleName, sourceLine.Number, annotation, value);
                         if (!IsValidIdentifier(value!))
-                            Throw(moduleName, sourceLine.Number, $"Invalid global name '{value}'.");
+                            Throw(moduleName, sourceLine.Number, $"Invalid global name '{value}'.", "invalid_global_name", value!);
 
                         module.Globals.Add(value!);
                         continue;
@@ -352,14 +354,14 @@ namespace DSCompilation.DIL
                     if (annotation == "FUNCTION")
                     {
                         if (currentFunction != null)
-                            Throw(moduleName, sourceLine.Number, "A function cannot begin before the previous # END_FUNCTION.");
+                            Throw(moduleName, sourceLine.Number, "A function cannot begin before the previous # END_FUNCTION.", "function_before_end");
 
                         RequireAnnotationValue(moduleName, sourceLine.Number, annotation, value);
                         if (!IsValidIdentifier(value!))
-                            Throw(moduleName, sourceLine.Number, $"Invalid function name '{value}'.");
+                            Throw(moduleName, sourceLine.Number, $"Invalid function name '{value}'.", "invalid_function_name", value!);
 
                         if (!functionNames.Add(value!))
-                            Throw(moduleName, sourceLine.Number, $"Function '{value}' is declared more than once in this file.");
+                            Throw(moduleName, sourceLine.Number, $"Function '{value}' is declared more than once in this file.", "duplicate_function", value!);
 
                         currentFunction = new FunctionDefinition(moduleName, value!, sourceLine.Number);
                         module.Functions.Add(currentFunction);
@@ -370,11 +372,11 @@ namespace DSCompilation.DIL
                     if (annotation == "PARAMS")
                     {
                         if (currentFunction == null)
-                            Throw(moduleName, sourceLine.Number, "# PARAMS must appear inside a function.");
+                            Throw(moduleName, sourceLine.Number, "# PARAMS must appear inside a function.", "params_outside_function");
                         if (functionBodyStarted)
-                            Throw(moduleName, sourceLine.Number, "# PARAMS must appear before the function body.");
+                            Throw(moduleName, sourceLine.Number, "# PARAMS must appear before the function body.", "params_before_body");
                         if (currentFunction!.ParameterCount >= 0)
-                            Throw(moduleName, sourceLine.Number, "# PARAMS is declared more than once for this function.");
+                            Throw(moduleName, sourceLine.Number, "# PARAMS is declared more than once for this function.", "duplicate_params");
 
                         currentFunction.ParameterCount = ParseNonNegativeInt(
                             moduleName,
@@ -388,11 +390,11 @@ namespace DSCompilation.DIL
                     if (annotation == "LOCALS")
                     {
                         if (currentFunction == null)
-                            Throw(moduleName, sourceLine.Number, "# LOCALS must appear inside a function.");
+                            Throw(moduleName, sourceLine.Number, "# LOCALS must appear inside a function.", "locals_outside_function");
                         if (functionBodyStarted)
-                            Throw(moduleName, sourceLine.Number, "# LOCALS must appear before the function body.");
+                            Throw(moduleName, sourceLine.Number, "# LOCALS must appear before the function body.", "locals_before_body");
                         if (currentFunction!.LocalCount >= 0)
-                            Throw(moduleName, sourceLine.Number, "# LOCALS is declared more than once for this function.");
+                            Throw(moduleName, sourceLine.Number, "# LOCALS is declared more than once for this function.", "duplicate_locals");
 
                         currentFunction.LocalCount = ParseNonNegativeInt(
                             moduleName,
@@ -406,9 +408,9 @@ namespace DSCompilation.DIL
                     if (annotation == "END_FUNCTION")
                     {
                         if (value != null)
-                            Throw(moduleName, sourceLine.Number, "# END_FUNCTION does not take a value.");
+                            Throw(moduleName, sourceLine.Number, "# END_FUNCTION does not take a value.", "end_function_value");
                         if (currentFunction == null)
-                            Throw(moduleName, sourceLine.Number, "# END_FUNCTION has no matching # FUNCTION.");
+                            Throw(moduleName, sourceLine.Number, "# END_FUNCTION has no matching # FUNCTION.", "end_function_without_function");
 
                         ValidateFunctionHeader(moduleName, sourceLine.Number, currentFunction!);
                         currentFunction = null;
@@ -423,7 +425,7 @@ namespace DSCompilation.DIL
                 importsOpen = false;
 
                 if (currentFunction == null)
-                    Throw(moduleName, sourceLine.Number, "Executable DIL must appear inside a function.");
+                    Throw(moduleName, sourceLine.Number, "Executable DIL must appear inside a function.", "executable_outside_function");
 
                 functionBodyStarted = true;
             }
@@ -434,7 +436,7 @@ namespace DSCompilation.DIL
                     moduleName,
                     currentFunction.DeclarationLine,
                     $"Function '{currentFunction.Name}' is missing # END_FUNCTION."
-                );
+                , "missing_end_function", currentFunction.Name);
             }
 
             return module;
@@ -551,7 +553,7 @@ namespace DSCompilation.DIL
 
                         case "END_FUNCTION":
                             if (currentFunction == null || instructions == null || instructionSources == null || labels == null || pendingJumps == null)
-                                Throw(module.Name, sourceLine.Number, "Internal DIL parser state is inconsistent.");
+                                Throw(module.Name, sourceLine.Number, "Internal DIL parser state is inconsistent.", "internal_state");
 
                             ResolveJumps(
                                 module.Name,
@@ -602,12 +604,12 @@ namespace DSCompilation.DIL
                 }
 
                 if (currentFunction == null || instructions == null || instructionSources == null || labels == null || pendingJumps == null)
-                    Throw(module.Name, sourceLine.Number, "Executable DIL must appear inside a function.");
+                    Throw(module.Name, sourceLine.Number, "Executable DIL must appear inside a function.", "executable_outside_function");
 
                 if (TryParseLabel(line, out string? label))
                 {
                     if (!labels!.TryAdd(label!, instructions!.Count))
-                        Throw(module.Name, sourceLine.Number, $"Label '{label}' is declared more than once in this function.");
+                        Throw(module.Name, sourceLine.Number, $"Label '{label}' is declared more than once in this function.", "duplicate_label", label!);
                     continue;
                 }
 
@@ -632,7 +634,7 @@ namespace DSCompilation.DIL
                     instructionSources.Add(sourceLocation);
 
                 if (instructions.Count <= instructionCountBefore)
-                    Throw(module.Name, sourceLine.Number, "Internal DIL parser error: executable line produced no instruction.");
+                    Throw(module.Name, sourceLine.Number, "Internal DIL parser error: executable line produced no instruction.", "internal_instruction");
             }
         }
 
@@ -735,7 +737,7 @@ namespace DSCompilation.DIL
             {
                 int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                 if (count < 0)
-                    Throw(moduleName, lineNumber, "SET requires a non-negative element count.");
+                    Throw(moduleName, lineNumber, "SET requires a non-negative element count.", "set_count");
                 instructions.Add(Instruction.Set(count));
                 return;
             }
@@ -754,7 +756,7 @@ namespace DSCompilation.DIL
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
                     string file = ParseStringLiteral(moduleName, lineNumber, tokens[1]);
                     if (string.IsNullOrWhiteSpace(file))
-                        Throw(moduleName, lineNumber, "DEBUG_FILE requires a non-empty file path.");
+                        Throw(moduleName, lineNumber, "DEBUG_FILE requires a non-empty file path.", "debug_file");
                     instructions.Add(Instruction.DebugFile(file));
                     return;
                 }
@@ -762,7 +764,7 @@ namespace DSCompilation.DIL
                 case "DEBUG_LINE":
                 {
                     int debugLine = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
-                    if (debugLine < 0) Throw(moduleName, lineNumber, "DEBUG_LINE requires a non-negative, zero-based line.");
+                    if (debugLine < 0) Throw(moduleName, lineNumber, "DEBUG_LINE requires a non-negative, zero-based line.", "debug_line");
                     instructions.Add(Instruction.DebugLine(debugLine));
                     return;
                 }
@@ -773,7 +775,7 @@ namespace DSCompilation.DIL
                     int start = ResolveInt32(moduleName, lineNumber, tokens[1], symbols);
                     int end = ResolveInt32(moduleName, lineNumber, tokens[2], symbols);
                     if (start < 0 || end < start)
-                        Throw(moduleName, lineNumber, "DEBUG_SPAN requires a valid half-open offset range.");
+                        Throw(moduleName, lineNumber, "DEBUG_SPAN requires a valid half-open offset range.", "debug_span");
                     instructions.Add(Instruction.DebugSpan(start, end));
                     return;
                 }
@@ -796,7 +798,7 @@ namespace DSCompilation.DIL
                 {
                     int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if (count < 0)
-                        Throw(moduleName, lineNumber, "TUPLE requires a non-negative element count.");
+                        Throw(moduleName, lineNumber, "TUPLE requires a non-negative element count.", "tuple_count");
 
                     instructions.Add(Instruction.Tuple(count));
                     return;
@@ -806,7 +808,7 @@ namespace DSCompilation.DIL
                 {
                     int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if (count < 0)
-                        Throw(moduleName, lineNumber, "LIST requires a non-negative element count.");
+                        Throw(moduleName, lineNumber, "LIST requires a non-negative element count.", "list_count");
                     instructions.Add(Instruction.List(count));
                     return;
                 }
@@ -815,7 +817,7 @@ namespace DSCompilation.DIL
                 {
                     int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if (count < 1 || count > 3)
-                        Throw(moduleName, lineNumber, "RANGE requires exactly 1, 2, or 3 operands on the stack.");
+                        Throw(moduleName, lineNumber, "RANGE requires exactly 1, 2, or 3 operands on the stack.", "range_operand_count");
                     instructions.Add(Instruction.Range(count));
                     return;
                 }
@@ -829,7 +831,7 @@ namespace DSCompilation.DIL
                 {
                     int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if (count < 0 || count > int.MaxValue / 2)
-                        Throw(moduleName, lineNumber, "DICT requires a non-negative pair count <= int.MaxValue/2.");
+                        Throw(moduleName, lineNumber, "DICT requires a non-negative pair count <= int.MaxValue/2.", "dict_pair_count");
                     instructions.Add(Instruction.Dict(count));
                     return;
                 }
@@ -839,7 +841,7 @@ namespace DSCompilation.DIL
                 {
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
                     if (!IsValidIdentifier(tokens[1]))
-                        Throw(moduleName, lineNumber, $"Invalid property name '{tokens[1]}'.");
+                        Throw(moduleName, lineNumber, $"Invalid property name '{tokens[1]}'.", "invalid_property_name", tokens[1]);
                     instructions.Add(mnemonic == "GET_PROPERTY"
                         ? Instruction.GetProperty(tokens[1]) : Instruction.SetProperty(tokens[1]));
                     return;
@@ -849,10 +851,10 @@ namespace DSCompilation.DIL
                 {
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 3);
                     if (!IsValidIdentifier(tokens[1]))
-                        Throw(moduleName, lineNumber, $"Invalid method name '{tokens[1]}'.");
+                        Throw(moduleName, lineNumber, $"Invalid method name '{tokens[1]}'.", "invalid_method_name", tokens[1]);
                     int argumentCount = ResolveInt32(moduleName, lineNumber, tokens[2], symbols);
                     if (argumentCount < 0 || argumentCount == int.MaxValue)
-                        Throw(moduleName, lineNumber, "CALL_METHOD requires a non-negative argument count below Int32.MaxValue.");
+                        Throw(moduleName, lineNumber, "CALL_METHOD requires a non-negative argument count below Int32.MaxValue.", "call_method_arg_count");
                     instructions.Add(Instruction.CallMethod(tokens[1], argumentCount));
                     return;
                 }
@@ -866,7 +868,7 @@ namespace DSCompilation.DIL
                             moduleName,
                             lineNumber,
                             $"Unknown or unsupported CAST target type '{tokens[1]}'."
-                        );
+                        , "invalid_cast_target", tokens[1]);
                     }
 
                     instructions.Add(Instruction.Cast(targetType));
@@ -919,15 +921,15 @@ namespace DSCompilation.DIL
                     if (name.StartsWith("$", StringComparison.Ordinal))
                         name = name.Substring(1);
                     if (!IsValidQualifiedName(name))
-                        Throw(moduleName, lineNumber, $"Invalid function name '{tokens[1]}'.");
+                        Throw(moduleName, lineNumber, $"Invalid function name '{tokens[1]}'.", "invalid_function_name", tokens[1]);
                     if (name.IndexOf('.') >= 0 &&
                         NativeLibrary.IsNativeModule(name.Substring(0, name.IndexOf('.'))) &&
                         !functionImports.Contains(name.Substring(0, name.IndexOf('.'))))
-                        Throw(moduleName, lineNumber, $"Native module for '{name}' must be imported.");
+                        Throw(moduleName, lineNumber, $"Native module for '{name}' must be imported.", "native_module_required", name);
                     string qualified = name.IndexOf('.') < 0 ? moduleName + "." + name : name;
                     if (!functionIds.TryGetValue(qualified, out int id) &&
                         !functionIds.TryGetValue(name, out id))
-                        Throw(moduleName, lineNumber, $"Unknown function '{qualified}'.");
+                        Throw(moduleName, lineNumber, $"Unknown function '{qualified}'.", "unknown_function", qualified);
                     instructions.Add(Instruction.PushFunction(id));
                     return;
                 }
@@ -937,11 +939,11 @@ namespace DSCompilation.DIL
                     RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 2);
                     string name = tokens[1];
                     if (!IsValidQualifiedName(name))
-                        Throw(moduleName, lineNumber, $"Invalid native symbol '{name}'.");
+                        Throw(moduleName, lineNumber, $"Invalid native symbol '{name}'.", "invalid_native_symbol", name);
                     string nameModule = name.IndexOf('.') >= 0 ? name.Substring(0, name.IndexOf('.')) : "";
                     if (nameModule.Length > 0 && NativeLibrary.IsNativeModule(nameModule) &&
                         !functionImports.Contains(nameModule))
-                        Throw(moduleName, lineNumber, $"Native module '{nameModule}' must be imported.");
+                        Throw(moduleName, lineNumber, $"Native module '{nameModule}' must be imported.", "native_module_not_imported", nameModule);
                     if (NativeLibrary.TryGetConstant(name, out DataValue constant))
                     {
                         instructions.Add(Instruction.Push(constant));
@@ -953,7 +955,7 @@ namespace DSCompilation.DIL
                         instructions.Add(Instruction.PushFunction(nativeId));
                         return;
                     }
-                    Throw(moduleName, lineNumber, $"Unknown native symbol '{name}' (is its module imported?).");
+                    Throw(moduleName, lineNumber, $"Unknown native symbol '{name}' (is its module imported?).", "unknown_native_symbol", name);
                     return;
                 }
 
@@ -962,7 +964,7 @@ namespace DSCompilation.DIL
                     int argumentCount = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if (argumentCount < 0 || argumentCount == int.MaxValue)
                         Throw(moduleName, lineNumber,
-                            "CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.");
+                            "CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.", "call_indirect_arg_count");
                     instructions.Add(Instruction.CallIndirect(argumentCount));
                     return;
                 }
@@ -971,7 +973,7 @@ namespace DSCompilation.DIL
                 {
                     int functionId = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     if ((uint)functionId >= (uint)functionCount)
-                        Throw(moduleName, lineNumber, $"Function id {functionId} does not exist in this DIL program.");
+                        Throw(moduleName, lineNumber, $"Function id {functionId} does not exist in this DIL program.", "function_id_missing", functionId);
 
                     instructions.Add(Instruction.Call(functionId));
                     return;
@@ -995,7 +997,7 @@ namespace DSCompilation.DIL
                             lineNumber,
                             $"CONTEXT_START range [{firstLocal}, {(long)firstLocal + localCount}) " +
                             $"is outside the {function.LocalCount} local slots of '{function.QualifiedName}'."
-                        );
+                        , "context_range", firstLocal, (long)firstLocal + localCount, function.LocalCount, function.QualifiedName);
                     }
 
                     instructions.Add(Instruction.ContextStart(firstLocal, localCount));
@@ -1025,7 +1027,7 @@ namespace DSCompilation.DIL
                     return;
 
                 default:
-                    Throw(moduleName, lineNumber, $"Unknown DIL instruction or operation '{mnemonic}'.");
+                    Throw(moduleName, lineNumber, $"Unknown DIL instruction or operation '{mnemonic}'.", "unknown_instruction", mnemonic);
                     return;
             }
         }
@@ -1037,7 +1039,7 @@ namespace DSCompilation.DIL
             Dictionary<string, long> symbols)
         {
             if (tokens.Length < 2)
-                Throw(moduleName, lineNumber, "PUSH requires a type.");
+                Throw(moduleName, lineNumber, "PUSH requires a type.", "push_requires_type");
 
             string type = tokens[1];
 
@@ -1053,7 +1055,7 @@ namespace DSCompilation.DIL
                         return Instruction.Push(DataValue.FromBool(true));
                     if (tokens[2] == "FALSE")
                         return Instruction.Push(DataValue.FromBool(false));
-                    Throw(moduleName, lineNumber, "BOOL literal must be TRUE or FALSE.");
+                    Throw(moduleName, lineNumber, "BOOL literal must be TRUE or FALSE.", "invalid_bool");
                     break;
 
                 case "INT":
@@ -1076,7 +1078,7 @@ namespace DSCompilation.DIL
                     );
 
                 default:
-                    Throw(moduleName, lineNumber, $"Unsupported PUSH type '{type}' in the current DIL implementation.");
+                    Throw(moduleName, lineNumber, $"Unsupported PUSH type '{type}' in the current DIL implementation.", "unsupported_push_type", type);
                     break;
             }
 
@@ -1104,7 +1106,7 @@ namespace DSCompilation.DIL
             }
 
             if (!IsValidIdentifier(target))
-                Throw(moduleName, lineNumber, $"Invalid jump label '{target}'.");
+                Throw(moduleName, lineNumber, $"Invalid jump label '{target}'.", "invalid_jump_label", target);
 
             int instructionIndex = instructions.Count;
             instructions.Add(CreateJump(instructionId, 0));
@@ -1126,7 +1128,7 @@ namespace DSCompilation.DIL
                         moduleName,
                         pending.SourceLine,
                         $"Unknown label '{pending.Label}' in function '{function.QualifiedName}'."
-                    );
+                    , "unknown_label", pending.Label, function.QualifiedName);
                 }
 
                 if ((uint)target >= (uint)instructions.Count)
@@ -1135,7 +1137,7 @@ namespace DSCompilation.DIL
                         moduleName,
                         pending.SourceLine,
                         $"Label '{pending.Label}' points past the end of function '{function.QualifiedName}'."
-                    );
+                    , "label_past_function_end", pending.Label, function.QualifiedName);
                 }
 
                 instructions[pending.InstructionIndex] = CreateJump(pending.Id, target);
@@ -1158,7 +1160,7 @@ namespace DSCompilation.DIL
                         moduleName,
                         function.DeclarationLine,
                         $"Jump target {instruction.OperandA} is outside function '{function.QualifiedName}'."
-                    );
+                    , "jump_outside_function", instruction.OperandA, function.QualifiedName);
                 }
             }
         }
@@ -1195,7 +1197,7 @@ namespace DSCompilation.DIL
         {
             long value = ResolveInt64(moduleName, lineNumber, token, symbols);
             if (value < int.MinValue || value > int.MaxValue)
-                Throw(moduleName, lineNumber, $"Value '{token}' is outside the Int32 range required by this instruction.");
+                Throw(moduleName, lineNumber, $"Value '{token}' is outside the Int32 range required by this instruction.", "int32_value_out_of_range", token);
 
             return (int)value;
         }
@@ -1214,7 +1216,7 @@ namespace DSCompilation.DIL
                     CultureInfo.InvariantCulture,
                     out long value))
             {
-                Throw(moduleName, lineNumber, $"'{token}' is not a valid Int64 value.");
+                Throw(moduleName, lineNumber, $"'{token}' is not a valid Int64 value.", "invalid_int64", token);
             }
 
             return value;
@@ -1231,10 +1233,10 @@ namespace DSCompilation.DIL
 
             string symbolName = token.Substring(1);
             if (!IsValidQualifiedName(symbolName))
-                Throw(moduleName, lineNumber, $"Invalid parse symbol '{token}'.");
+                Throw(moduleName, lineNumber, $"Invalid parse symbol '{token}'.", "invalid_parse_symbol", token);
 
             if (!symbols.TryGetValue(symbolName, out long value))
-                Throw(moduleName, lineNumber, $"Undefined parse symbol '{token}'.");
+                Throw(moduleName, lineNumber, $"Undefined parse symbol '{token}'.", "undefined_parse_symbol", token);
 
             return value.ToString(CultureInfo.InvariantCulture);
         }
@@ -1242,7 +1244,7 @@ namespace DSCompilation.DIL
         private static string ParseStringLiteral(string moduleName, int lineNumber, string token)
         {
             if (token.Length < 2 || token[0] != '"' || token[^1] != '"')
-                Throw(moduleName, lineNumber, "STRING literal must be enclosed in double quotes.");
+                Throw(moduleName, lineNumber, "STRING literal must be enclosed in double quotes.", "string_quotes");
 
             var result = new StringBuilder(token.Length - 2);
 
@@ -1256,7 +1258,7 @@ namespace DSCompilation.DIL
                 }
 
                 if (++i >= token.Length - 1)
-                    Throw(moduleName, lineNumber, "STRING literal ends with an incomplete escape sequence.");
+                    Throw(moduleName, lineNumber, "STRING literal ends with an incomplete escape sequence.", "string_incomplete_escape");
 
                 char escape = token[i];
                 switch (escape)
@@ -1282,18 +1284,18 @@ namespace DSCompilation.DIL
                     case 'u':
                     {
                         if (i + 4 >= token.Length)
-                            Throw(moduleName, lineNumber, "\\u escape requires exactly four hexadecimal digits.");
+                            Throw(moduleName, lineNumber, "\\u escape requires exactly four hexadecimal digits.", "unicode_escape_digits");
 
                         string hex = token.Substring(i + 1, 4);
                         if (!ushort.TryParse(hex, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ushort codeUnit))
-                            Throw(moduleName, lineNumber, $"Invalid Unicode escape '\\u{hex}'.");
+                            Throw(moduleName, lineNumber, $"Invalid Unicode escape '\\u{hex}'.", "invalid_unicode_escape", hex);
 
                         result.Append((char)codeUnit);
                         i += 4;
                         break;
                     }
                     default:
-                        Throw(moduleName, lineNumber, $"Unsupported STRING escape '\\{escape}'.");
+                        Throw(moduleName, lineNumber, $"Unsupported STRING escape '\\{escape}'.", "unsupported_string_escape", escape);
                         break;
                 }
             }
@@ -1304,7 +1306,7 @@ namespace DSCompilation.DIL
         private static long ParseDecimalRaw(string moduleName, int lineNumber, string token)
         {
             if (string.IsNullOrEmpty(token))
-                Throw(moduleName, lineNumber, "Decimal literal cannot be empty.");
+                Throw(moduleName, lineNumber, "Decimal literal cannot be empty.", "empty_decimal");
 
             int index = 0;
             bool negative = false;
@@ -1316,7 +1318,7 @@ namespace DSCompilation.DIL
             }
 
             if (index >= token.Length)
-                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.");
+                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.", "invalid_decimal", token);
 
             int decimalPoint = token.IndexOf('.', index);
             string integerPart;
@@ -1330,17 +1332,17 @@ namespace DSCompilation.DIL
             else
             {
                 if (token.IndexOf('.', decimalPoint + 1) >= 0)
-                    Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.");
+                    Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.", "invalid_decimal", token);
 
                 integerPart = token.Substring(index, decimalPoint - index);
                 fractionalPart = token.Substring(decimalPoint + 1);
             }
 
             if (integerPart.Length == 0 || !ContainsOnlyDigits(integerPart))
-                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.");
+                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.", "invalid_decimal", token);
 
             if (fractionalPart.Length > 0 && !ContainsOnlyDigits(fractionalPart))
-                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.");
+                Throw(moduleName, lineNumber, $"Invalid decimal literal '{token}'.", "invalid_decimal", token);
 
             int fractionalDigits = GetDecimalScaleDigits();
             string truncatedFraction = fractionalPart.Length > fractionalDigits
@@ -1355,7 +1357,7 @@ namespace DSCompilation.DIL
 
             BigInteger signed = negative ? -magnitude : magnitude;
             if (signed < long.MinValue || signed > long.MaxValue)
-                Throw(moduleName, lineNumber, $"Decimal literal '{token}' overflows the Directiva decimal range.");
+                Throw(moduleName, lineNumber, $"Decimal literal '{token}' overflows the Directiva decimal range.", "decimal_overflow", token);
 
             return (long)signed;
         }
@@ -1389,7 +1391,7 @@ namespace DSCompilation.DIL
                     moduleName,
                     lineNumber,
                     $"Local slot {localIndex} is outside the {function.LocalCount} local slots of '{function.QualifiedName}'."
-                );
+                , "local_slot_out_of_range", localIndex, function.LocalCount, function.QualifiedName);
             }
         }
 
@@ -1400,7 +1402,7 @@ namespace DSCompilation.DIL
             int globalIndex)
         {
             if ((uint)globalIndex >= (uint)globalCount)
-                Throw(moduleName, lineNumber, $"Global slot {globalIndex} is outside the program's {globalCount} global slots.");
+                Throw(moduleName, lineNumber, $"Global slot {globalIndex} is outside the program's {globalCount} global slots.", "global_slot_out_of_range", globalIndex, globalCount);
         }
 
         private static void ValidateFunctionHeader(
@@ -1409,10 +1411,10 @@ namespace DSCompilation.DIL
             FunctionDefinition function)
         {
             if (function.ParameterCount < 0)
-                Throw(moduleName, lineNumber, $"Function '{function.Name}' is missing # PARAMS.");
+                Throw(moduleName, lineNumber, $"Function '{function.Name}' is missing # PARAMS.", "missing_params", function.Name);
 
             if (function.LocalCount < 0)
-                Throw(moduleName, lineNumber, $"Function '{function.Name}' is missing # LOCALS.");
+                Throw(moduleName, lineNumber, $"Function '{function.Name}' is missing # LOCALS.", "missing_locals", function.Name);
 
             if (function.LocalCount < function.ParameterCount)
             {
@@ -1420,7 +1422,7 @@ namespace DSCompilation.DIL
                     moduleName,
                     lineNumber,
                     $"Function '{function.Name}' declares {function.ParameterCount} parameters but only {function.LocalCount} local slots."
-                );
+                , "function_locals_below_params", function.Name, function.ParameterCount, function.LocalCount);
             }
         }
 
@@ -1438,7 +1440,7 @@ namespace DSCompilation.DIL
                     CultureInfo.InvariantCulture,
                     out int result))
             {
-                Throw(moduleName, lineNumber, $"# {annotation} requires a non-negative Int32 value.");
+                Throw(moduleName, lineNumber, $"# {annotation} requires a non-negative Int32 value.", "nonnegative_annotation_value", annotation);
             }
 
             return result;
@@ -1460,7 +1462,7 @@ namespace DSCompilation.DIL
             string? value)
         {
             if (!IsValidQualifiedName(symbolName))
-                Throw(moduleName, lineNumber, $"Invalid parse symbol name '{symbolName}'.");
+                Throw(moduleName, lineNumber, $"Invalid parse symbol name '{symbolName}'.", "invalid_symbol_name", symbolName);
 
             RequireAnnotationValue(moduleName, lineNumber, symbolName, value);
 
@@ -1470,7 +1472,7 @@ namespace DSCompilation.DIL
                     CultureInfo.InvariantCulture,
                     out long result))
             {
-                Throw(moduleName, lineNumber, $"Parse symbol '{symbolName}' must contain exactly one integer number.");
+                Throw(moduleName, lineNumber, $"Parse symbol '{symbolName}' must contain exactly one integer number.", "symbol_requires_integer", symbolName);
             }
 
             return result;
@@ -1697,7 +1699,7 @@ namespace DSCompilation.DIL
             string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
-                Throw(moduleName, lineNumber, $"# {annotation} requires a value after ':'.");
+                Throw(moduleName, lineNumber, $"# {annotation} requires a value after ':'.", "annotation_requires_value", annotation);
         }
 
         private static void RequireTokenCount(
@@ -1713,13 +1715,15 @@ namespace DSCompilation.DIL
                     moduleName,
                     lineNumber,
                     $"{instruction} expects {expected - 1} operand(s), but received {tokens.Length - 1}."
-                );
+                , "operand_count", instruction, expected - 1, tokens.Length - 1);
             }
         }
 
-        private static void Throw(string moduleName, int lineNumber, string message)
+        private static void Throw(string moduleName, int lineNumber, string message,
+            string? localizationKey = null, params object[] localizationArguments)
         {
-            throw new DILParseException(moduleName, lineNumber, message);
+            throw new DILParseException(moduleName, lineNumber, message,
+                localizationKey, localizationArguments);
         }
     }
 }

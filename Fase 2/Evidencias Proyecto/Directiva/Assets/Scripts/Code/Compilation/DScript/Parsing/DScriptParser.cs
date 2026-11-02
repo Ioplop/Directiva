@@ -42,7 +42,7 @@ namespace DSCompilation.DScript.Parsing
                 if (Match(TokenKind.Newline)) continue;
                 if (Is(TokenKind.Indent) || Is(TokenKind.Dedent))
                 {
-                    Error("DS2001", "Unexpected indentation level.", Current.Span);
+                    Error("DS2001", "Unexpected indentation level.", Current.Span, "unexpected_indentation");
                     Advance();
                     continue;
                 }
@@ -60,7 +60,7 @@ namespace DSCompilation.DScript.Parsing
                 }
                 if (position == before) Advance();
             }
-            if (block) Expect(TokenKind.Dedent, "Expected the end of an indented block.");
+            if (block) Expect(TokenKind.Dedent, "Expected the end of an indented block.", "end_indented_block");
             return result;
         }
 
@@ -71,7 +71,7 @@ namespace DSCompilation.DScript.Parsing
             if (depth == 0 && !(Is(TokenKind.Def) || Is(TokenKind.Import) ||
                 Is(TokenKind.From) || Is(TokenKind.Shared) || Is(TokenKind.Global)))
             {
-                Error("DS2013", "Module scope allows only imports, shared declarations and functions.", Current.Span);
+                Error("DS2013", "Module scope allows only imports, shared declarations and functions.", Current.Span, "module_scope");
                 throw new BadSyntax();
             }
             switch (Current.Kind)
@@ -81,7 +81,7 @@ namespace DSCompilation.DScript.Parsing
                 case TokenKind.From: return ReadFromImport();
                 case TokenKind.Shared: return ReadShared();
                 case TokenKind.Global:
-                    Error("DS2015", "'global' is not a DScript declaration; use module-level 'shared'.", Current.Span);
+                    Error("DS2015", "'global' is not a DScript declaration; use module-level 'shared'.", Current.Span, "global_not_supported");
                     throw new BadSyntax();
                 case TokenKind.If: return ReadIf();
                 case TokenKind.While: return ReadWhile();
@@ -90,13 +90,13 @@ namespace DSCompilation.DScript.Parsing
                 {
                     var beginning = Advance();
                     Expression value = Is(TokenKind.Newline) ? null : ReadExpression();
-                    var end = Expect(TokenKind.Newline, "Expected end of return statement.");
+                    var end = Expect(TokenKind.Newline, "Expected end of return statement.", "end_return");
                     return new ReturnStatement(value, SourceSpan.Through(beginning.Span, end.Span));
                 }
                 case TokenKind.Pass: case TokenKind.Break: case TokenKind.Continue:
                 {
                     var beginning = Advance();
-                    var end = Expect(TokenKind.Newline, "Expected end of statement.");
+                    var end = Expect(TokenKind.Newline, "Expected end of statement.", "end_statement");
                     return new FlowStatement(beginning.Text, SourceSpan.Through(beginning.Span, end.Span));
                 }
                 default: return ReadSimple();
@@ -105,18 +105,18 @@ namespace DSCompilation.DScript.Parsing
 
         private Statement ReadFunction()
         {
-            var begin = Expect(TokenKind.Def, "Expected def.");
-            var name = Expect(TokenKind.Identifier, "Expected function name.");
-            Expect(TokenKind.LeftParen, "Expected '(' after function name.");
+            var begin = Expect(TokenKind.Def, "Expected def.", "expected_def");
+            var name = Expect(TokenKind.Identifier, "Expected function name.", "expected_function_name");
+            Expect(TokenKind.LeftParen, "Expected '(' after function name.", "expected_function_left_paren");
             var parameters = new List<string>();
             if (!Is(TokenKind.RightParen))
             {
                 do
                 {
-                    parameters.Add(Expect(TokenKind.Identifier, "Expected parameter name.").Text);
+                    parameters.Add(Expect(TokenKind.Identifier, "Expected parameter name.", "expected_param_name").Text);
                 } while (Match(TokenKind.Comma) && !Is(TokenKind.RightParen));
             }
-            Expect(TokenKind.RightParen, "Expected ')' after parameters.");
+            Expect(TokenKind.RightParen, "Expected ')' after parameters.", "expected_params_right_paren");
             var body = ReadSuite();
             return new FunctionStatement(name.Text, parameters, body, SourceSpan.Through(begin.Span, Previous.Span));
         }
@@ -125,8 +125,8 @@ namespace DSCompilation.DScript.Parsing
         {
             var begin = Advance();
             string name = ReadQualifiedName();
-            string alias = Match(TokenKind.As) ? Expect(TokenKind.Identifier, "Expected import alias.").Text : null;
-            var end = Expect(TokenKind.Newline, "Expected end of import statement (one module per import).");
+            string alias = Match(TokenKind.As) ? Expect(TokenKind.Identifier, "Expected import alias.", "expected_import_alias").Text : null;
+            var end = Expect(TokenKind.Newline, "Expected end of import statement (one module per import).", "end_import");
             return new ImportStatement(name, alias, SourceSpan.Through(begin.Span, end.Span));
         }
 
@@ -134,27 +134,27 @@ namespace DSCompilation.DScript.Parsing
         {
             var begin = Advance();
             string name = ReadQualifiedName();
-            Expect(TokenKind.Import, "Expected 'import' in from-import statement.");
+            Expect(TokenKind.Import, "Expected 'import' in from-import statement.", "expected_import_keyword");
             var imports = new List<ImportedName>();
             bool wildcard = Match(TokenKind.Star);
             if (!wildcard)
             {
                 do
                 {
-                    var identifier = Expect(TokenKind.Identifier, "Expected imported symbol name.");
-                    string alias = Match(TokenKind.As) ? Expect(TokenKind.Identifier, "Expected symbol alias.").Text : null;
+                    var identifier = Expect(TokenKind.Identifier, "Expected imported symbol name.", "expected_imported_symbol");
+                    string alias = Match(TokenKind.As) ? Expect(TokenKind.Identifier, "Expected symbol alias.", "expected_symbol_alias").Text : null;
                     imports.Add(new ImportedName(identifier.Text, alias, identifier.Span));
                     if (Is(TokenKind.Newline)) break;
                 } while (Match(TokenKind.Comma));
             }
-            var end = Expect(TokenKind.Newline, "Expected end of from-import statement.");
+            var end = Expect(TokenKind.Newline, "Expected end of from-import statement.", "end_from_import");
             return new FromImportStatement(name, imports, wildcard, SourceSpan.Through(begin.Span, end.Span));
         }
 
         private string ReadQualifiedName()
         {
-            string name = Expect(TokenKind.Identifier, "Expected module name.").Text;
-            while (Match(TokenKind.Dot)) name += "." + Expect(TokenKind.Identifier, "Expected module path segment.").Text;
+            string name = Expect(TokenKind.Identifier, "Expected module name.", "expected_module_name").Text;
+            while (Match(TokenKind.Dot)) name += "." + Expect(TokenKind.Identifier, "Expected module path segment.", "expected_module_segment").Text;
             return name;
         }
 
@@ -162,20 +162,20 @@ namespace DSCompilation.DScript.Parsing
         {
             if (depth != 0)
             {
-                Error("DS2014", "'shared' declarations are only permitted at module scope.", Current.Span);
+                Error("DS2014", "'shared' declarations are only permitted at module scope.", Current.Span, "shared_scope");
                 throw new BadSyntax();
             }
             var begin = Advance();
-            var name = Expect(TokenKind.Identifier, "Expected shared variable name.");
+            var name = Expect(TokenKind.Identifier, "Expected shared variable name.", "expected_shared_name");
             Expression initializer = Match(TokenKind.Equals) ? ReadExpression() : null;
-            var end = Expect(TokenKind.Newline, "Expected end of shared declaration.");
+            var end = Expect(TokenKind.Newline, "Expected end of shared declaration.", "end_shared_declaration");
             return new SharedStatement(name.Text, name.Span, initializer,
                 SourceSpan.Through(begin.Span, end.Span));
         }
 
         private Statement ReadIf()
         {
-            var start = Expect(TokenKind.If, "Expected if.");
+            var start = Expect(TokenKind.If, "Expected if.", "expected_if");
             var branches = new List<ConditionalBranch>();
             branches.Add(new ConditionalBranch(ReadExpression(), ReadSuite()));
             while (Match(TokenKind.Elif)) branches.Add(new ConditionalBranch(ReadExpression(), ReadSuite()));
@@ -195,8 +195,8 @@ namespace DSCompilation.DScript.Parsing
         private Statement ReadFor()
         {
             var start = Advance();
-            var variable = Expect(TokenKind.Identifier, "For loop target must be a single variable.");
-            Expect(TokenKind.In, "Expected 'in' in for loop.");
+            var variable = Expect(TokenKind.Identifier, "For loop target must be a single variable.", "expected_for_target");
+            Expect(TokenKind.In, "Expected 'in' in for loop.", "expected_for_in");
             var iterable = ReadExpression();
             var body = ReadSuite();
             return new ForStatement(variable.Text, variable.Span, iterable, body,
@@ -205,18 +205,18 @@ namespace DSCompilation.DScript.Parsing
 
         private IReadOnlyList<Statement> ReadSuite()
         {
-            Expect(TokenKind.Colon, "Expected ':' before indented block.");
-            Expect(TokenKind.Newline, "Expected newline after ':' (inline suites are not supported).");
-            Expect(TokenKind.Indent, "Expected an indented block.");
+            Expect(TokenKind.Colon, "Expected ':' before indented block.", "expected_colon");
+            Expect(TokenKind.Newline, "Expected newline after ':' (inline suites are not supported).", "expected_newline_after_colon");
+            Expect(TokenKind.Indent, "Expected an indented block.", "expected_indented_suite");
             if (++depth > options.MaxNestingDepth)
             {
-                Error("DS2002", "Maximum syntax nesting depth exceeded.", Current.Span);
+                Error("DS2002", "Maximum syntax nesting depth exceeded.", Current.Span, "syntax_depth");
                 throw new BadSyntax();
             }
             var body = ReadStatements(true);
             depth--;
             if (body.Count == 0)
-                Error("DS2003", "An indented suite must contain at least one statement.", Previous.Span);
+                Error("DS2003", "An indented suite must contain at least one statement.", Previous.Span, "empty_suite");
             return body;
         }
 
@@ -230,12 +230,12 @@ namespace DSCompilation.DScript.Parsing
             {
                 var op = Advance();
                 if (!(lhs is NameExpression || lhs is IndexExpression || lhs is AttributeExpression))
-                    Error("DS2004", "Assignment target must be a variable, index or attribute.", lhs.Span);
+                    Error("DS2004", "Assignment target must be a variable, index or attribute.", lhs.Span, "invalid_assignment_target");
                 Expression rhs = ReadExpression();
-                var end = Expect(TokenKind.Newline, "Expected end of assignment.");
+                var end = Expect(TokenKind.Newline, "Expected end of assignment.", "end_assignment");
                 return new AssignmentStatement(lhs, op.Text, rhs, SourceSpan.Through(lhs.Span, end.Span));
             }
-            Expect(TokenKind.Newline, "Expected end of expression statement.");
+            Expect(TokenKind.Newline, "Expected end of expression statement.", "end_expression");
             return new ExpressionStatement(lhs, lhs.Span);
         }
 
@@ -244,7 +244,7 @@ namespace DSCompilation.DScript.Parsing
             if (++expressionDepth > options.MaxNestingDepth)
             {
                 expressionDepth--;
-                Error("DS2002", "Maximum expression nesting depth exceeded.", Current.Span);
+                Error("DS2002", "Maximum expression nesting depth exceeded.", Current.Span, "expression_depth");
                 throw new BadSyntax();
             }
             try { return ReadOr(); }
@@ -269,7 +269,7 @@ namespace DSCompilation.DScript.Parsing
             {
                 if (operators.Count >= options.MaxNestingDepth)
                 {
-                    Error("DS2002", "Maximum unary nesting depth exceeded.", Current.Span);
+                    Error("DS2002", "Maximum unary nesting depth exceeded.", Current.Span, "unary_depth");
                     throw new BadSyntax();
                 }
                 operators.Add(Advance());
@@ -292,7 +292,7 @@ namespace DSCompilation.DScript.Parsing
                 left = new BinaryExpression(left, symbol, right, SourceSpan.Through(left.Span, right.Span));
                 if (IsComparison(Current.Kind) || Is(TokenKind.Not) && Peek(1).Kind == TokenKind.In)
                 {
-                    Error("DS2012", "Chained comparisons are not supported yet; combine with 'and'.", Current.Span);
+                    Error("DS2012", "Chained comparisons are not supported yet; combine with 'and'.", Current.Span, "chained_comparisons");
                     throw new BadSyntax();
                 }
             }
@@ -322,7 +322,7 @@ namespace DSCompilation.DScript.Parsing
             {
                 if (operators.Count >= options.MaxNestingDepth)
                 {
-                    Error("DS2002", "Maximum unary nesting depth exceeded.", Current.Span);
+                    Error("DS2002", "Maximum unary nesting depth exceeded.", Current.Span, "unary_depth");
                     throw new BadSyntax();
                 }
                 operators.Add(Advance());
@@ -338,7 +338,7 @@ namespace DSCompilation.DScript.Parsing
             if (++expressionDepth > options.MaxNestingDepth)
             {
                 expressionDepth--;
-                Error("DS2002", "Maximum power-expression depth exceeded.", Current.Span);
+                Error("DS2002", "Maximum power-expression depth exceeded.", Current.Span, "power_depth");
                 throw new BadSyntax();
             }
             try
@@ -357,7 +357,7 @@ namespace DSCompilation.DScript.Parsing
             {
                 if (Match(TokenKind.Dot))
                 {
-                    var attr = Expect(TokenKind.Identifier, "Expected attribute name.");
+                    var attr = Expect(TokenKind.Identifier, "Expected attribute name.", "expected_attribute_name");
                     expression = new AttributeExpression(expression, attr.Text,
                         SourceSpan.Through(expression.Span, attr.Span));
                 }
@@ -369,13 +369,13 @@ namespace DSCompilation.DScript.Parsing
                         do { args.Add(ReadExpression()); }
                         while (Match(TokenKind.Comma) && !Is(TokenKind.RightParen));
                     }
-                    var end = Expect(TokenKind.RightParen, "Expected ')' after call arguments.");
+                    var end = Expect(TokenKind.RightParen, "Expected ')' after call arguments.", "expected_call_right_paren");
                     expression = new CallExpression(expression, args, SourceSpan.Through(expression.Span, end.Span));
                 }
                 else if (Match(TokenKind.LeftBracket))
                 {
                     var index = ReadExpression();
-                    var end = Expect(TokenKind.RightBracket, "Expected ']' after index.");
+                    var end = Expect(TokenKind.RightBracket, "Expected ']' after index.", "expected_index_right_bracket");
                     expression = new IndexExpression(expression, index, SourceSpan.Through(expression.Span, end.Span));
                 }
                 else break;
@@ -397,7 +397,7 @@ namespace DSCompilation.DScript.Parsing
                 case TokenKind.LeftBracket: return ReadList(t);
                 case TokenKind.LeftBrace: return ReadBraces(t);
                 default:
-                    Error("DS2005", "Expected expression, found " + t.Kind + ".", t.Span);
+                    Error("DS2005", "Expected expression, found " + t.Kind + ".", t.Span, "expression_expected", t.Kind);
                     throw new BadSyntax();
             }
         }
@@ -414,7 +414,7 @@ namespace DSCompilation.DScript.Parsing
                     if (!Match(TokenKind.Comma)) break;
                 }
             }
-            var end = Expect(TokenKind.RightParen, "Expected ')' after expression.");
+            var end = Expect(TokenKind.RightParen, "Expected ')' after expression.", "expected_expression_right_paren");
             if (!tuple && entries.Count == 1) return entries[0];
             return new CollectionExpression(CollectionKind.Tuple, entries, Array.Empty<Expression>(),
                 SourceSpan.Through(start.Span, end.Span));
@@ -422,7 +422,7 @@ namespace DSCompilation.DScript.Parsing
         private Expression ReadList(DScriptToken start)
         {
             var entries = ReadElements(TokenKind.RightBracket);
-            var end = Expect(TokenKind.RightBracket, "Expected ']' after list literal.");
+            var end = Expect(TokenKind.RightBracket, "Expected ']' after list literal.", "expected_list_right_bracket");
             return new CollectionExpression(CollectionKind.List, entries, Array.Empty<Expression>(),
                 SourceSpan.Through(start.Span, end.Span));
         }
@@ -441,7 +441,7 @@ namespace DSCompilation.DScript.Parsing
                     while (Match(TokenKind.Comma) && !Is(TokenKind.RightBrace))
                     {
                         keys.Add(ReadExpression());
-                        Expect(TokenKind.Colon, "Expected ':' between dictionary key and value.");
+                        Expect(TokenKind.Colon, "Expected ':' between dictionary key and value.", "expected_dictionary_colon");
                         values.Add(ReadExpression());
                     }
                 }
@@ -452,7 +452,7 @@ namespace DSCompilation.DScript.Parsing
                     while (Match(TokenKind.Comma) && !Is(TokenKind.RightBrace)) values.Add(ReadExpression());
                 }
             }
-            var end = Expect(TokenKind.RightBrace, "Expected '}' after collection literal.");
+            var end = Expect(TokenKind.RightBrace, "Expected '}' after collection literal.", "expected_collection_right_brace");
             return new CollectionExpression(kind, values, keys, SourceSpan.Through(start.Span, end.Span));
         }
         private List<Expression> ReadElements(TokenKind end)
@@ -483,16 +483,18 @@ namespace DSCompilation.DScript.Parsing
             if (position < tokens.Count - 1) position++;
             return current;
         }
-        private DScriptToken Expect(TokenKind kind, string message)
+        private DScriptToken Expect(TokenKind kind, string message, string localizationKey = null)
         {
             if (Is(kind)) return Advance();
-            Error("DS2000", message, Current.Span);
+            Error("DS2000", message, Current.Span, localizationKey);
             throw new BadSyntax();
         }
-        private void Error(string code, string message, SourceSpan span)
+        private void Error(string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
         {
             if (diagnostics.Count < options.MaxDiagnostics)
-                diagnostics.Add(new DScriptDiagnostic(module, code, message, span));
+                diagnostics.Add(new DScriptDiagnostic(module, code, message, span,
+                    localizationKey, localizationArguments));
         }
     }
 }

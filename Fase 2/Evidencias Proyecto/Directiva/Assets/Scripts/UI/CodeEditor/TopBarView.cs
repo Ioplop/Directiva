@@ -91,7 +91,7 @@ namespace Directiva.CodeUI
             _entryFunction.style.minWidth = 90f;
             _entryFunction.style.maxWidth = 240f;
             _entryFunction.style.height = 24f;
-            _entryFunction.tooltip = "Nombre de la función DScript sin parámetros a ejecutar dentro del archivo seleccionado. Si se deja vacío, se ejecuta la primera función declarada en el archivo.";
+            _entryFunction.tooltip = _locale.Get("Tooltips", "entry_function");
             StyleEntryFunctionField();
             _entryFunction.RegisterCallback<AttachToPanelEvent>(_ => StyleEntryFunctionField());
             _entryFunction.RegisterValueChangedCallback(evt =>
@@ -107,9 +107,7 @@ namespace Directiva.CodeUI
             _debugSource.style.marginTop = 0f;
             _debugSource.style.marginBottom = 0f;
             _debugSource.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _debugSource.tooltip =
-                "Resalta en el editor la línea DScript que ejecuta la VM. " +
-                "Los metadatos DEBUG_* se generan siempre, aunque esta opción esté desactivada.";
+            _debugSource.tooltip = _locale.Get("Tooltips", "debug_source");
             UIIconView.SetToggle(_debugSource, _icons?.checkedBox, _icons?.uncheckedBox);
 
             _stop = new Button(() => StopClicked?.Invoke());
@@ -157,9 +155,7 @@ namespace Directiva.CodeUI
             _executionMetrics.style.unityTextAlign = TextAnchor.MiddleLeft;
             _executionMetrics.style.color = new Color(0.64f, 0.68f, 0.75f, 1f);
             _executionMetrics.style.display = DisplayStyle.None;
-            _executionMetrics.tooltip =
-                "Advances ejecutados y tiempo real transcurrido. El tiempo incluye pausas; " +
-                "DEBUG_* también cuenta como Advances en esta versión.";
+            _executionMetrics.tooltip = _locale.Get("Tooltips", "execution_metrics");
 
             var spacer = new VisualElement();
             spacer.style.flexGrow = 1;
@@ -351,6 +347,9 @@ namespace Directiva.CodeUI
             UIIconView.SetButton(_save, _icons?.save);
             UIIconView.SetButton(_revert, _icons?.revert);
 
+            _entryFunction.tooltip = _locale.Get("Tooltips", "entry_function");
+            _debugSource.tooltip = _locale.Get("Tooltips", "debug_source");
+            _executionMetrics.tooltip = _locale.Get("Tooltips", "execution_metrics");
             _save.tooltip = _locale.Get("Common", "save");
             _revert.tooltip = _locale.Get("Common", "revert");
 

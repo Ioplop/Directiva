@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Events;
 using UnityEngine.UIElements;
 using Directiva.Settings;
+using Directiva.Localization;
 using Directiva.UI;
 
 namespace Directiva.MainMenu
@@ -152,6 +153,7 @@ namespace Directiva.MainMenu
         private Label resolutionCountdownLabel;
         private IVisualElementScheduledItem resolutionTimer;
         private Vector2Int? pendingResolution;
+        private string builtLocale;
 
         private static Label Label(string text, string className = null)
         {
@@ -169,6 +171,20 @@ namespace Directiva.MainMenu
         {
             return string.IsNullOrWhiteSpace(value) ? defaultText : value;
         }
+
+        private static string T(string key, params object[] args) =>
+            DirectivaLocalization.Get("MainMenu", key, args);
+
+        // Inspector values can override a label; the legacy Spanish defaults are
+        // treated as defaults, not as custom text that prevents changing language.
+        private static string DefaultLabel(string value, string originalSpanish, string key)
+        {
+            return string.IsNullOrWhiteSpace(value) || value.Trim() == originalSpanish
+                ? T(key) : value;
+        }
+
+        private static string MenuButtonText(MainMenuButtonAction action, string originalSpanish, string key)
+            => DefaultLabel(action?.label, originalSpanish, key);
 
         private enum ButtonVisualState { Normal, Hover, Pressed }
 
@@ -228,7 +244,9 @@ namespace Directiva.MainMenu
 
         private Button CreateBackButton(MainMenuButtonAction action, Action onBack)
         {
-            string caption = ButtonText(action, "Atrás").TrimStart('‹', ' ');
+            string caption = string.IsNullOrWhiteSpace(action?.label) ||
+                action.label.Trim() == "‹ Atrás" || action.label.Trim() == "Atrás"
+                ? T("back") : action.label.TrimStart('‹', ' ');
             var button = CreateButton(caption,
                 () => TriggerButton(action, onBack), "dm-back-button");
             Sprite sprite = _theme?.icons?.back;
@@ -253,6 +271,7 @@ namespace Directiva.MainMenu
             if (buttons.confirmResolution == null) buttons.confirmResolution = new MainMenuButtonAction("Conservar resolución");
             if (buttons.revertResolution == null) buttons.revertResolution = new MainMenuButtonAction("Revertir");
             SettingsManager.Initialize();
+            builtLocale = DirectivaLocalization.CurrentLocale;
             pendingResolution = null;
             resolutionTimer = null;
             volumeSliders.Clear();
@@ -283,6 +302,26 @@ namespace Directiva.MainMenu
 
         private void OnSettingsChanged(GameSettings _)
         {
+            if (!string.Equals(builtLocale, DirectivaLocalization.CurrentLocale, StringComparison.OrdinalIgnoreCase))
+            {
+                // The language dropdown belongs to the page being replaced.
+                // Preserve the selected page, not the old controls or their callbacks.
+                bool showingOptions = options != null && options.parent != null &&
+                    options.parent.style.display.value == DisplayStyle.Flex;
+                bool showingLevels = levelSelection != null && levelSelection.parent != null &&
+                    levelSelection.parent.style.display.value == DisplayStyle.Flex;
+                if (pendingResolution.HasValue) CancelResolution();
+                volumeSliders.Clear();
+                volumeLabels.Clear();
+                resolutionByLabel.Clear();
+                root.Clear();
+                builtLocale = DirectivaLocalization.CurrentLocale;
+                BuildHome();
+                BuildOptions();
+                BuildLevels();
+                Show(showingOptions ? options : showingLevels ? levelSelection : home);
+                return;
+            }
             if (pendingResolution.HasValue && !SettingsRuntimeApplier.IsResolutionPreviewActive)
                 CloseResolutionConfirmation();
             RefreshOptionValues();
@@ -334,9 +373,9 @@ namespace Directiva.MainMenu
                 home.Add(Label(gameTitle, "dm-title"));
             }
             var actions = Container("dm-home-actions");
-            actions.Add(CreateButton(ButtonText(buttons?.play, "Jugar"), () => TriggerButton(buttons?.play, ShowLevelsScreen), "dm-big-button"));
-            actions.Add(CreateButton(ButtonText(buttons?.options, "Opciones"), () => TriggerButton(buttons?.options, ShowOptionsScreen), "dm-big-button"));
-            actions.Add(CreateButton(ButtonText(buttons?.exit, "Salir"), () => TriggerButton(buttons?.exit, QuitApplication), "dm-big-button"));
+            actions.Add(CreateButton(MenuButtonText(buttons?.play, "Jugar", "play"), () => TriggerButton(buttons?.play, ShowLevelsScreen), "dm-big-button"));
+            actions.Add(CreateButton(MenuButtonText(buttons?.options, "Opciones", "options"), () => TriggerButton(buttons?.options, ShowOptionsScreen), "dm-big-button"));
+            actions.Add(CreateButton(MenuButtonText(buttons?.exit, "Salir", "exit"), () => TriggerButton(buttons?.exit, QuitApplication), "dm-big-button"));
             home.Add(actions);
         }
 
@@ -399,34 +438,34 @@ namespace Directiva.MainMenu
 
             GameSettings values = SettingsManager.Current;
 
-            var general = AddOptionsSection(SectionTitle(generalSectionTitle, buttons?.generalTab, "General"));
-            languageDropdown = AddDropdown(general, TextOrDefault(languageSettingLabel, "Idioma"),
-                new List<string> { "Español", "Inglés" },
-                values.general.language == "en" ? "Inglés" : "Español",
-                label => SettingsManager.SetLanguage(label == "Inglés" ? "en" : "es"));
+            var general = AddOptionsSection(SectionTitle(generalSectionTitle, buttons?.generalTab, "General", "general"));
+            languageDropdown = AddDropdown(general, DefaultLabel(languageSettingLabel, "Idioma", "language"),
+                new List<string> { T("lang_spanish"), T("lang_english") },
+                values.general.language == "en" ? T("lang_english") : T("lang_spanish"),
+                label => SettingsManager.SetLanguage(label == T("lang_english") ? "en" : "es"));
             simulateInactiveButton = AddBooleanButton(general, "",
                 buttons?.simulateWhenInactive,
                 () => SettingsManager.SetSimulateWhenInactive(!SettingsManager.Current.general.simulateWhenInactive));
 
-            var sound = AddOptionsSection(SectionTitle(audioSectionTitle, null, "Sonido"));
-            AddVolume(sound, "master", TextOrDefault(masterVolumeSettingLabel, "Volumen general"),
+            var sound = AddOptionsSection(SectionTitle(audioSectionTitle, null, "Sonido", "sound"));
+            AddVolume(sound, "master", DefaultLabel(masterVolumeSettingLabel, "Volumen general", "volume_master"),
                 values.audio.masterVolume, SettingsManager.SetMasterVolume);
-            AddVolume(sound, "music", TextOrDefault(musicVolumeSettingLabel, "Volumen de la música"),
+            AddVolume(sound, "music", DefaultLabel(musicVolumeSettingLabel, "Volumen de la música", "volume_music"),
                 values.audio.musicVolume, SettingsManager.SetMusicVolume);
-            AddVolume(sound, "ui", TextOrDefault(uiVolumeSettingLabel, "Volumen de la interfaz"),
+            AddVolume(sound, "ui", DefaultLabel(uiVolumeSettingLabel, "Volumen de la interfaz", "volume_ui"),
                 values.audio.uiVolume, SettingsManager.SetUiVolume);
-            AddVolume(sound, "simulation", TextOrDefault(simulationVolumeSettingLabel, "Volumen de la partida / simulación"),
+            AddVolume(sound, "simulation", DefaultLabel(simulationVolumeSettingLabel, "Volumen de la partida / simulación", "volume_simulation"),
                 values.audio.simulationVolume, SettingsManager.SetSimulationVolume);
 
-            var graphics = AddOptionsSection(SectionTitle(graphicsSectionTitle, buttons?.graphicsTab, "Gráficos"));
+            var graphics = AddOptionsSection(SectionTitle(graphicsSectionTitle, buttons?.graphicsTab, "Gráficos", "graphics"));
             fullScreenButton = AddBooleanButton(graphics, "", buttons?.fullScreen,
                 () => SettingsManager.SetFullscreen(!SettingsManager.Current.graphics.fullscreen));
-            resolutionDropdown = AddDropdown(graphics, TextOrDefault(resolutionSettingLabel, "Resolución"),
+            resolutionDropdown = AddDropdown(graphics, DefaultLabel(resolutionSettingLabel, "Resolución", "resolution"),
                 new List<string> { "..." }, "...", RequestResolutionChange);
 
-            var controls = AddOptionsSection(SectionTitle(controlsSectionTitle, buttons?.controlsTab, "Controles"));
-            mouseCaptureDropdown = AddDropdown(controls, TextOrDefault(mouseCaptureSettingLabel, "Atrapar el mouse"),
-                new List<string> { "Siempre", "En pantalla completa", "Nunca" },
+            var controls = AddOptionsSection(SectionTitle(controlsSectionTitle, buttons?.controlsTab, "Controles", "controls"));
+            mouseCaptureDropdown = AddDropdown(controls, DefaultLabel(mouseCaptureSettingLabel, "Atrapar el mouse", "mouse_capture"),
+                new List<string> { T("mouse_always"), T("mouse_fullscreen"), T("mouse_never") },
                 MouseCaptureLabel(values.controls.mouseCapture),
                 label => SettingsManager.SetMouseCapture(MouseCaptureValue(label)));
 
@@ -435,9 +474,11 @@ namespace Directiva.MainMenu
             RefreshOptionValues();
         }
 
-        private static string SectionTitle(string overrideTitle, MainMenuButtonAction oldTab, string fallback)
+        private static string SectionTitle(string overrideTitle, MainMenuButtonAction oldTab,
+            string originalSpanish, string key)
         {
-            return string.IsNullOrWhiteSpace(overrideTitle) ? ButtonText(oldTab, fallback) : overrideTitle;
+            if (!string.IsNullOrWhiteSpace(overrideTitle)) return overrideTitle;
+            return MenuButtonText(oldTab, originalSpanish, key);
         }
 
         private VisualElement AddOptionsSection(string sectionTitle)
@@ -478,7 +519,9 @@ namespace Directiva.MainMenu
         private void SetBooleanButton(Button button, MainMenuButtonAction action, string fallback, bool enabled)
         {
             if (button == null) return;
-            button.text = ButtonText(action, fallback) + (enabled ? ": Sí" : ": No");
+            string key = button == fullScreenButton ? "fullscreen" : "simulate_inactive";
+            string originalSpanish = button == fullScreenButton ? "Pantalla completa" : "Simular en ventana inactiva";
+            button.text = MenuButtonText(action, originalSpanish, key) + (enabled ? ": " + T("yes") : ": " + T("no"));
             button.EnableInClassList("dm-active", enabled);
             SetButtonColor(button, ButtonVisualState.Normal);
         }
@@ -508,9 +551,9 @@ namespace Directiva.MainMenu
         {
             switch (value)
             {
-                case "Always": return "Siempre";
-                case "Never": return "Nunca";
-                default: return "En pantalla completa";
+                case "Always": return T("mouse_always");
+                case "Never": return T("mouse_never");
+                default: return T("mouse_fullscreen");
             }
         }
 
@@ -518,8 +561,8 @@ namespace Directiva.MainMenu
         {
             switch (label)
             {
-                case "Siempre": return "Always";
-                case "Nunca": return "Never";
+                case var x when x == T("mouse_always"): return "Always";
+                case var x when x == T("mouse_never"): return "Never";
                 default: return "FullscreenOnly";
             }
         }
@@ -547,7 +590,7 @@ namespace Directiva.MainMenu
         {
             if (optionsContent == null) return;
             GameSettings values = SettingsManager.Current;
-            languageDropdown?.SetValueWithoutNotify(values.general.language == "en" ? "Inglés" : "Español");
+            languageDropdown?.SetValueWithoutNotify(values.general.language == "en" ? T("lang_english") : T("lang_spanish"));
             mouseCaptureDropdown?.SetValueWithoutNotify(MouseCaptureLabel(values.controls.mouseCapture));
             SetBooleanButton(fullScreenButton, buttons?.fullScreen, "Pantalla completa", values.graphics.fullscreen);
             SetBooleanButton(simulateInactiveButton, buttons?.simulateWhenInactive, "Simular en ventana inactiva",
@@ -576,14 +619,14 @@ namespace Directiva.MainMenu
             resolutionConfirmation = Container("dm-resolution-overlay");
             resolutionConfirmation.style.display = DisplayStyle.None;
             var dialog = Container("dm-resolution-dialog");
-            dialog.Add(Label("¿Conservar esta resolución?", "dm-resolution-question"));
-            dialog.Add(Label("Si no confirmas, se restaurará la selección anterior.", "dm-muted"));
+            dialog.Add(Label(T("resolution_question"), "dm-resolution-question"));
+            dialog.Add(Label(T("resolution_info"), "dm-muted"));
             resolutionCountdownLabel = Label("", "dm-resolution-countdown");
             dialog.Add(resolutionCountdownLabel);
             var actions = Container("dm-resolution-actions");
-            actions.Add(CreateButton(ButtonText(buttons?.confirmResolution, "Conservar resolución"),
+            actions.Add(CreateButton(MenuButtonText(buttons?.confirmResolution, "Conservar resolución", "keep_resolution"),
                 () => TriggerButton(buttons?.confirmResolution, ConfirmResolution), "dm-resolution-button"));
-            actions.Add(CreateButton(ButtonText(buttons?.revertResolution, "Revertir"),
+            actions.Add(CreateButton(MenuButtonText(buttons?.revertResolution, "Revertir", "revert"),
                 () => TriggerButton(buttons?.revertResolution, CancelResolution), "dm-resolution-button"));
             dialog.Add(actions);
             resolutionConfirmation.Add(dialog);
@@ -600,7 +643,7 @@ namespace Directiva.MainMenu
             if (!SettingsRuntimeApplier.TryPreviewResolution(selected.x, selected.y,
                     Mathf.Max(5, resolutionConfirmSeconds)))
             {
-                Debug.LogWarning("[Directiva Settings] Unable to preview selected resolution.");
+                Debug.LogWarning(T("resolution_preview_failed"));
                 RefreshResolutionChoices();
                 return;
             }
@@ -616,7 +659,7 @@ namespace Directiva.MainMenu
         {
             if (!pendingResolution.HasValue) return;
             int remaining = Mathf.CeilToInt(SettingsRuntimeApplier.ResolutionPreviewSecondsRemaining);
-            resolutionCountdownLabel.text = "Tiempo restante: " + remaining + " s";
+            resolutionCountdownLabel.text = T("time_remaining", remaining);
             if (!SettingsRuntimeApplier.IsResolutionPreviewActive || remaining == 0)
                 CancelResolution();
         }
@@ -628,7 +671,7 @@ namespace Directiva.MainMenu
             CloseResolutionConfirmation();
             if (!confirmed)
             {
-                Debug.LogWarning("[Directiva Settings] Resolution preview expired or display mode became unavailable.");
+                Debug.LogWarning(T("resolution_preview_expired"));
                 SettingsManager.RefreshDisplayModes();
             }
             RefreshResolutionChoices();
@@ -656,7 +699,7 @@ namespace Directiva.MainMenu
             levelSelection = BuildPage();
             var header = Container("dm-level-header");
             // The centered title has its own absolute layout, independent of the back button and stars.
-            var title = Label(TextOrDefault(levelsTitle, "Niveles"), "dm-level-title");
+            var title = Label(DefaultLabel(levelsTitle, "Niveles", "levels"), "dm-level-title");
             title.pickingMode = PickingMode.Ignore;
             header.Add(title);
             var back = CreateBackButton(buttons?.backFromLevels, ShowHomeScreen);
@@ -737,12 +780,12 @@ namespace Directiva.MainMenu
             if (entry == null || entry.locked) return;
             if (string.IsNullOrWhiteSpace(entry.sceneName))
             {
-                Debug.LogError($"[Directiva] Level '{entry.name}' has no destination scene.", this);
+                Debug.LogError(T("level_missing_scene", entry.name), this);
                 return;
             }
             if (!Application.CanStreamedLevelBeLoaded(entry.sceneName))
             {
-                Debug.LogError($"[Directiva] Scene '{entry.sceneName}' is not available in Build Profiles / Build Settings.", this);
+                Debug.LogError(T("level_scene_unavailable", entry.sceneName), this);
                 return;
             }
             LevelLaunchContext.Clear();

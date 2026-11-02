@@ -78,7 +78,7 @@ namespace DSCompilation.DScript.Semantics
                         BindFunction(function, module);
                     else if (!(statement is ImportStatement || statement is FromImportStatement ||
                         statement is SharedStatement))
-                        Error("DS4001", "Only imports, function declarations and shared declarations are allowed at module scope.", statement.Span);
+                        Error("DS4001", "Only imports, function declarations and shared declarations are allowed at module scope.", statement.Span, "module_scope_binder");
                 }
             }
             currentFunction = null;
@@ -92,7 +92,7 @@ namespace DSCompilation.DScript.Semantics
                 if (statement is FunctionStatement function)
                 {
                     if (module.ExportsInternal.ContainsKey(function.Name))
-                        Error(module.Name, "DS4002", "Duplicate module symbol '" + function.Name + "'.", statement.Span);
+                        Error(module.Name, "DS4002", "Duplicate module symbol '" + function.Name + "'.", statement.Span, "duplicate_module_symbol", function.Name);
                     else
                     {
                         var symbol = new DScriptSymbol(function.Name, module.Name + "." + function.Name,
@@ -111,7 +111,7 @@ namespace DSCompilation.DScript.Semantics
             string name = declaration.Name;
             if (module.FunctionsInternal.ContainsKey(name))
             {
-                Error(module.Name, "DS4002", "Function and shared variable share the name '" + name + "'.", declaration.NameSpan);
+                Error(module.Name, "DS4002", "Function and shared variable share the name '" + name + "'.", declaration.NameSpan, "function_shared_collision", name);
                 return;
             }
             if (!sharedByName.TryGetValue(name, out DScriptSymbol symbol))
@@ -126,7 +126,7 @@ namespace DSCompilation.DScript.Semantics
             {
                 if (firstInitializer.ContainsKey(name))
                     Error(module.Name, "DS4018", "Shared variable '" + name +
-                        "' has more than one initializer in the program.", declaration.NameSpan);
+                        "' has more than one initializer in the program.", declaration.NameSpan, "duplicate_shared_initializer", name);
                 else firstInitializer.Add(name, declaration);
             }
         }
@@ -186,7 +186,7 @@ namespace DSCompilation.DScript.Semantics
                         {
                             if (!exports.TryGetValue(imported.Name, out DScriptSymbol symbol))
                             {
-                                Error(module.Name, "DS4003", "Module '" + from.ModuleName + "' has no exported symbol '" + imported.Name + "'.", imported.Span);
+                                Error(module.Name, "DS4003", "Module '" + from.ModuleName + "' has no exported symbol '" + imported.Name + "'.", imported.Span, "no_exported_symbol", from.ModuleName, imported.Name);
                                 continue;
                             }
                             AddImport(module, imported.Alias ?? imported.Name, symbol, imported.Span, false);
@@ -223,14 +223,14 @@ namespace DSCompilation.DScript.Semantics
                 // Importing the same shared variable that this module already declared is harmless.
                 if (declared.Kind == SymbolKind.Global && target.Kind == SymbolKind.Global &&
                     declared.QualifiedName == target.QualifiedName) return;
-                Error(module.Name, "DS4004", "Import '" + alias + "' conflicts with a declaration in this module.", span);
+                Error(module.Name, "DS4004", "Import '" + alias + "' conflicts with a declaration in this module.", span, "import_conflict", alias);
                 return;
             }
             if (module.ImportsInternal.TryGetValue(alias, out var existing))
             {
                 if (allowSameModulePrefix && target.Kind == SymbolKind.Module &&
                     existing.Kind == SymbolKind.Module && existing.QualifiedName == target.QualifiedName) return;
-                Error(module.Name, "DS4004", "Import alias '" + alias + "' is already defined.", span);
+                Error(module.Name, "DS4004", "Import alias '" + alias + "' is already defined.", span, "duplicate_import_alias", alias);
                 return;
             }
             module.ImportsInternal.Add(alias, new DScriptSymbol(alias, target.QualifiedName, target.Kind, target.ParameterCount)
@@ -247,9 +247,9 @@ namespace DSCompilation.DScript.Semantics
             foreach (string name in function.Parameters)
             {
                 if (table.LocalsInternal.ContainsKey(name))
-                    Error("DS4005", "Duplicate parameter '" + name + "'.", function.Span);
+                    Error("DS4005", "Duplicate parameter '" + name + "'.", function.Span, "duplicate_parameter", name);
                 else if (module.GlobalsInternal.ContainsKey(name))
-                    Error("DS4006", "Parameter '" + name + "' conflicts with a shared variable.", function.Span);
+                    Error("DS4006", "Parameter '" + name + "' conflicts with a shared variable.", function.Span, "parameter_shared_collision", name);
                 else AddLocal(name, SymbolKind.Parameter);
             }
             CollectLocalAssignments(function.Body);
@@ -291,7 +291,7 @@ namespace DSCompilation.DScript.Semantics
         {
             if (++walkDepth > options.MaxNestingDepth)
             {
-                Error("DS4029", "Maximum semantic nesting depth exceeded.", statement.Span);
+                Error("DS4029", "Maximum semantic nesting depth exceeded.", statement.Span, "semantic_depth");
                 walkDepth--; return;
             }
             try { VisitStatementCore(statement); }
@@ -308,7 +308,7 @@ namespace DSCompilation.DScript.Semantics
             else if (statement is ExpressionStatement expr) VisitExpression(expr.Value);
             else if (statement is ReturnStatement ret)
             {
-                if (currentFunction == null) Error("DS4007", "Return is only allowed in a function.", statement.Span);
+                if (currentFunction == null) Error("DS4007", "Return is only allowed in a function.", statement.Span, "return_outside");
                 if (ret.Value != null) VisitExpression(ret.Value);
             }
             else if (statement is IfStatement conditional)
@@ -339,14 +339,14 @@ namespace DSCompilation.DScript.Semantics
             else if (statement is FlowStatement flow)
             {
                 if ((flow.Keyword == "break" || flow.Keyword == "continue") && loopDepth == 0)
-                    Error("DS4008", "'" + flow.Keyword + "' requires an enclosing loop.", statement.Span);
+                    Error("DS4008", "'" + flow.Keyword + "' requires an enclosing loop.", statement.Span, "loop_required", flow.Keyword);
             }
             else if (statement is FunctionStatement)
-                Error("DS4009", "Nested functions and closures are not supported.", statement.Span);
+                Error("DS4009", "Nested functions and closures are not supported.", statement.Span, "nested_functions");
             else if (statement is ImportStatement || statement is FromImportStatement)
-                Error("DS4010", "Imports must be declared at module scope.", statement.Span);
+                Error("DS4010", "Imports must be declared at module scope.", statement.Span, "imports_scope");
             else if (statement is SharedStatement)
-                Error("DS4019", "Shared variables must be declared at module scope.", statement.Span);
+                Error("DS4019", "Shared variables must be declared at module scope.", statement.Span, "shared_scope_binder");
         }
 
         private void VisitTarget(Expression target, bool readBeforeWrite)
@@ -355,7 +355,7 @@ namespace DSCompilation.DScript.Semantics
             {
                 var symbol = FindName(variable.Name, variable.Span, true);
                 if (symbol == null || symbol.Kind != SymbolKind.Local && symbol.Kind != SymbolKind.Parameter && symbol.Kind != SymbolKind.Global)
-                    Error("DS4011", "Cannot assign to '" + variable.Name + "'.", variable.Span);
+                    Error("DS4011", "Cannot assign to '" + variable.Name + "'.", variable.Span, "cannot_assign", variable.Name);
                 else bindings[variable] = symbol;
             }
             else if (target is IndexExpression index)
@@ -365,15 +365,15 @@ namespace DSCompilation.DScript.Semantics
             }
             else if (target is AttributeExpression attribute)
             {
-                if (TryResolveStaticModule(attribute, out DScriptSymbol member, out _))
+                if (TryResolveStaticModule(attribute, out DScriptSymbol member, out _, out _, out _))
                 {
                     if (member != null && member.Kind == SymbolKind.Global)
                         bindings[attribute] = member;
-                    else Error("DS4012", "Only variables (not functions/constants) can be assigned through imported modules.", attribute.Span);
+                    else Error("DS4012", "Only variables (not functions/constants) can be assigned through imported modules.", attribute.Span, "import_assignment");
                 }
                 else VisitExpression(attribute.Receiver);
             }
-            else Error("DS4011", "Invalid assignment target.", target.Span);
+            else Error("DS4011", "Invalid assignment target.", target.Span, "invalid_assignment");
         }
 
         private void VisitExpression(Expression expression)
@@ -381,7 +381,7 @@ namespace DSCompilation.DScript.Semantics
             if (expression == null) return;
             if (++walkDepth > options.MaxNestingDepth)
             {
-                Error("DS4029", "Maximum semantic expression depth exceeded.", expression.Span);
+                Error("DS4029", "Maximum semantic expression depth exceeded.", expression.Span, "semantic_expression_depth");
                 walkDepth--; return;
             }
             try { VisitExpressionCore(expression); }
@@ -394,14 +394,14 @@ namespace DSCompilation.DScript.Semantics
             {
                 if (ulong.TryParse(literal.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude)
                     && magnitude > long.MaxValue)
-                    Error("DS4017", "Integer literal exceeds Int64.MaxValue; use -9223372036854775808 only as a signed literal.", literal.Span);
+                    Error("DS4017", "Integer literal exceeds Int64.MaxValue; use -9223372036854775808 only as a signed literal.", literal.Span, "integer_literal_out_of_range");
             }
             else if (expression is NameExpression name)
             {
                 DScriptSymbol symbol = FindName(name.Name, name.Span, false);
                 if (symbol == null) return;
                 if (symbol.Kind == SymbolKind.Module)
-                    Error("DS4013", "Modules are compile-time namespaces, not runtime values: '" + name.Name + "'.", name.Span);
+                    Error("DS4013", "Modules are compile-time namespaces, not runtime values: '" + name.Name + "'.", name.Span, "module_namespace_not_value", name.Name);
                 bindings[name] = symbol;
             }
             else if (expression is UnaryExpression unary)
@@ -424,19 +424,20 @@ namespace DSCompilation.DScript.Semantics
                     callee.Kind == SymbolKind.Function && callee.ParameterCount >= 0 &&
                     callee.ParameterCount != call.Arguments.Count)
                     Error("DS4014", "Function '" + callee.QualifiedName + "' expects " +
-                        callee.ParameterCount + " arguments, got " + call.Arguments.Count + ".", call.Span);
+                        callee.ParameterCount + " arguments, got " + call.Arguments.Count + ".", call.Span, "wrong_function_arity", callee.QualifiedName, callee.ParameterCount, call.Arguments.Count);
             }
             else if (expression is AttributeExpression attribute)
             {
-                if (TryResolveStaticModule(attribute, out DScriptSymbol symbol, out string error))
+                if (TryResolveStaticModule(attribute, out DScriptSymbol symbol, out string error,
+                    out string errorKey, out object[] errorArguments))
                 {
                     if (symbol != null)
                     {
                         if (symbol.Kind == SymbolKind.Module)
-                            Error("DS4013", "A module namespace cannot be used as a value.", attribute.Span);
+                            Error("DS4013", "A module namespace cannot be used as a value.", attribute.Span, "module_namespace_not_value_plain");
                         bindings[attribute] = symbol;
                     }
-                    else Error("DS4015", error, attribute.Span);
+                    else Error("DS4015", error, attribute.Span, errorKey, errorArguments);
                 }
                 else VisitExpression(attribute.Receiver);
             }
@@ -462,7 +463,7 @@ namespace DSCompilation.DScript.Semantics
             if (currentModule.FunctionsInternal.TryGetValue(name, out DScriptSymbol function)) return function;
             if (currentModule.ImportsInternal.TryGetValue(name, out DScriptSymbol imported)) return imported;
             if (builtins.TryGetValue(name, out DScriptSymbol builtin)) return builtin;
-            if (!write) Error("DS4016", "Undefined name '" + name + "'.", at);
+            if (!write) Error("DS4016", "Undefined name '" + name + "'.", at, "undefined_name", name);
             return null;
         }
 
@@ -470,9 +471,11 @@ namespace DSCompilation.DScript.Semantics
         /// If the root is an imported module (not a local/global shadow), resolve static namespace
         /// chains. Returns false for ordinary runtime object attributes (e.g. unit.health).
         /// </summary>
-        private bool TryResolveStaticModule(AttributeExpression attr, out DScriptSymbol symbol, out string error)
+        private bool TryResolveStaticModule(AttributeExpression attr, out DScriptSymbol symbol,
+            out string error, out string errorKey, out object[] errorArguments)
         {
-            symbol = null; error = null;
+            symbol = null; error = null; errorKey = null;
+            errorArguments = Array.Empty<object>();
             var parts = new List<string>();
             Expression root = attr;
             while (root is AttributeExpression access) { parts.Insert(0, access.Attribute); root = access.Receiver; }
@@ -491,6 +494,8 @@ namespace DSCompilation.DScript.Semantics
                 var exports = GetExports(moduleName);
                 if (exports.TryGetValue(memberName, out symbol)) return true;
                 error = "Module '" + moduleName + "' has no symbol '" + memberName + "'.";
+                errorKey = "static_module_missing_symbol";
+                errorArguments = new object[] { moduleName, memberName };
                 return true;
             }
             // A path may begin with a statically imported value and continue with dynamic
@@ -514,15 +519,21 @@ namespace DSCompilation.DScript.Semantics
                     return true;
                 }
             error = "Namespace '" + path + "' is not imported.";
+            errorKey = "static_namespace_not_imported";
+            errorArguments = new object[] { path };
             return true;
         }
 
-        private void Error(string code, string message, SourceSpan span)
-            => Error(currentModule != null ? currentModule.Name : string.Empty, code, message, span);
-        private void Error(string module, string code, string message, SourceSpan span)
+        private void Error(string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
+            => Error(currentModule != null ? currentModule.Name : string.Empty,
+                code, message, span, localizationKey, localizationArguments);
+        private void Error(string module, string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
         {
             if (errors.Count < options.MaxDiagnostics)
-                errors.Add(new DScriptDiagnostic(module, code, message, span));
+                errors.Add(new DScriptDiagnostic(module, code, message, span,
+                    localizationKey, localizationArguments));
         }
     }
 }

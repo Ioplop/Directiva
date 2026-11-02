@@ -48,7 +48,8 @@ namespace DSCompilation.DScript.Backend
             int logicalBudgetPerInitializer = 100000,
             VMOptions options = null,
             Action<DScriptCompiledInitializer, RuntimeError> onError = null,
-            Action<string> onOutput = null)
+            Action<string> onOutput = null,
+            Action<DScriptCompiledInitializer, RuntimeError, VMDebugState> onErrorWithDebug = null)
         {
             if (program == null) throw new ArgumentNullException(nameof(program));
             if (memory == null) throw new ArgumentNullException(nameof(memory));
@@ -75,7 +76,11 @@ namespace DSCompilation.DScript.Backend
                         logicalBudgetPerInitializer + " steps.");
                     vm.Abort(error); // Release GC roots from abandoned call stacks.
                 }
-                if (error != null) onError?.Invoke(step, error);
+                if (error != null)
+                {
+                    onError?.Invoke(step, error);
+                    onErrorWithDebug?.Invoke(step, error, vm.Debug.Snapshot());
+                }
                 outcomes.Add(new DScriptInitializerOutcome(step, vm.Status, error, result.StepsExecuted));
             }
             return new DScriptInitializationReport(outcomes.AsReadOnly());

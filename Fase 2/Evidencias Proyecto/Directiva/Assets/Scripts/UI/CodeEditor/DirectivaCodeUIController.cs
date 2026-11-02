@@ -14,6 +14,7 @@ using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
 using UnityEngine.SceneManagement;
 using Directiva.UI;
+using Directiva.Localization;
 
 namespace Directiva.CodeUI
 {
@@ -21,7 +22,6 @@ namespace Directiva.CodeUI
     {
         [Header("Localization")]
         [SerializeField] private string defaultLocale = "es";
-        [SerializeField] private string initialLocale = "es";
 
         [Header("Shared UI Theme")]
         [SerializeField] private DirectivaUITheme uiTheme;
@@ -97,6 +97,7 @@ namespace Directiva.CodeUI
         private VMMemoryContext _runningMemory;
         private bool _runningSourceDebugEnabled;
         private readonly DScriptLineBreakpointGate _breakpointGate = new DScriptLineBreakpointGate();
+        private DScriptCompilationResult _lastCompilation;
         private readonly HashSet<string> _lastCompilationDiagnosticPaths =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<int>> _runningBreakpointsByModule =
@@ -158,7 +159,10 @@ namespace Directiva.CodeUI
             _document = GetComponent<UIDocument>();
 
             Events = new DirectivaUIEventHub();
+            // The persisted language is authoritative, including for embedded editors.
             Localization = new LocalizationService(defaultLocale);
+            Localization.SetLocale(DirectivaLocalization.CurrentLocale);
+            DirectivaLocalization.LanguageChanged += OnGlobalLanguageChanged;
             Output = new OutputService(outputCapacity);
 
             var scriptsRoot = Path.Combine(Application.persistentDataPath, "DirectivaScripts");
@@ -229,7 +233,28 @@ namespace Directiva.CodeUI
             _workspace?.FlushActiveBackup();
         }
 
-        public void SetLocale(string locale) => Localization.SetLocale(locale);
+        public void SetLocale(string locale) => DirectivaLocalization.SetLocale(locale);
+
+        private void OnDestroy()
+        {
+            DirectivaLocalization.LanguageChanged -= OnGlobalLanguageChanged;
+        }
+
+        private void OnGlobalLanguageChanged(string locale)
+        {
+            Localization?.SetLocale(locale);
+            SetExplorerCollapsed(_explorerCollapsed);
+            if (_lastCompilation != null) PublishCompilationDiagnostics(_lastCompilation);
+            if (_document != null)
+            {
+                var menuButton = _document.rootVisualElement.Q<Button>("standalone-main-menu-button");
+                if (menuButton != null)
+                {
+                    menuButton.text = DirectivaLocalization.Get("Simulation", "main_menu");
+                    menuButton.tooltip = DirectivaLocalization.Get("Simulation", "back_to_menu");
+                }
+            }
+        }
 
         /// <summary>Allows a simulation host to supply the same theme before mounting.</summary>
         public void SetTheme(DirectivaUITheme theme)
@@ -249,7 +274,7 @@ namespace Directiva.CodeUI
         {
             if (!Application.CanStreamedLevelBeLoaded(menuSceneName))
             {
-                Debug.LogError($"[Directiva] Menu scene '{menuSceneName}' is not in Build Profiles.", this);
+                Debug.LogError(Localization.Get("Console", "menu_scene_unavailable", menuSceneName), this);
                 return;
             }
             SceneManager.LoadScene(menuSceneName);
@@ -269,7 +294,6 @@ namespace Directiva.CodeUI
 
             BuildUI(container);
             WireEvents();
-            Localization.SetLocale(initialLocale);
             RefreshCodebase();
             _mounted = true;
         }
@@ -287,7 +311,9 @@ namespace Directiva.CodeUI
             {
                 UIIconView.SetButton(_explorerToggle,
                     collapsed ? _theme?.icons?.arrowRight : _theme?.icons?.arrowLeft, 14f);
-                _explorerToggle.tooltip = collapsed ? "Mostrar solución" : "Ocultar solución";
+                _explorerToggle.tooltip = collapsed
+                    ? Localization.Get("Simulation", "show_solution")
+                    : Localization.Get("Simulation", "hide_solution");
             }
         }
 
@@ -439,6 +465,8 @@ namespace Directiva.CodeUI
             {
                 explorerFontSize = size;
             };
+
+            _outputPanel.SourceRequested += NavigateToOutputSource;
 
             _outputPanel.FontSizeChanged += size =>
             {
@@ -856,7 +884,7 @@ namespace Directiva.CodeUI
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
             _editor.ClearExecutionLine();
-            Output.Write("[DScript] Ejecución detenida.");
+            Output.Write(Localization.Get("Console", "stopped"));
         }
 
         private bool StartActiveDScriptExecution(bool startPaused = false)
@@ -864,13 +892,13 @@ namespace Directiva.CodeUI
             var active = _workspace.Active;
             if (active == null)
             {
-                Output.WriteError("[DScript] No hay ningún archivo seleccionado.");
+                Output.WriteError(Localization.Get("Console", "no_file"));
                 return false;
             }
 
             if (!TryGetModuleName(active.RelativePath, out string moduleName, out string moduleError))
             {
-                Output.WriteError("[DScript] " + moduleError);
+                Output.WriteError(Localization.Get("Console", "module_error", moduleError));
                 return false;
             }
 
@@ -881,15 +909,22 @@ namespace Directiva.CodeUI
                 BuildRunningBreakpointMap();
                 var sourceProvider = new WorkspaceDScriptSourceProvider(
                     Codebase, _workspace, _storage.RootPath);
-                Output.Write($"[DScript] Compilando {active.RelativePath} y parseando DIL...");
+                Output.Write(Localization.Get("Console", "compile_start", active.RelativePath));
 
                 DScriptEditorPreparedRun prepared = DScriptEditorRunPipeline.Prepare(
                     moduleName, _topBar.EntryFunctionName, sourceProvider,
                     editorInitializerStepBudget,
                     onInitializerOutput: text => Output.Write(text ?? string.Empty),
-                    onInitializerError: (step, error) => Output.WriteError(
-                        $"[DScript][shared] {step.Module}.{step.Variable} " +
-                        $"({step.Span.Line}:{step.Span.Column}) falló ({error.Id}): {error.Message}"));
+                    onInitializerErrorWithDebug: (step, error, debug) =>
+                    {
+                        // Shared initializers execute on temporary VMs. Prefer the
+                        // actual failing instruction (which may be inside a called function).
+                        OutputSourceLocation? source = OutputSourceLocation.FromDebug(debug) ??
+                            OutputSourceLocation.FromModuleSpan(step.Module, step.Span);
+                        Output.WriteError(Localization.Get("Console", "initializer_failed",
+                            step.Module, step.Variable, step.Span.Line, step.Span.Column,
+                            error.Id, DirectivaLocalization.Format(error)), source);
+                    });
 
                 PublishCompilationDiagnostics(prepared.Compilation);
                 if (!prepared.Compilation.Success)
@@ -898,16 +933,22 @@ namespace Directiva.CodeUI
                     {
                         string path = diagnostic.Module.Replace('.', '/') +
                                       FileSystemScriptStorage.ScriptExtension;
-                        Output.WriteError(
-                            $"[DScript] {path}:{diagnostic.Span.Line}:{diagnostic.Span.Column} " +
-                            $"{diagnostic.Code}: {diagnostic.Message}");
+                        OutputSourceLocation? source = OutputSourceLocation.FromDiagnostic(diagnostic);
+                        // Generated/bootstrap DIL modules are not editable source files.
+                        if (source.HasValue && !_storage.ScriptExists(source.Value.FilePath))
+                            source = null;
+                        Output.WriteError(Localization.Get("Console", "diagnostic", path,
+                            diagnostic.Span.Line, diagnostic.Span.Column, diagnostic.Code,
+                            DirectivaLocalization.Format(diagnostic)), source);
                     }
                     return false;
                 }
 
                 if (!prepared.Success)
                 {
-                    Output.WriteError("[DScript] " + prepared.Error);
+                    Output.WriteError(Localization.Get("Console", "script_error",
+                        string.IsNullOrEmpty(prepared.ErrorKey) ? prepared.Error :
+                            Localization.Get("Console", prepared.ErrorKey, prepared.ErrorArguments)));
                     return false;
                 }
 
@@ -917,11 +958,11 @@ namespace Directiva.CodeUI
                 {
                     foreach (string warning in GeneratedDILCache.Write(
                         prepared.Program, _storage.RootPath))
-                        Output.WriteWarning("[DScript] " + warning);
+                        Output.WriteWarning(Localization.Get("Console", "cache_warning", warning));
                 }
                 catch (Exception ex)
                 {
-                    Output.WriteWarning("[DScript] No se pudo guardar el DIL generado: " + ex.Message);
+                    Output.WriteWarning(Localization.Get("Console", "cache_failed", ex.Message));
                 }
 
                 _runningFunctionName = prepared.FunctionName;
@@ -936,19 +977,43 @@ namespace Directiva.CodeUI
                 _editor.ClearExecutionLine();
                 _topBar.ClearExecutionMetrics();
                 _executionController.Start(prepared.VM, paused: startPaused);
-                Output.Write($"[DScript] Compilación correcta ({prepared.Program.DILModules.Count - 1} módulos). " +
-                    $"Ejecutando {_runningFunctionName}...");
+                Output.Write(Localization.Get("Console", "compile_success",
+                    prepared.Program.DILModules.Count - 1, _runningFunctionName));
                 return true;
             }
             catch (Exception ex)
             {
-                Output.WriteError("[DScript] No se pudo iniciar la ejecución: " + ex.Message);
+                Output.WriteError(Localization.Get("Console", "start_failed", ex.Message));
                 return false;
+            }
+        }
+
+        private void NavigateToOutputSource(OutputSourceLocation source)
+        {
+            // Only source scripts may be opened. Missing/renamed files have an
+            // outdated location, so keep the current document instead.
+            try
+            {
+                if (!_storage.ScriptExists(source.FilePath))
+                {
+                    Output.WriteWarning(Localization.Get("Console", "source_unavailable", source.FilePath));
+                    return;
+                }
+
+                _workspace.Open(source.FilePath);
+                _editor.RevealSourceLocation(source.Line, source.Column,
+                    source.StartOffset, source.Length);
+            }
+            catch (Exception ex)
+            {
+                Output.WriteWarning(Localization.Get("Console", "source_open_failed",
+                    source.FilePath, ex.Message));
             }
         }
 
         private void PublishCompilationDiagnostics(DScriptCompilationResult compilation)
         {
+            _lastCompilation = compilation;
             foreach (string previousPath in _lastCompilationDiagnosticPaths)
                 _workspace.SetDiagnostics(previousPath, Array.Empty<CodeDiagnostic>());
             _lastCompilationDiagnosticPaths.Clear();
@@ -961,7 +1026,7 @@ namespace Directiva.CodeUI
                 if (!_storage.ScriptExists(group.Key)) continue;
                 _workspace.SetDiagnostics(group.Key, group.Select(d =>
                     new CodeDiagnostic(d.Code, DiagnosticSeverity.Error,
-                        d.Span.Start, d.Span.Length, d.Message)).ToArray());
+                        d.Span.Start, d.Span.Length, DirectivaLocalization.Format(d))).ToArray());
                 _lastCompilationDiagnosticPaths.Add(group.Key);
             }
         }
@@ -974,12 +1039,11 @@ namespace Directiva.CodeUI
         private void OnExecutionCompleted(DataValue returnValue)
         {
             string functionName = string.IsNullOrWhiteSpace(_runningFunctionName)
-                ? "función"
+                ? Localization.Get("Console", "function_fallback")
                 : _runningFunctionName;
 
-            Output.Write(
-                $"[DScript] {functionName} retornó {FormatDataValue(returnValue, _runningMemory)}"
-            );
+            Output.Write(Localization.Get("Console", "completed", functionName,
+                FormatDataValue(returnValue, _runningMemory)));
 
             _topBar.SetExecutionMetrics(
                 _executionController.TotalAdvances,
@@ -997,12 +1061,16 @@ namespace Directiva.CodeUI
         private void OnExecutionFaulted(DSExecution.Errors.RuntimeError error)
         {
             string functionName = string.IsNullOrWhiteSpace(_runningFunctionName)
-                ? "función"
+                ? Localization.Get("Console", "function_fallback")
                 : _runningFunctionName;
 
-            Output.WriteError(
-                $"[DScript] {functionName} falló ({error.Id}): {error.Message}"
-            );
+            OutputSourceLocation? source =
+                OutputSourceLocation.FromDebug(_executionController.LastFaultDebug);
+            string locationSuffix = source.HasValue
+                ? " (" + source.Value.FilePath + ":" + source.Value.Line + ")"
+                : string.Empty;
+            Output.WriteError(Localization.Get("Console", "faulted", functionName,
+                error.Id, DirectivaLocalization.Format(error)) + locationSuffix, source);
 
             _topBar.SetExecutionMetrics(
                 _executionController.TotalAdvances,
@@ -1026,7 +1094,7 @@ namespace Directiva.CodeUI
             string file = string.IsNullOrWhiteSpace(debug.File) ? "?" : debug.File;
             string line = debug.Line >= 0 ? (debug.Line + 1).ToString(CultureInfo.InvariantCulture) : "?";
 
-            Output.Write($"[DScript] Breakpoint alcanzado en {file}:{line}.");
+            Output.Write(Localization.Get("Console", "breakpoint_hit", file, line));
             RefreshDScriptDebugHighlight();
         }
 
@@ -1163,7 +1231,7 @@ namespace Directiva.CodeUI
                     FileSystemScriptStorage.ScriptExtension,
                     StringComparison.OrdinalIgnoreCase))
             {
-                error = "El archivo seleccionado no es un script .dscript válido.";
+                error = DirectivaLocalization.Get("Console", "invalid_script_file");
                 return false;
             }
 
@@ -1182,9 +1250,7 @@ namespace Directiva.CodeUI
                 !string.Equals(canonicalPath, relativeScriptPath.Replace('\\', '/'),
                     StringComparison.Ordinal))
             {
-                error =
-                    $"La ruta '{relativeScriptPath}' no corresponde a un módulo DScript válido. " +
-                    "Usa identificadores sin puntos en cada carpeta y nombre de archivo.";
+                error = DirectivaLocalization.Get("Console", "invalid_module_path", relativeScriptPath);
                 moduleName = string.Empty;
                 return false;
             }

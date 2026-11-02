@@ -33,12 +33,12 @@ namespace DSCompilation.DScript.Modules
             modules.Clear(); states.Clear(); diagnostics.Clear(); order.Clear();
             if (!IsValidName(entryModule))
             {
-                Error(entryModule, "DS3000", "Invalid entry module name.", new SourceSpan(0, 0, 1, 1));
+                Error(entryModule, "DS3000", "Invalid entry module name.", new SourceSpan(0, 0, 1, 1), "entry_module_invalid");
                 return;
             }
             if (NativeLibrary.IsNativeModule(entryModule))
             {
-                Error(entryModule, "DS3002", "Entry module cannot be a reserved native module.", new SourceSpan(0, 0, 1, 1));
+                Error(entryModule, "DS3002", "Entry module cannot be a reserved native module.", new SourceSpan(0, 0, 1, 1), "entry_native_module");
                 return;
             }
             Visit(entryModule, entryModule, new SourceSpan(0, 0, 1, 1));
@@ -55,7 +55,7 @@ namespace DSCompilation.DScript.Modules
             }
             if (modules.Count >= options.MaxModules)
             {
-                Error(importer, "DS3004", "Maximum imported module count exceeded.", location);
+                Error(importer, "DS3004", "Maximum imported module count exceeded.", location, "maximum_modules");
                 return;
             }
             states.Add(name, 1);
@@ -64,14 +64,14 @@ namespace DSCompilation.DScript.Modules
             {
                 if (!provider.TryReadModule(name, out source) || source == null)
                 {
-                    Error(importer, "DS3001", "Module '" + name + "' was not found.", location);
+                    Error(importer, "DS3001", "Module '" + name + "' was not found.", location, "module_not_found", name);
                     states[name] = 2;
                     return;
                 }
             }
             catch (Exception ex)
             {
-                Error(importer, "DS3005", "Cannot read module '" + name + "': " + ex.Message, location);
+                Error(importer, "DS3005", "Cannot read module '" + name + "': " + ex.Message, location, "module_read_failed", name, ex.Message);
                 states[name] = 2;
                 return;
             }
@@ -92,10 +92,12 @@ namespace DSCompilation.DScript.Modules
             order.Add(name);
         }
 
-        private void Error(string module, string code, string message, SourceSpan span)
+        private void Error(string module, string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
         {
             if (diagnostics.Count < options.MaxDiagnostics)
-                diagnostics.Add(new DScriptDiagnostic(module, code, message, span));
+                diagnostics.Add(new DScriptDiagnostic(module, code, message, span,
+                    localizationKey, localizationArguments));
         }
 
         public static bool IsValidName(string name)

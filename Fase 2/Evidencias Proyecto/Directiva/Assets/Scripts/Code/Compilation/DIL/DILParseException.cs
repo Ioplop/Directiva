@@ -9,12 +9,19 @@ namespace DSCompilation.DIL
     {
         public string ModuleName { get; }
         public int LineNumber { get; }
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
 
-        public DILParseException(string moduleName, int lineNumber, string message)
+        // Keep Message unchanged: parser tests and tooling rely on its English diagnostics.
+        // Presentation code can format LocalizationKey instead, using the same location.
+        public DILParseException(string moduleName, int lineNumber, string message,
+            string localizationKey = null, params object[] localizationArguments)
             : base(FormatMessage(moduleName, lineNumber, message))
         {
             ModuleName = moduleName ?? string.Empty;
             LineNumber = lineNumber;
+            LocalizationKey = localizationKey;
+            LocalizationArguments = localizationArguments ?? Array.Empty<object>();
         }
 
         private static string FormatMessage(string moduleName, int lineNumber, string message)

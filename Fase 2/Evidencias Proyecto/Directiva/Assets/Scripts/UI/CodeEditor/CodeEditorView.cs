@@ -456,6 +456,84 @@ namespace Directiva.CodeUI
             UpdateExecutionHighlightPosition();
         }
 
+        /// <summary>
+        /// Opens the location of a console diagnostic in the current document.
+        /// The deferred update runs after OpenDocument restores its saved selection
+        /// and after UI Toolkit has calculated the new TextField geometry.
+        /// </summary>
+        public void RevealSourceLocation(int oneBasedLine, int oneBasedColumn = 1,
+            int sourceOffset = -1, int sourceLength = 0)
+        {
+            if (string.IsNullOrEmpty(DocumentPath))
+                return;
+
+            string requestedDocument = DocumentPath;
+            schedule.Execute(() =>
+            {
+                if (!string.Equals(DocumentPath, requestedDocument, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                string text = Text;
+                int caret = ResolveSourceCaretIndex(text, oneBasedLine, oneBasedColumn, sourceOffset);
+                int selectionEnd = Math.Min(text.Length, caret + Math.Max(0, sourceLength));
+                _textField.Focus();
+                _textField.textSelection.SelectRange(caret, selectionEnd);
+                ScrollSourceLineIntoView(oneBasedLine);
+                CaptureActiveHistorySelection();
+            }).ExecuteLater(40);
+        }
+
+        /// <summary>
+        /// Uses the original absolute offset only if it still belongs to the same line;
+        /// otherwise line/column remain meaningful even if the file has been edited.
+        /// </summary>
+        internal static int ResolveSourceCaretIndex(string text, int oneBasedLine,
+            int oneBasedColumn, int sourceOffset = -1)
+        {
+            text ??= string.Empty;
+            int lineStart = 0;
+            int currentLine = 1;
+            while (currentLine < Math.Max(1, oneBasedLine))
+            {
+                int newline = text.IndexOf('\n', lineStart);
+                if (newline < 0)
+                    break;
+                lineStart = newline + 1;
+                currentLine++;
+            }
+
+            int lineEnd = text.IndexOf('\n', lineStart);
+            if (lineEnd < 0)
+                lineEnd = text.Length;
+            if (lineEnd > lineStart && text[lineEnd - 1] == '\r')
+                lineEnd--;
+
+            if (sourceOffset >= lineStart && sourceOffset <= lineEnd)
+                return sourceOffset;
+            return Math.Min(lineEnd, lineStart + Math.Max(0, oneBasedColumn - 1));
+        }
+
+        private void ScrollSourceLineIntoView(int oneBasedLine)
+        {
+            if (_internalScroll == null)
+                return;
+            var viewport = _internalScroll.contentViewport;
+            float viewportHeight = viewport != null
+                ? viewport.resolvedStyle.height : _internalScroll.resolvedStyle.height;
+            if (viewportHeight <= 0f)
+                return;
+
+            int line = Mathf.Clamp(oneBasedLine, 1, Math.Max(1, CountLines(Text)));
+            float lineTop = _textOriginY + (line - 1) * _lineHeight;
+            // The line is placed near the center so it is easy to spot.
+            float targetY = Mathf.Max(0f, lineTop - viewportHeight * 0.4f);
+            _internalScroll.scrollOffset = new Vector2(_internalScroll.scrollOffset.x, targetY);
+            RebuildGutter();
+            RebuildIndentGuides();
+            UpdateExecutionHighlightPosition();
+            RefreshVisibleSyntaxLines();
+        }
+
         public void ClearExecutionLine()
         {
             _executionLine = -1;

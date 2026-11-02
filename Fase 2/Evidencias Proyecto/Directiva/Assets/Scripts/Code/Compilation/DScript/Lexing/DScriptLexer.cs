@@ -42,7 +42,7 @@ namespace DSCompilation.DScript.Lexing
             indents.Push(0);
             if (source.Length > options.MaxSourceLength)
             {
-                Report("DS1000", "Source exceeds the maximum length.", new SourceSpan(0, 0, 1, 1));
+                Report("DS1000", "Source exceeds the maximum length.", new SourceSpan(0, 0, 1, 1), "source_too_long");
                 tokens.Add(new DScriptToken(TokenKind.End, "", new SourceSpan(0, 0, 1, 1)));
                 return tokens;
             }
@@ -57,7 +57,7 @@ namespace DSCompilation.DScript.Lexing
                 lineNumber++;
             }
             if (brackets.Count != 0)
-                Report("DS1006", "Unclosed bracket or parenthesis.", new SourceSpan(source.Length, 0, lineNumber, 1));
+                Report("DS1006", "Unclosed bracket or parenthesis.", new SourceSpan(source.Length, 0, lineNumber, 1), "bracket_unclosed");
             if (tokens.Count > 0 && tokens[tokens.Count - 1].Kind != TokenKind.Newline)
                 Add(TokenKind.Newline, "", source.Length, 0, lineNumber, 1);
             while (indents.Count > 1)
@@ -76,7 +76,7 @@ namespace DSCompilation.DScript.Lexing
             {
                 while (i < end && (source[i] == ' ' || source[i] == '\t'))
                 {
-                    if (source[i] == '\t') Report("DS1001", "Tabs are not allowed for indentation; use spaces.", Span(i, 1, start, line));
+                    if (source[i] == '\t') Report("DS1001", "Tabs are not allowed for indentation; use spaces.", Span(i, 1, start, line), "tabs_indent");
                     i++;
                 }
                 if (i == end || source[i] == '#') return;
@@ -84,7 +84,7 @@ namespace DSCompilation.DScript.Lexing
                 if (indentation > indents.Peek())
                 {
                     if (indents.Count >= options.MaxNestingDepth)
-                        Report("DS1002", "Maximum indentation depth exceeded.", Span(start, indentation, start, line));
+                        Report("DS1002", "Maximum indentation depth exceeded.", Span(start, indentation, start, line), "maximum_indentation");
                     else
                     {
                         indents.Push(indentation);
@@ -99,7 +99,7 @@ namespace DSCompilation.DScript.Lexing
                         Add(TokenKind.Dedent, "", start, 0, line, 1);
                     }
                     if (indentation != indents.Peek())
-                        Report("DS1003", "Inconsistent dedent: no matching indentation level.", Span(start, indentation, start, line));
+                        Report("DS1003", "Inconsistent dedent: no matching indentation level.", Span(start, indentation, start, line), "inconsistent_dedent");
                 }
             }
             bool emitted = false;
@@ -137,10 +137,10 @@ namespace DSCompilation.DScript.Lexing
                         string[] pieces = literal.Split('.');
                         if (pieces[1].Length > 4 || !decimal.TryParse(literal, NumberStyles.AllowDecimalPoint,
                             CultureInfo.InvariantCulture, out decimal parsed) || parsed > (decimal)long.MaxValue / 10000m)
-                            Report("DS1004", "Decimal literal exceeds fixed-point precision or range (four fractional digits).", Span(at, i - at, start, line));
+                            Report("DS1004", "Decimal literal exceeds fixed-point precision or range (four fractional digits).", Span(at, i - at, start, line), "decimal_out_of_range");
                     }
                     else if (!ulong.TryParse(literal, NumberStyles.None, CultureInfo.InvariantCulture, out _))
-                        Report("DS1005", "Integer literal exceeds the supported Int64 magnitude.", Span(at, i - at, start, line));
+                        Report("DS1005", "Integer literal exceeds the supported Int64 magnitude.", Span(at, i - at, start, line), "integer_out_of_range");
                     Add(kind, literal, at, i - at, line, at - start + 1);
                     emitted = true;
                     continue;
@@ -170,12 +170,12 @@ namespace DSCompilation.DScript.Lexing
                                 if (i + 4 <= end && ushort.TryParse(source.Substring(i, 4),
                                     NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ushort code))
                                 { text.Append((char)code); i += 4; }
-                                else Report("DS1007", "Invalid Unicode escape; expected four hex digits.", Span(at, i - at, start, line));
+                                else Report("DS1007", "Invalid Unicode escape; expected four hex digits.", Span(at, i - at, start, line), "unicode_escape");
                                 break;
-                            default: Report("DS1007", "Unsupported string escape: \\" + escaped, Span(i - 2, 2, start, line)); break;
+                            default: Report("DS1007", "Unsupported string escape: \\" + escaped, Span(i - 2, 2, start, line), "string_escape", escaped); break;
                         }
                     }
-                    if (!closed) Report("DS1008", "Unterminated string literal.", Span(at, i - at, start, line));
+                    if (!closed) Report("DS1008", "Unterminated string literal.", Span(at, i - at, start, line), "unterminated_string");
                     Add(TokenKind.String, text.ToString(), at, i - at, line, at - start + 1);
                     emitted = true;
                     continue;
@@ -218,7 +218,7 @@ namespace DSCompilation.DScript.Lexing
                         case '<': tokenKind = TokenKind.Less; break;
                         case '>': tokenKind = TokenKind.Greater; break;
                         default:
-                            Report("DS1009", "Unexpected character '" + c + "'.", Span(at, 1, start, line));
+                            Report("DS1009", "Unexpected character '" + c + "'.", Span(at, 1, start, line), "unexpected_character", c);
                             i++;
                             continue;
                     }
@@ -238,21 +238,23 @@ namespace DSCompilation.DScript.Lexing
         private void Open(char kind, int at, int start, int line)
         {
             if (brackets.Count >= options.MaxNestingDepth)
-                Report("DS1006", "Maximum bracket nesting depth exceeded.", Span(at, 1, start, line));
+                Report("DS1006", "Maximum bracket nesting depth exceeded.", Span(at, 1, start, line), "maximum_brackets");
             else brackets.Push(kind);
         }
         private void Close(char expected, int at, int start, int line)
         {
             if (brackets.Count == 0 || brackets.Peek() != expected)
-                Report("DS1006", "Unmatched or mismatched closing bracket.", Span(at, 1, start, line));
+                Report("DS1006", "Unmatched or mismatched closing bracket.", Span(at, 1, start, line), "bracket_mismatch");
             else brackets.Pop();
         }
         private void Add(TokenKind kind, string text, int start, int length, int line, int column)
             => tokens.Add(new DScriptToken(kind, text, new SourceSpan(start, length, line, column)));
-        private void Report(string code, string message, SourceSpan span)
+        private void Report(string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
         {
             if (diagnostics.Count < options.MaxDiagnostics)
-                diagnostics.Add(new DScriptDiagnostic(module, code, message, span));
+                diagnostics.Add(new DScriptDiagnostic(module, code, message, span,
+                    localizationKey, localizationArguments));
         }
         private static bool IsIdentifierStart(char c) => c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
         private static bool IsIdentifierPart(char c) => IsIdentifierStart(c) || IsDigit(c);

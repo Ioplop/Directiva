@@ -1,5 +1,6 @@
 using System;
 using Directiva.CodeUI;
+using Directiva.Localization;
 using Directiva.MainMenu;
 using Directiva.UI;
 using UnityEngine;
@@ -71,12 +72,41 @@ namespace Directiva.SimulationUI
         private Button _mainMenuButton;
         private SimulationEditorResizeHandle _resizeHandle;
         private Label _statusLabel;
+        private Label _editorTabLabel;
+        private readonly System.Collections.Generic.Dictionary<string, Button> _controlButtons =
+            new System.Collections.Generic.Dictionary<string, Button>();
+        private int _playbackState = 1;
         private Button _activePlaybackButton;
         private Button _activeSpeedButton;
         private float _dockedWidth;
         private bool _initialWidthMeasured;
         private bool _editorMounted;
         private bool _pointerPressStartedOnUI;
+
+        private static string T(string key, params object[] arguments) =>
+            DirectivaLocalization.Get("Simulation", key, arguments);
+
+        private void OnEnable()
+        {
+            DirectivaLocalization.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnDisable()
+        {
+            DirectivaLocalization.LanguageChanged -= OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(string _)
+        {
+            if (_editorTabLabel != null)
+                _editorTabLabel.text = string.IsNullOrWhiteSpace(editorButtonLabel) || editorButtonLabel == "Editor"
+                    ? T("editor") : editorButtonLabel;
+            if (_mainMenuButton != null) _mainMenuButton.text = T("main_menu");
+            foreach (var entry in _controlButtons)
+                entry.Value.tooltip = T(entry.Key);
+            SelectPlayback(_playbackState);
+            if (_editorPane != null) SetEditorMode(CurrentEditorMode);
+        }
 
         private void Awake()
         {
@@ -157,8 +187,9 @@ namespace Directiva.SimulationUI
             // SetButton clears Button.text because it is designed for icon-only controls.
             // This global toggle must remain identifiable even without a theme sprite.
             _openEditorTab.style.flexDirection = FlexDirection.Row;
-            var editorTabLabel = new Label(string.IsNullOrWhiteSpace(editorButtonLabel)
-                ? "Editor" : editorButtonLabel);
+            var editorTabLabel = new Label(string.IsNullOrWhiteSpace(editorButtonLabel) || editorButtonLabel == "Editor"
+                ? T("editor") : editorButtonLabel);
+            _editorTabLabel = editorTabLabel;
             editorTabLabel.pickingMode = PickingMode.Ignore;
             editorTabLabel.style.marginLeft = _theme?.icons?.openEditor != null ? 7f : 0f;
             _openEditorTab.Add(editorTabLabel);
@@ -168,20 +199,20 @@ namespace Directiva.SimulationUI
             controls.AddToClassList("sim-controls");
             hud.Add(controls);
 
-            controls.Add(CreateControlButton(_theme?.icons?.play, "Play", () => SelectPlayback(0), controlEvents.play, true));
-            controls.Add(CreateControlButton(_theme?.icons?.stop, "Stop", () => SelectPlayback(1), controlEvents.stop, true));
-            controls.Add(CreateControlButton(_theme?.icons?.pause, "Pause", () => SelectPlayback(2), controlEvents.pause, true));
+            controls.Add(CreateControlButton(_theme?.icons?.play, "play", () => SelectPlayback(0), controlEvents.play, true));
+            controls.Add(CreateControlButton(_theme?.icons?.stop, "stop", () => SelectPlayback(1), controlEvents.stop, true));
+            controls.Add(CreateControlButton(_theme?.icons?.pause, "pause", () => SelectPlayback(2), controlEvents.pause, true));
 
             var separator = new VisualElement();
             separator.AddToClassList("sim-control-separator");
             separator.pickingMode = PickingMode.Ignore;
             controls.Add(separator);
 
-            controls.Add(CreateControlButton(_theme?.icons?.slowMotion, "Slowmo", () => SelectSpeed("0.25×"), controlEvents.slowMotion, false));
-            controls.Add(CreateControlButton(_theme?.icons?.doubleSpeed, "Velocidad x2", () => SelectSpeed("2×"), controlEvents.doubleSpeed, false));
-            controls.Add(CreateControlButton(_theme?.icons?.quintupleSpeed, "Velocidad x5", () => SelectSpeed("5×"), controlEvents.quintupleSpeed, false));
+            controls.Add(CreateControlButton(_theme?.icons?.slowMotion, "slow_motion", () => SelectSpeed("0.25×"), controlEvents.slowMotion, false));
+            controls.Add(CreateControlButton(_theme?.icons?.doubleSpeed, "double_speed", () => SelectSpeed("2×"), controlEvents.doubleSpeed, false));
+            controls.Add(CreateControlButton(_theme?.icons?.quintupleSpeed, "quintuple_speed", () => SelectSpeed("5×"), controlEvents.quintupleSpeed, false));
 
-            _statusLabel = new Label("Detenida · 1×");
+            _statusLabel = new Label(T("status_stopped") + " · 1×");
             _statusLabel.AddToClassList("sim-status");
             hud.Add(_statusLabel);
 
@@ -203,7 +234,7 @@ namespace Directiva.SimulationUI
 
             _minimizeButton = new Button(() => SetEditorMode(EditorDisplayMode.Hidden));
             _minimizeButton.AddToClassList("sim-editor-header-button");
-            _minimizeButton.tooltip = "Ocultar editor";
+            _minimizeButton.tooltip = T("hide_editor");
             UIIconView.SetButton(_minimizeButton, _theme?.icons?.minimize, 16f);
             editorHeader.Add(_minimizeButton);
 
@@ -222,7 +253,7 @@ namespace Directiva.SimulationUI
 
             // This button remains accessible above the fullscreen editor. It is
             // owned by the simulation UI, never by the reusable code editor.
-            _mainMenuButton = new Button(ReturnToMainMenu) { text = "Menú principal" };
+            _mainMenuButton = new Button(ReturnToMainMenu) { text = T("main_menu") };
             _mainMenuButton.AddToClassList("sim-menu-button");
             overlay.Add(_mainMenuButton);
 
@@ -290,23 +321,24 @@ namespace Directiva.SimulationUI
                 button.AddToClassList("sim-selected");
                 if (playback) _activePlaybackButton = button;
                 else _activeSpeedButton = button;
-            }) { tooltip = tooltip };
+            }) { tooltip = T(tooltip) };
+            _controlButtons[tooltip] = button;
             button.AddToClassList("sim-control-button");
             UIIconView.SetButton(button, sprite, 17f);
             return button;
         }
 
-        private string _playback = "Detenida";
         private string _speed = "1×";
         private void SelectPlayback(int state)
         {
-            _playback = state == 0 ? "Ejecutando" : state == 1 ? "Detenida" : "Pausada";
-            _statusLabel.text = _playback + " · " + _speed;
+            _playbackState = state;
+            string key = state == 0 ? "status_playing" : state == 1 ? "status_stopped" : "status_paused";
+            _statusLabel.text = T(key) + " · " + _speed;
         }
         private void SelectSpeed(string speed)
         {
             _speed = speed;
-            _statusLabel.text = _playback + " · " + _speed;
+            SelectPlayback(_playbackState);
         }
 
         /// <summary>Changes presentation only; editor contents, workspace and execution are retained.</summary>
@@ -319,12 +351,12 @@ namespace Directiva.SimulationUI
             // Keep this button (and therefore the simulation controls beside it)
             // in the same position when the editor opens, hides or maximizes.
             _openEditorTab.EnableInClassList("sim-editor-tab-active", !hidden);
-            _openEditorTab.tooltip = hidden ? "Abrir editor" : "Ocultar editor";
+            _openEditorTab.tooltip = hidden ? T("show_editor") : T("hide_editor");
             _resizeHandle.style.display = mode == EditorDisplayMode.Docked ? DisplayStyle.Flex : DisplayStyle.None;
             UIIconView.SetButton(_fullscreenButton,
                 fullscreen ? _theme?.icons?.restore : _theme?.icons?.maximize, 17f);
-            _fullscreenButton.tooltip = fullscreen ? "Volver a ventana lateral" : "Expandir editor";
-            _minimizeButton.tooltip = "Ocultar editor";
+            _fullscreenButton.tooltip = fullscreen ? T("restore_editor") : T("expand_editor");
+            _minimizeButton.tooltip = T("hide_editor");
             // The global HUD is always visible: fullscreen editor begins below
             // the simulation controls and the host-owned menu button.
             if (fullscreen)
@@ -403,7 +435,7 @@ namespace Directiva.SimulationUI
         {
             if (!Application.CanStreamedLevelBeLoaded(menuSceneName))
             {
-                Debug.LogError($"[Directiva] Menu scene '{menuSceneName}' must be included in Build Profiles.", this);
+                Debug.LogError(T("menu_scene_unavailable", menuSceneName), this);
                 return;
             }
             onBeforeReturnToMenu?.Invoke();

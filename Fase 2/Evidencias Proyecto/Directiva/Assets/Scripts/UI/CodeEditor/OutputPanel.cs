@@ -42,6 +42,7 @@ namespace Directiva.CodeUI
         private float _resizeStartHeight;
 
         public event Action<float> FontSizeChanged;
+        public event Action<OutputSourceLocation> SourceRequested;
 
         public OutputPanel(
             OutputService output,
@@ -356,6 +357,27 @@ namespace Directiva.CodeUI
                 OutputSeverity.Warning => "output-warning",
                 _ => "output-message"
             });
+
+            if (entry.Source.HasValue)
+            {
+                OutputSourceLocation source = entry.Source.Value;
+                label.AddToClassList("output-entry-link");
+                label.focusable = true;
+                label.tooltip = source.FilePath + ":" + source.Line + ":" + source.Column;
+                label.RegisterCallback<ClickEvent>(evt =>
+                {
+                    SourceRequested?.Invoke(source);
+                    evt.StopPropagation();
+                });
+                label.RegisterCallback<KeyDownEvent>(evt =>
+                {
+                    if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
+                        evt.keyCode != KeyCode.Space)
+                        return;
+                    SourceRequested?.Invoke(source);
+                    evt.StopPropagation();
+                });
+            }
 
             _scroll.Add(label);
         }

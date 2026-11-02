@@ -1,5 +1,6 @@
 using System;
 using Directiva.UI;
+using Directiva.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -26,8 +27,12 @@ namespace Directiva.CodeUI
             editorContainer.style.minHeight = 0f;
             root.Add(editorContainer);
 
-            var menuButton = new Button(returnToMenu) { text = "Menú principal" };
-            menuButton.tooltip = "Volver al menú principal";
+            var menuButton = new Button(returnToMenu)
+            {
+                name = "standalone-main-menu-button",
+                text = DirectivaLocalization.Get("Simulation", "main_menu")
+            };
+            menuButton.tooltip = DirectivaLocalization.Get("Simulation", "back_to_menu");
             menuButton.style.position = Position.Absolute;
             menuButton.style.top = 6f;
             menuButton.style.right = 8f;

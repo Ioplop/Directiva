@@ -13,6 +13,15 @@ namespace DSExecution.VirtualMachine
         public int SpanStart { get; internal set; } = -1;
         public int SpanEnd { get; internal set; } = -1;
 
+        /// <summary>Preserves the failing source position after its VM has stopped.</summary>
+        public VMDebugState Snapshot() => new VMDebugState
+        {
+            File = File,
+            Line = Line,
+            SpanStart = SpanStart,
+            SpanEnd = SpanEnd
+        };
+
         internal void Reset()
         {
             File = null;

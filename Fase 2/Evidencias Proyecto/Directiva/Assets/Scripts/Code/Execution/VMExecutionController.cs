@@ -19,6 +19,7 @@ namespace Directiva.CodeUI
 
         public ScriptExecutionState State { get; private set; } = ScriptExecutionState.Stopped;
         public DirectivaVM CurrentVM => _vm;
+        public VMDebugState LastFaultDebug { get; private set; }
         public long TotalAdvances { get; private set; }
         public double ElapsedMilliseconds => _executionTimer.Elapsed.TotalMilliseconds;
 
@@ -40,6 +41,7 @@ namespace Directiva.CodeUI
                 _vm.Printed -= OnVMPrinted;
 
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
+            LastFaultDebug = null;
             _vm.Printed += OnVMPrinted;
             TotalAdvances = 0;
             ClearBreakpointSuppression();
@@ -68,6 +70,7 @@ namespace Directiva.CodeUI
                 _vm.Printed -= OnVMPrinted;
 
             _vm = null;
+            LastFaultDebug = null;
             ClearBreakpointSuppression();
             SetState(ScriptExecutionState.Stopped);
         }
@@ -142,6 +145,7 @@ namespace Directiva.CodeUI
                     "VM reported Faulted without a RuntimeError."
                 );
 
+                LastFaultDebug = _vm.Debug.Snapshot();
                 _executionTimer.Stop();
                 _vm.Printed -= OnVMPrinted;
                 _vm = null;
@@ -190,6 +194,7 @@ namespace Directiva.CodeUI
                         "VM reported Faulted without a RuntimeError."
                     );
 
+                    LastFaultDebug = _vm.Debug.Snapshot();
                     _executionTimer.Stop();
                     _vm.Printed -= OnVMPrinted;
                     _vm = null;

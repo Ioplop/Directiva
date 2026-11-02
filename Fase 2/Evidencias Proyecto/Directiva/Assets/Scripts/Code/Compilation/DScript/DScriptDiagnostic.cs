@@ -32,13 +32,18 @@ namespace DSCompilation.DScript
         public string Message { get; }
         public string Module { get; }
         public SourceSpan Span { get; }
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
 
-        public DScriptDiagnostic(string module, string code, string message, SourceSpan span)
+        public DScriptDiagnostic(string module, string code, string message, SourceSpan span,
+            string localizationKey = null, params object[] localizationArguments)
         {
             Module = module ?? string.Empty;
             Code = code ?? string.Empty;
             Message = message ?? string.Empty;
             Span = span;
+            LocalizationKey = localizationKey;
+            LocalizationArguments = localizationArguments ?? Array.Empty<object>();
         }
 
         public override string ToString() => Module + ":" + Span + " " + Code + ": " + Message;

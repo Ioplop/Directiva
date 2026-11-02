@@ -2,7 +2,6 @@ using DSExecution.DataTypes;
 
 namespace DSExecution.Errors
 {
-    // TODO: Localize error messages.
 
     /// <summary>
     /// Stable identifiers for runtime failures that can be reported by the VM or data type operations.
@@ -46,25 +45,30 @@ namespace DSExecution.Errors
     public sealed class RuntimeError
     {
         public RuntimeErrorId Id { get; }
+        // Message stays in its original technical language for regression tests and logs.
+        // The UI uses MessageKey + MessageArguments to format a localized version.
         public string Message { get; }
+        public string MessageKey => Id.ToString();
+        public object[] MessageArguments { get; }
 
-        private RuntimeError(RuntimeErrorId id, string message)
+        private RuntimeError(RuntimeErrorId id, string message, params object[] arguments)
         {
             Id = id;
             Message = message;
+            MessageArguments = arguments ?? System.Array.Empty<object>();
         }
 
         public static RuntimeError MemberNotFound(string type, string name)
             => new(RuntimeErrorId.MemberNotFound,
-                $"Member '{name}' is not available on type {type}. TODO: Localize!");
+                $"Member '{name}' is not available on type {type}. TODO: Localize!", type, name);
 
         public static RuntimeError ReadOnlyProperty(string type, string name)
             => new(RuntimeErrorId.ReadOnlyProperty,
-                $"Property '{name}' on {type} is read-only. TODO: Localize!");
+                $"Property '{name}' on {type} is read-only. TODO: Localize!", type, name);
 
         public static RuntimeError WriteOnlyProperty(string type, string name)
             => new(RuntimeErrorId.WriteOnlyProperty,
-                $"Property '{name}' on {type} is write-only. TODO: Localize!");
+                $"Property '{name}' on {type} is write-only. TODO: Localize!", type, name);
 
         public static RuntimeError InvalidMemberArgumentCount(string type, string name, int expected, int actual)
             => InvalidMemberArgumentCount(type, name, expected, expected, actual);
@@ -78,20 +82,20 @@ namespace DSExecution.Errors
                 : minimum == maximum ? $"{minimum} argument(s)" :
                     $"between {minimum} and {maximum} argument(s)";
             return new RuntimeError(RuntimeErrorId.InvalidMemberArgumentCount,
-                $"Member '{name}' on {type} expected {expected}, got {actual}. TODO: Localize!");
+                $"Member '{name}' on {type} expected {expected}, got {actual}. TODO: Localize!", type, name, minimum, maximum, actual);
         }
 
         public static RuntimeError NotIterable(DataTypeId sourceType)
             => new(RuntimeErrorId.NotIterable,
-                $"Type {sourceType} does not support iteration. TODO: Localize!");
+                $"Type {sourceType} does not support iteration. TODO: Localize!", sourceType);
 
         public static RuntimeError InvalidIterator(DataTypeId sourceType)
             => new(RuntimeErrorId.InvalidIterator,
-                $"ITER_NEXT needs an Iterator, received {sourceType}. TODO: Localize!");
+                $"ITER_NEXT needs an Iterator, received {sourceType}. TODO: Localize!", sourceType);
 
         public static RuntimeError IteratorModified(DataTypeId sourceType)
             => new(RuntimeErrorId.IteratorModified,
-                $"{sourceType} was modified during iteration. TODO: Localize!");
+                $"{sourceType} was modified during iteration. TODO: Localize!", sourceType);
 
         public static RuntimeError DivisionByZero()
             => new(
@@ -108,19 +112,19 @@ namespace DSExecution.Errors
         public static RuntimeError InvalidOperation(string details)
             => new(
                 RuntimeErrorId.InvalidOperation,
-                $"Invalid operation. {details} TODO: Localize!"
+                $"Invalid operation. {details} TODO: Localize!", details
             );
 
         public static RuntimeError InvalidMemoryAccess(uint memoryReference)
             => new(
                 RuntimeErrorId.InvalidMemoryAccess,
-                $"Invalid heap reference {memoryReference}. TODO: Localize!"
+                $"Invalid heap reference {memoryReference}. TODO: Localize!", memoryReference
             );
 
         public static RuntimeError IndexOutOfRange(long index, int count, string containerType)
             => new(
                 RuntimeErrorId.IndexOutOfRange,
-                $"{containerType} index {index} is out of range for {count} element(s). TODO: Localize!"
+                $"{containerType} index {index} is out of range for {count} element(s). TODO: Localize!", containerType, index, count
             );
 
         /// <summary>
@@ -132,7 +136,7 @@ namespace DSExecution.Errors
                 RuntimeErrorId.UnhashableType,
                 $"Unhashable type {type}" +
                 (string.IsNullOrEmpty(tuplePath) ? "." : $" at tuple element {tuplePath}.") +
-                " TODO: Localize!"
+                " TODO: Localize!", type, tuplePath
             );
 
         public static RuntimeError StackOverflow()
@@ -156,16 +160,16 @@ namespace DSExecution.Errors
         public static RuntimeError InvalidInstruction(string details)
             => new(
                 RuntimeErrorId.InvalidInstruction,
-                $"Invalid instruction. {details} TODO: Localize!"
+                $"Invalid instruction. {details} TODO: Localize!", details
             );
 
         public static RuntimeError InvalidCallTarget(DataTypeId actualType)
             => new(RuntimeErrorId.InvalidCallTarget,
-                $"Indirect call requires a Function, got {actualType}. TODO: Localize!");
+                $"Indirect call requires a Function, got {actualType}. TODO: Localize!", actualType);
 
         public static RuntimeError InvalidFunctionArgumentCount(int functionId, int expected, int actual)
             => new(RuntimeErrorId.InvalidFunctionArgumentCount,
-                $"Function {functionId} expects {expected} argument(s), got {actual}. TODO: Localize!");
+                $"Function {functionId} expects {expected} argument(s), got {actual}. TODO: Localize!", functionId, expected, actual);
 
         public static RuntimeError ForeignFunctionProgram()
             => new(RuntimeErrorId.ForeignFunctionProgram,
@@ -174,25 +178,25 @@ namespace DSExecution.Errors
         public static RuntimeError InvalidFunction(int functionId)
             => new(
                 RuntimeErrorId.InvalidFunction,
-                $"Function id {functionId} does not exist. TODO: Localize!"
+                $"Function id {functionId} does not exist. TODO: Localize!", functionId
             );
 
         public static RuntimeError InvalidLocalAccess(int localIndex)
             => new(
                 RuntimeErrorId.InvalidLocalAccess,
-                $"Invalid local index {localIndex}. TODO: Localize!"
+                $"Invalid local index {localIndex}. TODO: Localize!", localIndex
             );
 
         public static RuntimeError InvalidGlobalAccess(int globalIndex)
             => new(
                 RuntimeErrorId.InvalidGlobalAccess,
-                $"Invalid global index {globalIndex}. TODO: Localize!"
+                $"Invalid global index {globalIndex}. TODO: Localize!", globalIndex
             );
 
         public static RuntimeError InvalidJumpTarget(int target)
             => new(
                 RuntimeErrorId.InvalidJumpTarget,
-                $"Invalid jump target {target}. TODO: Localize!"
+                $"Invalid jump target {target}. TODO: Localize!", target
             );
 
         public static RuntimeError CallStackOverflow()
@@ -210,7 +214,7 @@ namespace DSExecution.Errors
         public static RuntimeError InvalidCast(DataTypeId sourceType, DataTypeId targetType)
             => new(
                 RuntimeErrorId.InvalidCast,
-                $"Cannot cast {sourceType} to {targetType}. TODO: Localize!"
+                $"Cannot cast {sourceType} to {targetType}. TODO: Localize!", sourceType, targetType
             );
 
         public static RuntimeError InvalidCastValue(
@@ -219,13 +223,13 @@ namespace DSExecution.Errors
             string details)
             => new(
                 RuntimeErrorId.InvalidCastValue,
-                $"Cannot cast value from {sourceType} to {targetType}. {details} TODO: Localize!"
+                $"Cannot cast value from {sourceType} to {targetType}. {details} TODO: Localize!", sourceType, targetType, details
             );
 
         public static RuntimeError InternalVmError(string details)
             => new(
                 RuntimeErrorId.InternalVmError,
-                $"Internal VM error. {details} TODO: Localize!"
+                $"Internal VM error. {details} TODO: Localize!", details
             );
     }
 }

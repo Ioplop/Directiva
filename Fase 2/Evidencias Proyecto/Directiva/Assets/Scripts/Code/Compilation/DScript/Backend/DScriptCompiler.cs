@@ -147,24 +147,30 @@ namespace DSCompilation.DScript.Backend
             }
             catch (DScriptBackendException ex)
             {
-                return Error(analysis, ex.Module, ex.Span, "DS5001", ex.Message);
+                return Error(analysis, ex.Module, ex.Span, "DS5001", ex.Message, "backend_error", ex.Message);
             }
             catch (DILParseException ex)
             {
-                return Error(analysis, ex.ModuleName, new SourceSpan(0, 0, 1, 1),
-                    "DS5002", "Generated DIL is invalid: " + ex.Message);
+                return new DScriptCompilationResult(analysis, null,
+                    new[] { new DScriptDiagnostic(ex.ModuleName, "DS5002",
+                        "Generated DIL is invalid: " + ex.Message,
+                        new SourceSpan(0, 0, 1, 1), "generated_dil_invalid", ex) });
             }
             catch (OverflowException ex)
             {
-                return Error(analysis, analysis.EntryModule, new SourceSpan(0, 0, 1, 1),
-                    "DS5003", "Compilation exceeded numeric limits: " + ex.Message);
+                return new DScriptCompilationResult(analysis, null,
+                    new[] { new DScriptDiagnostic(analysis.EntryModule, "DS5003",
+                        "Compilation exceeded numeric limits: " + ex.Message,
+                        new SourceSpan(0, 0, 1, 1), "numeric_limits", ex.Message) });
             }
         }
 
         private static DScriptCompilationResult Error(DScriptAnalysis analysis, string module,
-            SourceSpan span, string code, string message)
+            SourceSpan span, string code, string message, string localizationKey = null,
+            params object[] localizationArguments)
             => new DScriptCompilationResult(analysis, null,
-                new[] { new DScriptDiagnostic(module, code, message, span) });
+                new[] { new DScriptDiagnostic(module, code, message, span,
+                    localizationKey, localizationArguments) });
 
         private static IEnumerable<string> ImportNames(ModuleNode ast)
         {
