@@ -100,5 +100,27 @@ namespace Directiva.EditorTests
         private static void DScriptEditorIntegration() => DirectivaTestRunner.StartCategory("DScript", "EditorIntegration");
         [MenuItem("Directiva/Tests/DScript/SyntaxHighlight/TestEverything", false, 151)]
         private static void DScriptSyntaxHighlight() => DirectivaTestRunner.StartCategory("DScript", "SyntaxHighlight");
+
+        [MenuItem("Directiva/Tests/Simulation/TestEverything", false, 200)]
+        private static void SimulationAll() => DirectivaTestRunner.StartCategory("Simulation");
+        [MenuItem("Directiva/Tests/Simulation/Entities/TestEverything", false, 201)]
+        private static void SimulationEntities() => DirectivaTestRunner.StartCategory("Simulation", "Entities");
+        [MenuItem("Directiva/Tests/Simulation/World/TestEverything", false, 201)]
+        private static void SimulationWorld() => DirectivaTestRunner.StartCategory("Simulation", "World");
+        [MenuItem("Directiva/Tests/Simulation/Collisions/TestEverything", false, 201)]
+        private static void SimulationCollisions() => DirectivaTestRunner.StartCategory("Simulation", "Collisions");
+        [MenuItem("Directiva/Tests/Simulation/Determinism/TestEverything", false, 201)]
+        private static void SimulationDeterminism() => DirectivaTestRunner.StartCategory("Simulation", "Determinism");
+
+        [MenuItem("Directiva/Tests/Math/TestEverything", false, 210)]
+        private static void MathAll() => DirectivaTestRunner.StartCategory("Math");
+        [MenuItem("Directiva/Tests/Math/Fixed/TestEverything", false, 211)]
+        private static void MathFixed() => DirectivaTestRunner.StartCategory("Math", "Fixed");
+        [MenuItem("Directiva/Tests/Math/Vectors/TestEverything", false, 211)]
+        private static void MathVectors() => DirectivaTestRunner.StartCategory("Math", "Vectors");
+        [MenuItem("Directiva/Tests/Math/Random/TestEverything", false, 211)]
+        private static void MathRandom() => DirectivaTestRunner.StartCategory("Math", "Random");
+        [MenuItem("Directiva/Tests/Math/Trigonometry/TestEverything", false, 211)]
+        private static void MathTrigonometry() => DirectivaTestRunner.StartCategory("Math", "Trigonometry");
     }
 }

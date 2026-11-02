@@ -270,3 +270,17 @@ Verificar manualmente en Play Mode: abrir un script largo, bajar hasta mitad,
 hacer Ctrl+rueda lento y rapido y comprobar que la misma linea permanece cerca
 del centro; probar primera/ultima linea, cursor, seleccion, gutter, colores
 y cambios de fuente desde opciones.
+
+
+## Simulation y Math (2026-11-01; pendiente de Unity)
+
+Se agregaron 62 casos, incluidos automaticamente en `TestAll`:
+
+- `Directiva/Tests/Simulation/TestEverything`: 47 casos en grupos `Entities` (17), `World` (12), `Collisions` (13) y `Determinism` (5).
+- `Directiva/Tests/Math/TestEverything`: 15 casos en `Fixed`, `Vectors`, `Random` y `Trigonometry`.
+
+Por compatibilidad con el ZIP incremental de superposicion, `Directiva_TupleSmokeTests.cs` y `Directiva_TupleCompletionSmokeTests.cs` siguen en `Editor/` (ubicaciones originales, sin duplicados). Sus pruebas siguen registradas bajo `DIL/Regression`; se podran reubicar por separado cuando se haga una limpieza con eliminacion de archivos antiguos.
+
+Cambio minimo en codigo de produccion: `Fixed.CeilToLong` ahora devuelve `integerPart` cuando no hay parte decimal positiva. Antes, un mundo de ancho 20 devolvia cero celdas al calcular `ceil(20/2)`. Ademas, se eliminaron dos `using` no utilizados (JetBrains.Annotations, UnityEditorInternal) de `FixedDecimal.cs`.
+
+**Los 62 casos son nuevos y NO estan validados en Unity todavia.** No afirmar PASS hasta ejecutarlos; como siempre, los informes van fuera del proyecto. Consulta `Simulation/README.md` para el alcance y limitaciones. No se ha modificado `Scripts/Simulation/`.

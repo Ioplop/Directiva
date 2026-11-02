@@ -138,7 +138,11 @@ namespace Directiva.EditorTests
             DScript.DScriptBackendTests.Register(tests);
             DScript.DScriptEditorIntegrationTests.Register(tests);
             DScript.DScriptSyntaxHighlightTests.Register(tests);
-            // Simulation tests will register here once the simulation exists.
+            SimulationTests.SimulationEntityTests.Register(tests);
+            SimulationTests.SimulationWorldTests.Register(tests);
+            SimulationTests.SimulationCollisionTests.Register(tests);
+            SimulationTests.SimulationDeterminismTests.Register(tests);
+            MathTests.MathFoundationTests.Register(tests);
             DirectivaTupleSmokeTests.Register(tests);
             Directiva_TupleCompletionSmokeTests.Register(tests);
             var unique = new HashSet<string>(StringComparer.Ordinal);
