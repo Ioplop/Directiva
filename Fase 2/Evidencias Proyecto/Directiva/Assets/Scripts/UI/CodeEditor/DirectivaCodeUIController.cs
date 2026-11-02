@@ -245,6 +245,8 @@ namespace Directiva.CodeUI
         private void OnGlobalLanguageChanged(string locale)
         {
             Localization?.SetLocale(locale);
+            if (_editor != null)
+                _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
             SetExplorerCollapsed(_explorerCollapsed);
             if (_lastCompilation != null) PublishCompilationDiagnostics(_lastCompilation);
             if (_document != null)
@@ -393,6 +395,7 @@ namespace Directiva.CodeUI
             // Inspector palette is only the default. The editor owns an independent
             // runtime copy so a future user Options menu can override each color.
             _editor.SetSyntaxColors(_theme?.codeSyntaxColors);
+            _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
 
             right.Add(_topBar);
             right.Add(_editor);
@@ -447,6 +450,8 @@ namespace Directiva.CodeUI
             _explorer.DuplicateRequested += path => Events.RaiseDuplicateRequested(path);
             _explorer.DeleteRequested += path => Events.RaiseDeleteRequested(path);
             _explorer.MoveRequested += (source, target) => Events.RaiseMoveRequested(source, target);
+
+            _editor.RenameSymbolRequested += RequestSymbolRename;
 
             _editor.TextChanged += text =>
             {
@@ -764,6 +769,49 @@ namespace Directiva.CodeUI
 
                 RefreshCodebase();
             });
+        }
+
+        private void RequestSymbolRename(int caret)
+        {
+            var active = _workspace.Active;
+            if (active == null || _editor.IsReadOnly) return;
+            if (!TryGetModuleName(active.RelativePath, out string module, out string error))
+            {
+                Output.WriteWarning(error);
+                return;
+            }
+            var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+            if (!DScriptLocalRename.TryFind(module, provider, caret, out string oldName,
+                out error))
+            {
+                Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", error)));
+                return;
+            }
+            string originalPath = active.RelativePath;
+            _modal.Prompt(
+                Localization.Get("Dialogs", "rename_symbol_title"),
+                Localization.Get("Dialogs", "rename_symbol_message", oldName),
+                oldName,
+                newName => SafeAction(() =>
+                {
+                    if (_workspace.Active == null ||
+                        !string.Equals(_workspace.Active.RelativePath, originalPath,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        PreventLockedSourceMutation(originalPath)) return;
+                    var liveProvider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+                    if (!DScriptLocalRename.TryRename(module, liveProvider, caret, newName,
+                        out var plan, out string failure))
+                    {
+                        Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", failure)));
+                        return;
+                    }
+                    if (plan.Count == 0) return;
+                    if (_editor.ApplyRefactoredContent(plan.Content, plan.Caret))
+                        Output.Write(Localization.Get("Dialogs", "rename_symbol_success",
+                            plan.OldName, plan.NewName, plan.Count));
+                }),
+                Localization.Get("Dialogs", "rename_symbol_action"),
+                Localization.Get("Common", "cancel"));
         }
 
         private void ShowDuplicatePrompt(string path)

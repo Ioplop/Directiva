@@ -8,3 +8,16 @@
 [delete_message]: ¿Seguro que quieres eliminar {{1}}? Esta acción también elimina su backup si existe.
 [duplicate_title]: Duplicar
 [duplicate_message]: Nombre para la copia de {{1}}.
+[rename_symbol_action]: Renombrar símbolo
+[rename_symbol_title]: Renombrar variable
+[rename_symbol_message]: Nuevo nombre para {{1}} (solo variables locales y parámetros).
+[rename_symbol_failed]: No se pudo renombrar: {{1}}
+[rename_symbol_success]: Se renombró {{1}} a {{2}} en {{3}} referencias.
+[rename_invalid_identifier]: El nombre debe ser un identificador DScript válido y no puede ser una palabra reservada.
+[rename_collision_local]: Ya existe un parámetro o variable local con ese nombre en esta función.
+[rename_collision_scope]: El nombre ya se usa para una función, importación, variable shared o función incorporada.
+[rename_unavailable_module]: No se pudo leer el módulo activo.
+[rename_result_invalid]: El nuevo nombre haría inválido el programa.
+[rename_fix_errors]: Corrige los errores de compilación antes de renombrar.
+[rename_only_local]: Coloca el cursor sobre una variable local o un parámetro. Las funciones y las variables shared tendrán su propia fase.
+[rename_stale_source]: No se pudieron identificar todas las referencias en el archivo actual.

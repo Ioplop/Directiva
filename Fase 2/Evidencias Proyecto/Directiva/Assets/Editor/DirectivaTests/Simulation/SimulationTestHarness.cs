@@ -20,8 +20,9 @@ namespace Directiva.EditorTests.SimulationTests
         internal sealed class StubEntity : SBEntity
         {
             internal StubEntity(Fixed radius, bool collides = true, int priority = 0)
-                : base(radius)
+                : base()
             {
+                Radius = radius;
                 Collides = collides;
                 CollisionPriority = priority;
             }

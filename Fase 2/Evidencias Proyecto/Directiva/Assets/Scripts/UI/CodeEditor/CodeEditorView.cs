@@ -85,10 +85,13 @@ namespace Directiva.CodeUI
         private bool _isReadOnly;
         private string _readOnlyContent = string.Empty;
         private int _executionLine = -1;
+        private int _rightClickCaret = -1;
+        public string RenameSymbolMenuLabel { get; set; } = "Rename symbol";
 
         public string DocumentPath { get; private set; } = string.Empty;
 
         public event Action<string> TextChanged;
+        public event Action<int> RenameSymbolRequested;
         public event Action<int, bool> BreakpointChanged;
         public event Action<float> FontSizeChanged;
 
@@ -737,9 +740,47 @@ namespace Directiva.CodeUI
             // This keeps our manual indentation logic tied to the same selection state
             // that UI Toolkit uses to draw and edit the caret.
             input.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+            input.RegisterCallback<PointerDownEvent>(OnCodePointerDown, TrickleDown.TrickleDown);
+            input.AddManipulator(new ContextualMenuManipulator(evt =>
+            {
+                evt.menu.AppendAction(RenameSymbolMenuLabel, _ =>
+                {
+                    int index = _rightClickCaret >= 0
+                        ? _rightClickCaret : _textField.textSelection.cursorIndex;
+                    _rightClickCaret = -1;
+                    RenameSymbolRequested?.Invoke(index);
+                },
+                    _ => _isReadOnly || string.IsNullOrEmpty(DocumentPath)
+                        ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
+            }));
             input.RegisterCallback<KeyUpEvent>(_ => CaptureActiveHistorySelection());
             input.RegisterCallback<PointerUpEvent>(_ => CaptureActiveHistorySelection());
             _textInputKeyHooked = true;
+        }
+
+        /// <summary>Apply a verified refactor through the usual text-change and undo path.</summary>
+        public bool ApplyRefactoredContent(string content, int caret)
+        {
+            if (_isReadOnly || string.IsNullOrEmpty(DocumentPath)) return false;
+            ApplyEdit(content, caret, caret);
+            return true;
+        }
+
+        private void OnCodePointerDown(PointerDownEvent evt)
+        {
+            if (evt.button != 1) { _rightClickCaret = -1; return; }
+            var world = new Vector2(evt.position.x, evt.position.y);
+            var local = _editorStack.WorldToLocal(world);
+            var scroll = _internalScroll != null ? _internalScroll.scrollOffset : Vector2.zero;
+            float x = local.x - _textOriginX + scroll.x;
+            float y = local.y - _textOriginY + scroll.y;
+            int lineIndex = Mathf.Max(0, Mathf.FloorToInt(y / Mathf.Max(1f, _lineHeight)));
+            int column = Mathf.Max(0, Mathf.FloorToInt(x / Mathf.Max(1f, _characterWidth)));
+            var lines = Text.Split('\n');
+            lineIndex = Mathf.Clamp(lineIndex, 0, lines.Length - 1);
+            int start = 0;
+            for (int i = 0; i < lineIndex; i++) start += lines[i].Length + 1;
+            _rightClickCaret = start + Mathf.Clamp(column, 0, lines[lineIndex].Length);
         }
 
         public void FocusEditor() => _textField.Focus();
@@ -1546,6 +1587,14 @@ namespace Directiva.CodeUI
 
         private void OnKeyDown(KeyDownEvent evt)
         {
+            if (evt.keyCode == KeyCode.F2 && !evt.ctrlKey && !evt.commandKey &&
+                !evt.altKey && !evt.shiftKey)
+            {
+                evt.StopImmediatePropagation();
+                if (!_isReadOnly && !string.IsNullOrEmpty(DocumentPath))
+                    RenameSymbolRequested?.Invoke(_textField.textSelection.cursorIndex);
+                return;
+            }
             var actionKey = evt.ctrlKey || evt.commandKey;
             if (_isReadOnly)
             {
