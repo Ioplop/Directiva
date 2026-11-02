@@ -95,8 +95,8 @@ namespace Directiva.CodeUI
         private VMExecutionController _executionController;
         private string _runningFunctionName;
         private VMMemoryContext _runningMemory;
-        private bool _runningSourceDebugEnabled;
         private readonly DScriptLineBreakpointGate _breakpointGate = new DScriptLineBreakpointGate();
+        private readonly ExecutionSourceLock _executionSourceLock = new ExecutionSourceLock();
         private DScriptCompilationResult _lastCompilation;
         private readonly HashSet<string> _lastCompilationDiagnosticPaths =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -211,7 +211,8 @@ namespace Directiva.CodeUI
                 FlushActiveEditorMetadata();
 
             _executionController?.Tick(executionStepsPerFrame);
-            RefreshDScriptDebugHighlight();
+            // Running code must not repaint its current source instruction each frame.
+            // Pauses and manual steps refresh the marker through their own handlers.
 
             if (_analysisPending && Time.unscaledTime >= _analysisAt)
             {
@@ -372,7 +373,8 @@ namespace Directiva.CodeUI
                 Localization,
                 _popupLayer,
                 explorerFontSize,
-                _theme);
+                _theme,
+                _executionSourceLock);
 
             var right = new VisualElement();
             right.AddToClassList("right-area");
@@ -554,6 +556,7 @@ namespace Directiva.CodeUI
             {
                 _activeMetadataPath = null;
                 _editor.ClearDocument();
+                _editor.SetReadOnly(false);
                 _topBar.SetEntryFunctionName(string.Empty);
                 _topBar.SetDocument(null, false);
                 return;
@@ -570,6 +573,8 @@ namespace Directiva.CodeUI
                 doc.WorkingContent,
                 GetBreakpoints(doc.RelativePath),
                 metadata?.undoHistory);
+            _editor.SetReadOnly(_executionSourceLock.IsFileLocked(doc.RelativePath),
+                Localization.Get("ScriptExplorer", "locked_during_execution"));
 
             if (metadata != null)
                 _topBar.SetEntryFunctionName(metadata.entryFunction);
@@ -663,7 +668,8 @@ namespace Directiva.CodeUI
         private void RefreshTopBar()
         {
             var doc = _workspace.Active;
-            _topBar.SetDocument(doc?.RelativePath, doc?.IsDirty ?? false);
+            _topBar.SetDocument(doc?.RelativePath, doc?.IsDirty ?? false,
+                doc != null && _executionSourceLock.IsFileLocked(doc.RelativePath));
         }
 
         private void RefreshCodebase()
@@ -718,16 +724,24 @@ namespace Directiva.CodeUI
 
         private void ShowRevertConfirmation(string path)
         {
+            if (PreventLockedSourceMutation(path))
+                return;
             _modal.Confirm(
                 Localization.Get("Dialogs", "revert_title"),
                 Localization.Get("Dialogs", "revert_message", path),
-                () => SafeAction(() => _workspace.Revert(path)),
+                () => SafeAction(() =>
+                {
+                    if (!PreventLockedSourceMutation(path))
+                        _workspace.Revert(path);
+                }),
                 Localization.Get("Common", "revert"),
                 Localization.Get("Common", "cancel"));
         }
 
         private void Rename(string path, string newName)
         {
+            if (PreventLockedSourceMutation(path))
+                return;
             SafeAction(() =>
             {
                 var isFolder = _storage.DirectoryExists(path);
@@ -778,11 +792,15 @@ namespace Directiva.CodeUI
 
         private void ShowDeleteConfirmation(string path)
         {
+            if (PreventLockedSourceMutation(path))
+                return;
             _modal.Confirm(
                 Localization.Get("Dialogs", "delete_title"),
                 Localization.Get("Dialogs", "delete_message", path),
                 () => SafeAction(() =>
                 {
+                    if (PreventLockedSourceMutation(path))
+                        return;
                     var isFolder = _storage.DirectoryExists(path);
 
                     var plan = Refactorer.Prepare(
@@ -806,6 +824,8 @@ namespace Directiva.CodeUI
 
         private void Move(string source, string targetFolder)
         {
+            if (PreventLockedSourceMutation(source))
+                return;
             SafeAction(() =>
             {
                 var isFolder = _storage.DirectoryExists(source);
@@ -860,7 +880,7 @@ namespace Directiva.CodeUI
             _executionController.Step(skipDebugMetadata: true); // DScript always emits DEBUG_* metadata.
             if (_executionController.State == ScriptExecutionState.Paused)
                 RefreshExecutionMetrics();
-            RefreshDScriptDebugHighlight();
+            RefreshDScriptDebugHighlight(followExecution: true);
         }
 
         private void HandlePauseRequested()
@@ -880,7 +900,6 @@ namespace Directiva.CodeUI
             RefreshExecutionMetrics();
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -965,13 +984,12 @@ namespace Directiva.CodeUI
                     Output.WriteWarning(Localization.Get("Console", "cache_failed", ex.Message));
                 }
 
+                _executionSourceLock.LockModules(prepared.Compilation.Analysis.Modules.Keys);
                 _runningFunctionName = prepared.FunctionName;
                 _runningMemory = prepared.Memory;
                 _breakpointGate.Reset();
-                // Debug instructions are always present. The checkbox controls visual
-                // highlighting; breakpoints work even if the checkbox was off at Start.
-                _runningSourceDebugEnabled = _topBar.DebugSourceEnabled ||
-                                             _runningBreakpointsByModule.Count > 0;
+                // DEBUG_* metadata is always generated. Breakpoints do not require
+                // continuous source-line highlighting while the VM is running.
                 _executionController.BreakpointPredicate =
                     _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
                 _editor.ClearExecutionLine();
@@ -981,6 +999,11 @@ namespace Directiva.CodeUI
             }
             catch (Exception ex)
             {
+                if (_executionController.State == ScriptExecutionState.Stopped)
+                {
+                    _executionSourceLock.Clear();
+                    RefreshExecutionLockPresentation();
+                }
                 Output.WriteError(Localization.Get("Console", "start_failed", ex.Message));
                 return false;
             }
@@ -1036,10 +1059,40 @@ namespace Directiva.CodeUI
 
         private void OnExecutionStateChanged(ScriptExecutionState state)
         {
-            // StateChanged fires for manual Pause, initial paused starts, and
-            // breakpoints. Capture metrics at the moment of the pause.
+            if (state == ScriptExecutionState.Stopped)
+                _executionSourceLock.Clear();
+            RefreshExecutionLockPresentation();
+
+            // Show the current source line only while paused. Play/Continue immediately
+            // removes the marker; a breakpoint or manual step restores it once.
             if (state == ScriptExecutionState.Paused)
+            {
                 RefreshExecutionMetrics();
+                RefreshDScriptDebugHighlight();
+            }
+            else
+            {
+                _editor?.ClearExecutionLine();
+            }
+        }
+
+        private void RefreshExecutionLockPresentation()
+        {
+            var active = _workspace?.Active;
+            _editor?.SetReadOnly(active != null &&
+                _executionSourceLock.IsFileLocked(active.RelativePath),
+                Localization.Get("ScriptExplorer", "locked_during_execution"));
+            _explorer?.RefreshExecutionLocks();
+            if (_topBar != null)
+                RefreshTopBar();
+        }
+
+        private bool PreventLockedSourceMutation(string relativePath)
+        {
+            if (!_executionSourceLock.ContainsLockedFile(relativePath))
+                return false;
+            Output.WriteWarning(Localization.Get("ScriptExplorer", "locked_action_blocked"));
+            return true;
         }
 
         private void RefreshExecutionMetrics()
@@ -1062,7 +1115,6 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -1087,7 +1139,6 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
-            _runningSourceDebugEnabled = false;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -1104,13 +1155,13 @@ namespace Directiva.CodeUI
             string line = debug.Line >= 0 ? (debug.Line + 1).ToString(CultureInfo.InvariantCulture) : "?";
 
             Output.Write(Localization.Get("Console", "breakpoint_hit", file, line));
-            RefreshDScriptDebugHighlight();
+            RefreshDScriptDebugHighlight(followExecution: true);
         }
 
-        private void RefreshDScriptDebugHighlight()
+        private void RefreshDScriptDebugHighlight(bool followExecution = false)
         {
-            if (!_runningSourceDebugEnabled ||
-                _executionController == null ||
+            if (_executionController == null ||
+                _executionController.State != ScriptExecutionState.Paused ||
                 _executionController.CurrentVM == null)
             {
                 _editor?.ClearExecutionLine();
@@ -1155,7 +1206,9 @@ namespace Directiva.CodeUI
                 return;
             }
 
-            _editor?.SetExecutionLine(debug.Line + 1, ensureVisible: true);
+            // This marker is shown only on pauses/steps, never during Play.
+            // Auto-follow is a one-shot action on Step/breakpoint.
+            _editor?.SetExecutionLine(debug.Line + 1, ensureVisible: followExecution);
         }
 
         private static string FormatDataValue(DataValue value, VMMemoryContext memory)
@@ -1346,8 +1399,6 @@ namespace Directiva.CodeUI
 
             _executionController.BreakpointPredicate =
                 _runningBreakpointsByModule.Count > 0 ? ShouldPauseAtBreakpoint : null;
-            _runningSourceDebugEnabled = _topBar.DebugSourceEnabled ||
-                                         _runningBreakpointsByModule.Count > 0;
             RefreshDScriptDebugHighlight();
         }
 

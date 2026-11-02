@@ -16,5 +16,4 @@
 [expand_output]: Expand Output
 [clear_output]: Clear Output
 [entry_function]: Name of a parameterless DScript function to run. Leave blank to run the first function in the selected file.
-[debug_source]: Highlights the DScript line currently executed by the VM. DEBUG_* metadata is always generated.
 [execution_metrics]: Logical steps consumed by the program and elapsed real time, including pauses.

@@ -11,13 +11,13 @@ namespace Directiva.CodeUI
         private readonly DirectivaUIIcons _icons;
         private readonly IScriptExecutionStateProvider _executionState;
         private bool _hasDocument;
+        private bool _documentLocked;
 
         private readonly Label _title;
         private readonly Button _save;
         private readonly Button _revert;
 
         private readonly TextField _entryFunction;
-        private readonly Toggle _debugSource;
 
         private readonly Button _stop;
         private readonly Button _pause;
@@ -46,7 +46,6 @@ namespace Directiva.CodeUI
         public event Action<string> EntryFunctionChanged;
 
         public string EntryFunctionName => (_entryFunction.value ?? string.Empty).Trim();
-        public bool DebugSourceEnabled => _debugSource.value;
 
         public TopBarView(
             LocalizationService locale,
@@ -100,19 +99,6 @@ namespace Directiva.CodeUI
             _entryFunction.RegisterValueChangedCallback(evt =>
                 EntryFunctionChanged?.Invoke((evt.newValue ?? string.Empty).Trim()));
 
-            _debugSource = new Toggle("debug")
-            {
-                value = false
-            };
-            _debugSource.style.height = 24f;
-            _debugSource.style.marginLeft = 6f;
-            _debugSource.style.marginRight = 4f;
-            _debugSource.style.marginTop = 0f;
-            _debugSource.style.marginBottom = 0f;
-            _debugSource.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _debugSource.tooltip = _locale.Get("Tooltips", "debug_source");
-            UIIconView.SetToggle(_debugSource, _icons?.checkedBox, _icons?.uncheckedBox);
-
             _stop = new Button(() => StopClicked?.Invoke());
             _pause = new Button(() => PauseClicked?.Invoke());
             _continue = new Button(() => ContinueClicked?.Invoke());
@@ -143,7 +129,6 @@ namespace Directiva.CodeUI
 
             execution.Add(entryLabel);
             execution.Add(_entryFunction);
-            execution.Add(_debugSource);
             execution.Add(_stop);
             execution.Add(_pause);
             execution.Add(_continue);
@@ -267,10 +252,9 @@ namespace Directiva.CodeUI
                 return;
 
             tooltips.Register(_save, () => _locale.Get("Tooltips", "save"));
-            tooltips.Register(_revert, () => _locale.Get("Tooltips", "revert"));
-
-            tooltips.Register(_debugSource, () =>
-                "Mostrar la línea original de DScript que ejecuta la VM (DEBUG_* ya se genera siempre).");
+            tooltips.Register(_revert, () => _documentLocked
+                ? _locale.Get("ScriptExplorer", "locked_during_execution")
+                : _locale.Get("Tooltips", "revert"));
 
             tooltips.Register(_stop, () => _locale.Get("Tooltips", "stop"));
             tooltips.Register(_pause, () => _locale.Get("Tooltips", "pause"));
@@ -306,12 +290,16 @@ namespace Directiva.CodeUI
                 $"{_lastLogicalSteps:N0} {steps} · {_lastElapsedMilliseconds:0.##} ms";
         }
 
-        public void SetDocument(string path, bool isDirty)
+        public void SetDocument(string path, bool isDirty, bool isLocked = false)
         {
             _hasDocument = !string.IsNullOrWhiteSpace(path);
+            _documentLocked = isLocked;
             _title.text = _hasDocument ? System.IO.Path.GetFileName(path) : "-";
             _save.SetEnabled(_hasDocument && isDirty);
-            _revert.SetEnabled(_hasDocument && isDirty);
+            _revert.SetEnabled(_hasDocument && isDirty && !isLocked);
+            _revert.tooltip = isLocked
+                ? _locale.Get("ScriptExplorer", "locked_during_execution")
+                : _locale.Get("Common", "revert");
             RefreshExecutionButtons();
         }
 
@@ -323,7 +311,6 @@ namespace Directiva.CodeUI
             {
                 case ScriptExecutionState.Running:
                     _entryFunction.SetEnabled(false);
-                    _debugSource.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(true);
                     _continue.SetEnabled(false);
@@ -332,7 +319,6 @@ namespace Directiva.CodeUI
 
                 case ScriptExecutionState.Paused:
                     _entryFunction.SetEnabled(false);
-                    _debugSource.SetEnabled(false);
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(true);
@@ -341,7 +327,6 @@ namespace Directiva.CodeUI
 
                 default:
                     _entryFunction.SetEnabled(_hasDocument);
-                    _debugSource.SetEnabled(_hasDocument);
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);
@@ -361,12 +346,13 @@ namespace Directiva.CodeUI
             UIIconView.SetButton(_revert, _icons?.revert);
 
             _entryFunction.tooltip = _locale.Get("Tooltips", "entry_function");
-            _debugSource.tooltip = _locale.Get("Tooltips", "debug_source");
             _executionMetrics.tooltip = _locale.Get("Tooltips", "execution_metrics");
             if (_hasExecutionMetrics)
                 UpdateExecutionMetricsLabel();
             _save.tooltip = _locale.Get("Common", "save");
-            _revert.tooltip = _locale.Get("Common", "revert");
+            _revert.tooltip = _documentLocked
+                ? _locale.Get("ScriptExplorer", "locked_during_execution")
+                : _locale.Get("Common", "revert");
 
             UIIconView.SetButton(_stop, _icons?.stop);
             UIIconView.SetButton(_pause, _icons?.pause);

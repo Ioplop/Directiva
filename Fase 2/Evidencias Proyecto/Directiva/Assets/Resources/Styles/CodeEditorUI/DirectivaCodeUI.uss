@@ -1107,6 +1107,33 @@ Toggle {
 
 
 /* -------------------------------------------------------------------------
+   Execution source locks: keep editable files visually distinct from read-only
+   compiled files while preserving selection, scrolling and source highlights.
+   ------------------------------------------------------------------------- */
+
+.tree-row.execution-locked .tree-label,
+.tree-row.execution-locked.selected .tree-label,
+.tree-row.execution-locked.state-error .tree-label,
+.tree-row.execution-locked.state-dirty .tree-label {
+    color: rgb(143, 149, 159);
+}
+
+.tree-row.execution-locked .tree-type-icon {
+    opacity: 0.58;
+}
+
+.code-editor.execution-locked,
+.code-editor.execution-locked .code-editor-stack,
+.code-editor.execution-locked .code-text-field,
+.code-editor.execution-locked .code-text-field > .unity-text-field__input {
+    background-color: rgb(39, 41, 46);
+}
+
+.code-editor.execution-locked .code-gutter-viewport {
+    background-color: rgb(44, 46, 52);
+}
+
+/* -------------------------------------------------------------------------
    v1.17: DScript syntax preview (caret and selection remain native TextField)
    ------------------------------------------------------------------------- */
 

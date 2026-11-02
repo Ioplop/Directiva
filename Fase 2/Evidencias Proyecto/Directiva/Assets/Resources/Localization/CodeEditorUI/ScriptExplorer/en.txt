@@ -6,3 +6,5 @@
 [folder]: Folder
 [script]: Script
 [root]: Scripts root
+[locked_during_execution]: Read-only while the program is running
+[locked_action_blocked]: Cannot modify, move, rename or delete a file while it is running.

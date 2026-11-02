@@ -201,6 +201,60 @@ namespace Directiva.EditorTests.DIL
                 t.Equal(ScriptExecutionState.Stopped, controller.State, "resume completed");
                 t.Equal(1, hits, "same breakpoint should not trigger again immediately");
             });
+            Add("ResumeAfterStepRunsToNextBreakpoint", "Play after a manual step resumes until the next breakpoint, not step-by-step", t =>
+            {
+                var vm = DILTestHarness.MakeVM(t,
+                    "PUSH INT 8\nPUSH INT 9\nADD\nRETURN");
+                var controller = new VMExecutionController();
+                int breakpointHits = 0;
+                controller.BreakpointPredicate = current =>
+                    current.InstructionPointer == 0 || current.InstructionPointer == 2;
+                controller.BreakpointHit += _ => breakpointHits++;
+                controller.Start(vm);
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Paused, controller.State, "first breakpoint");
+                t.Equal(0, vm.InstructionPointer, "first breakpoint before first instruction");
+                controller.Step(false);
+                t.Equal(1, vm.InstructionPointer, "one manual step");
+                t.Equal(ScriptExecutionState.Paused, controller.State, "manual step keeps pause");
+
+                controller.Continue();
+                t.Equal(ScriptExecutionState.Running, controller.State, "Play resumes running");
+                controller.Step(false);
+                t.Equal(1, vm.InstructionPointer, "Step does nothing during Play");
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Paused, controller.State, "next breakpoint pauses again");
+                t.Equal(2, vm.InstructionPointer, "next breakpoint at ADD");
+                t.Equal(2, breakpointHits, "only two breakpoint events");
+                t.Equal(2L, controller.TotalLogicalSteps, "both PUSH instructions consumed");
+
+                controller.Continue();
+                controller.Tick(10);
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "Play completes after second breakpoint");
+                t.Equal(4L, controller.TotalLogicalSteps, "full logical step cost");
+                t.Equal(2, breakpointHits, "no repeat hit at resume location");
+            });
+            Add("ResumeAfterManualPauseRunsContinuously", "Manual pause and continue do not enter repeated single-step mode", t =>
+            {
+                var vm = DILTestHarness.MakeVM(t,
+                    "PUSH INT 1\nPUSH INT 2\nADD\nRETURN");
+                var controller = new VMExecutionController();
+                var states = new List<ScriptExecutionState>();
+                controller.StateChanged += states.Add;
+                controller.Start(vm);
+                controller.Tick(1);
+                controller.Pause();
+                t.Equal(ScriptExecutionState.Paused, controller.State, "manual pause");
+                controller.Step(false);
+                t.Equal(2, vm.InstructionPointer, "single instruction while paused");
+                controller.Continue();
+                t.Equal(ScriptExecutionState.Running, controller.State, "resumes from manual pause");
+                controller.Tick(100);
+                t.Equal(ScriptExecutionState.Stopped, controller.State, "runs to completion");
+                t.Equal(1, states.FindAll(state => state == ScriptExecutionState.Paused).Count,
+                    "only the explicit manual pause");
+                t.Equal(4L, controller.TotalLogicalSteps, "full logical step count");
+            });
             Add("StopDetaches", "Stop prevents further progress and detaches the printed event", t =>
             {
                 var controller = new VMExecutionController();

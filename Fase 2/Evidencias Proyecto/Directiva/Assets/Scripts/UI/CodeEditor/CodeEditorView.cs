@@ -82,6 +82,8 @@ namespace Directiva.CodeUI
         private bool _suppressChange;
         private bool _historyApplying;
         private bool _forceHistoryBoundaryNextChange;
+        private bool _isReadOnly;
+        private string _readOnlyContent = string.Empty;
         private int _executionLine = -1;
 
         public string DocumentPath { get; private set; } = string.Empty;
@@ -91,6 +93,17 @@ namespace Directiva.CodeUI
         public event Action<float> FontSizeChanged;
 
         public string Text => _textField.value ?? string.Empty;
+        public bool IsReadOnly => _isReadOnly;
+
+        /// <summary>Keep selection, copying, scrolling and breakpoints available.</summary>
+        public void SetReadOnly(bool readOnly, string reason = null)
+        {
+            _isReadOnly = readOnly;
+            _readOnlyContent = readOnly ? Text : string.Empty;
+            _textField.isReadOnly = readOnly;
+            EnableInClassList("execution-locked", readOnly);
+            _textField.tooltip = readOnly ? reason ?? string.Empty : string.Empty;
+        }
 
         public CodeEditorView(
             FontAsset normalFont,
@@ -200,6 +213,14 @@ namespace Directiva.CodeUI
             {
                 if (_suppressChange)
                     return;
+
+                // A native edit, paste or Unity undo command must never mutate a
+                // compiled source while the execution still owns its debug spans.
+                if (_isReadOnly)
+                {
+                    _textField.SetValueWithoutNotify(_readOnlyContent);
+                    return;
+                }
 
                 var value = evt.newValue ?? string.Empty;
                 var normalized = NormalizeLineEndings(value);
@@ -593,7 +614,7 @@ namespace Directiva.CodeUI
 
         public bool Undo()
         {
-            if (_activeUndoHistory == null)
+            if (_isReadOnly || _activeUndoHistory == null)
                 return false;
 
             var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, Text.Length);
@@ -607,7 +628,7 @@ namespace Directiva.CodeUI
 
         public bool Redo()
         {
-            if (_activeUndoHistory == null)
+            if (_isReadOnly || _activeUndoHistory == null)
                 return false;
 
             var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, Text.Length);
@@ -1526,6 +1547,15 @@ namespace Directiva.CodeUI
         private void OnKeyDown(KeyDownEvent evt)
         {
             var actionKey = evt.ctrlKey || evt.commandKey;
+            if (_isReadOnly)
+            {
+                // Native TextField isReadOnly handles typing, cut and paste;
+                // suppress the editor's custom undo/redo and indentation shortcuts.
+                if (evt.keyCode == KeyCode.Tab ||
+                    (actionKey && (evt.keyCode == KeyCode.Z || evt.keyCode == KeyCode.Y)))
+                    evt.StopImmediatePropagation();
+                return;
+            }
 
             if (actionKey && evt.keyCode == KeyCode.Z)
             {
@@ -1651,6 +1681,8 @@ namespace Directiva.CodeUI
 
         private void ApplyEdit(string updated, int cursor, int select)
         {
+            if (_isReadOnly)
+                return;
             _forceHistoryBoundaryNextChange = true;
             _textField.value = updated;
             schedule.Execute(() =>

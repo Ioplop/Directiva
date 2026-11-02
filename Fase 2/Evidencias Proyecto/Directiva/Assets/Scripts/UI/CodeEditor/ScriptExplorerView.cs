@@ -21,6 +21,7 @@ namespace Directiva.CodeUI
         private readonly ScriptWorkspace _workspace;
         private readonly LocalizationService _locale;
         private readonly DirectivaUIIcons _icons;
+        private readonly ExecutionSourceLock _executionLocks;
 
         private readonly VisualElement _toolbar;
         private readonly Button _newScript;
@@ -64,8 +65,10 @@ namespace Directiva.CodeUI
             LocalizationService locale,
             VisualElement popupLayer,
             float fontSize,
-            DirectivaUITheme theme = null)
+            DirectivaUITheme theme = null,
+            ExecutionSourceLock executionLocks = null)
         {
+            _executionLocks = executionLocks;
             _storage = storage;
             _workspace = workspace;
             _locale = locale;
@@ -159,6 +162,19 @@ namespace Directiva.CodeUI
         }
 
         public string SelectedPath => _selectedPath;
+
+        /// <summary>Refreshes labels and commands after an execution starts/stops.</summary>
+        public void RefreshExecutionLocks()
+        {
+            HideContextMenu();
+            Rebuild();
+        }
+
+        private bool IsFileLocked(string path) =>
+            _executionLocks != null && _executionLocks.IsFileLocked(path);
+
+        private bool IsPathLocked(string path) =>
+            _executionLocks != null && _executionLocks.ContainsLockedFile(path);
 
         public void SetFontSize(float fontSize)
         {
@@ -424,6 +440,7 @@ namespace Directiva.CodeUI
                 ApplyRowButtonSize(save, 24f, 22f);
 
                 var revert = new Button(() => RevertQuickRequested?.Invoke(path));
+                revert.SetEnabled(!IsFileLocked(path));
                 UIIconView.SetButton(revert, _icons?.revert, Scaled(15f, 10f));
                 revert.AddToClassList("tree-mini-button");
                 ApplyRowButtonSize(revert, 24f, 22f);
@@ -434,7 +451,9 @@ namespace Directiva.CodeUI
 
                 _tooltips?.Register(
                     revert,
-                    () => _locale.Get("Tooltips", "revert"));
+                    () => IsFileLocked(path)
+                        ? _locale.Get("ScriptExplorer", "locked_during_execution")
+                        : _locale.Get("Tooltips", "revert"));
 
                 row.Add(save);
                 row.Add(revert);
@@ -467,18 +486,27 @@ namespace Directiva.CodeUI
             if (hasError && dirty)
                 state.AddToClassList("state-dirty-dot");
 
+            bool locked = !isFolder && IsFileLocked(path);
+            if (locked)
+            {
+                row.AddToClassList("execution-locked");
+                row.tooltip = _locale.Get("ScriptExplorer", "locked_during_execution");
+            }
+
             var typeIcon = UIIconView.Create(isFolder ? _icons?.folder : _icons?.script);
             typeIcon.AddToClassList("tree-type-icon");
             typeIcon.style.fontSize = _fontSize;
             typeIcon.AddToClassList(isFolder ? "folder-icon" : "script-icon");
             ApplyTypeIconSize(typeIcon);
-            typeIcon.tooltip = isFolder
-                ? _locale.Get("ScriptExplorer", "folder")
-                : _locale.Get("ScriptExplorer", "script");
+            typeIcon.tooltip = locked
+                ? _locale.Get("ScriptExplorer", "locked_during_execution")
+                : _locale.Get("ScriptExplorer", isFolder ? "folder" : "script");
 
             var label = new Label(Path.GetFileName(path));
             label.AddToClassList("tree-label");
             label.style.fontSize = _fontSize;
+            if (locked)
+                label.tooltip = _locale.Get("ScriptExplorer", "locked_during_execution");
 
             if (string.Equals(_selectedPath, path, StringComparison.OrdinalIgnoreCase))
                 row.AddToClassList("selected");
@@ -505,7 +533,7 @@ namespace Directiva.CodeUI
                 if (evt.button != 0)
                     return;
 
-                _dragSource = new NodeInfo { Path = path, IsFolder = isFolder };
+                _dragSource = IsPathLocked(path) ? null : new NodeInfo { Path = path, IsFolder = isFolder };
                 _dragStart = evt.position;
                 _dragging = false;
 
@@ -515,7 +543,8 @@ namespace Directiva.CodeUI
                 }
                 else
                 {
-                    if (string.Equals(_selectedPath, path, StringComparison.OrdinalIgnoreCase) &&
+                    if (!IsFileLocked(path) &&
+                        string.Equals(_selectedPath, path, StringComparison.OrdinalIgnoreCase) &&
                         evt.target == label)
                     {
                         BeginInlineRename(row, label, path, false);
@@ -538,6 +567,9 @@ namespace Directiva.CodeUI
 
         private void BeginInlineRename(VisualElement row, Label label, string path, bool isFolder)
         {
+            if (IsPathLocked(path))
+                return;
+
             var initial = isFolder
                 ? Path.GetFileName(path)
                 : Path.GetFileNameWithoutExtension(path);
@@ -666,6 +698,9 @@ namespace Directiva.CodeUI
                 DeleteRequested?.Invoke(path);
             }) { text = _locale.Get("ScriptExplorer", "delete") };
 
+            bool locked = IsPathLocked(path);
+            rename.SetEnabled(!locked);
+            delete.SetEnabled(!locked);
             _contextMenu.Add(rename);
             _contextMenu.Add(duplicate);
             _contextMenu.Add(delete);
@@ -691,6 +726,8 @@ namespace Directiva.CodeUI
 
         private void PromptRename(string path, bool isFolder)
         {
+            if (IsPathLocked(path))
+                return;
             _selectedPath = path;
             var row = FindRowByPath(path);
             if (row == null)
@@ -764,7 +801,7 @@ namespace Directiva.CodeUI
             if (_dragSource == null)
                 return;
 
-            if (_dragging)
+            if (_dragging && !IsPathLocked(_dragSource.Path))
             {
                 var picked = panel?.Pick(new Vector2(evt.position.x, evt.position.y));
                 var row = FindAncestorRow(picked);
