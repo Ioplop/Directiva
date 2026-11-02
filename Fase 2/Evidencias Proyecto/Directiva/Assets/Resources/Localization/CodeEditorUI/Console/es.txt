@@ -1,0 +1,23 @@
+[invalid_script_file]: El archivo seleccionado no es un script .dscript válido.
+[breakpoint_hit]: [DScript] Punto de interrupción alcanzado en {{1}}:{{2}}.
+[no_file]: [DScript] No hay ningún archivo seleccionado.
+[compile_start]: [DScript] Compilando {{1}} y analizando DIL...
+[compile_success]: [DScript] Compilación correcta ({{1}} módulos). Ejecutando {{2}}...
+[stopped]: [DScript] Ejecución detenida.
+[completed]: [DScript] {{1}} retornó {{2}}.
+[faulted]: [DScript] {{1}} falló ({{2}}): {{3}}
+[initializer_failed]: [DScript][shared] {{1}}.{{2}} ({{3}}:{{4}}) falló ({{5}}): {{6}}
+[start_failed]: [DScript] No se pudo iniciar la ejecución: {{1}}
+[cache_failed]: [DScript] No se pudo guardar el DIL generado: {{1}}
+[diagnostic]: [DScript] {{1}}:{{2}}:{{3}} {{4}}: {{5}}
+[module_error]: [DScript] {{1}}
+[cache_warning]: [DScript] {{1}}
+[script_error]: [DScript] {{1}}
+[function_fallback]: función
+[script_no_function]: El módulo '{{1}}' no declara ninguna función ejecutable.
+[script_function_not_found]: No existe la función '{{1}}' en el módulo '{{2}}'. El editor solo ejecuta funciones del archivo seleccionado.
+[script_function_has_args]: La función '{{1}}' requiere {{2}} parámetro(s). El editor solo puede ejecutar funciones sin parámetros.
+[menu_scene_unavailable]: [Directiva] La escena de menú '{{1}}' no está incluida en los perfiles de compilación.
+[source_unavailable]: No se puede ir al error: el archivo '{{1}}' ya no existe.
+[source_open_failed]: No se pudo abrir '{{1}}' para mostrar el error: {{2}}
+[invalid_module_path]: La ruta '{{1}}' no corresponde a un módulo DScript válido. Usa identificadores sin puntos en cada carpeta y nombre de archivo.

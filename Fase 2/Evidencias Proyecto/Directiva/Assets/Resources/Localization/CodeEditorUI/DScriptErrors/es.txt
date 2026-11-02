@@ -1,0 +1,92 @@
+[source_too_long]: El código fuente supera la longitud máxima permitida.
+[bracket_unclosed]: Hay un paréntesis, corchete o llave sin cerrar.
+[tabs_indent]: No se permiten tabulaciones para indentar; utiliza espacios.
+[maximum_indentation]: Se superó la profundidad máxima de indentación.
+[inconsistent_dedent]: La reducción de indentación no coincide con ningún nivel anterior.
+[decimal_out_of_range]: El literal decimal excede la precisión o el rango de punto fijo (cuatro decimales).
+[integer_out_of_range]: El literal entero supera la magnitud Int64 permitida.
+[unicode_escape]: Secuencia Unicode inválida; se esperaban cuatro dígitos hexadecimales.
+[string_escape]: Secuencia de escape no admitida: \{{1}}
+[unterminated_string]: El literal de texto no está cerrado.
+[unexpected_character]: Carácter inesperado: '{{1}}'.
+[maximum_brackets]: Se superó la profundidad máxima de anidación de paréntesis y corchetes.
+[bracket_mismatch]: Se encontró un cierre de paréntesis o corchete sin pareja correspondiente.
+[unexpected_indentation]: Nivel de indentación inesperado.
+[module_scope]: En el ámbito del módulo solo se permiten imports, shared y funciones.
+[global_not_supported]: 'global' no existe en DScript; usa 'shared' a nivel de módulo.
+[shared_scope]: Las declaraciones 'shared' solo están permitidas a nivel de módulo.
+[syntax_depth]: Se superó la profundidad máxima de anidación de sintaxis.
+[empty_suite]: Un bloque indentado debe contener al menos una instrucción.
+[invalid_assignment_target]: El destino de una asignación debe ser una variable, índice o atributo.
+[expression_depth]: Se superó la profundidad máxima de anidación de expresiones.
+[unary_depth]: Se superó la profundidad máxima de anidación de operadores unarios.
+[chained_comparisons]: Las comparaciones encadenadas aún no se admiten; combínalas con 'and'.
+[power_depth]: Se superó la profundidad máxima de potencias anidadas.
+[expression_expected]: Se esperaba una expresión, pero se encontró {{1}}.
+[entry_module_invalid]: Nombre de módulo de entrada inválido.
+[entry_native_module]: El módulo de entrada no puede ser un módulo nativo reservado.
+[maximum_modules]: Se superó la cantidad máxima de módulos importados.
+[module_not_found]: No se encontró el módulo '{{1}}'.
+[module_read_failed]: No se pudo leer el módulo '{{1}}': {{2}}
+[module_scope_binder]: A nivel de módulo solo se permiten imports, funciones y declaraciones shared.
+[duplicate_module_symbol]: El símbolo '{{1}}' está duplicado en el módulo.
+[function_shared_collision]: Una función y una variable shared comparten el nombre '{{1}}'.
+[duplicate_shared_initializer]: La variable shared '{{1}}' tiene más de un inicializador en el programa.
+[no_exported_symbol]: El módulo '{{1}}' no exporta el símbolo '{{2}}'.
+[import_conflict]: El import '{{1}}' entra en conflicto con una declaración de este módulo.
+[duplicate_import_alias]: El alias '{{1}}' ya está definido.
+[duplicate_parameter]: Parámetro duplicado: '{{1}}'.
+[parameter_shared_collision]: El parámetro '{{1}}' entra en conflicto con una variable shared.
+[semantic_depth]: Se superó la profundidad máxima de anidación semántica.
+[return_outside]: return solo está permitido dentro de una función.
+[loop_required]: '{{1}}' requiere estar dentro de un bucle.
+[nested_functions]: No se admiten funciones anidadas ni cierres.
+[imports_scope]: Los imports deben declararse a nivel de módulo.
+[shared_scope_binder]: Las variables shared deben declararse a nivel de módulo.
+[cannot_assign]: No se puede asignar a '{{1}}'.
+[import_assignment]: Solo se pueden asignar variables (no funciones ni constantes) a través de módulos importados.
+[invalid_assignment]: Destino de asignación inválido.
+[semantic_expression_depth]: Se superó la profundidad máxima de expresiones semánticas.
+[integer_literal_out_of_range]: El entero supera Int64.MaxValue; -9223372036854775808 solo está permitido como literal con signo.
+[module_namespace_not_value]: Los módulos son espacios de nombres en compilación, no valores en ejecución: '{{1}}'.
+[wrong_function_arity]: La función '{{1}}' esperaba {{2}} argumento(s), pero recibió {{3}}.
+[module_namespace_not_value_plain]: Un espacio de nombres de módulo no se puede utilizar como valor.
+[undefined_name]: Nombre no definido: '{{1}}'.
+[generated_dil_invalid]: El DIL generado es inválido: {{1}}
+[numeric_limits]: La compilación superó los límites numéricos: {{1}}
+[backend_error]: Error del compilador: {{1}}
+[end_indented_block]: Se esperaba el final de un bloque indentado.
+[end_return]: Se esperaba el final de la instrucción return.
+[end_statement]: Se esperaba el final de la instrucción.
+[expected_def]: Se esperaba def.
+[expected_function_name]: Se esperaba el nombre de la función.
+[expected_function_left_paren]: Se esperaba '(' después del nombre de la función.
+[expected_param_name]: Se esperaba el nombre de un parámetro.
+[expected_params_right_paren]: Se esperaba ')' después de los parámetros.
+[expected_import_alias]: Se esperaba un alias de importación.
+[end_import]: Se esperaba el final del import (un módulo por importación).
+[expected_import_keyword]: Se esperaba 'import' en la instrucción from-import.
+[expected_imported_symbol]: Se esperaba el nombre de un símbolo importado.
+[expected_symbol_alias]: Se esperaba un alias de símbolo.
+[end_from_import]: Se esperaba el final de la instrucción from-import.
+[expected_module_name]: Se esperaba un nombre de módulo.
+[expected_module_segment]: Se esperaba un segmento de la ruta de un módulo.
+[expected_shared_name]: Se esperaba el nombre de una variable shared.
+[end_shared_declaration]: Se esperaba el final de la declaración shared.
+[expected_if]: Se esperaba if.
+[expected_for_target]: El destino de un bucle for debe ser una sola variable.
+[expected_for_in]: Se esperaba 'in' en el bucle for.
+[expected_colon]: Se esperaba ':' antes de un bloque indentado.
+[expected_newline_after_colon]: Se esperaba una nueva línea después de ':' (no se admiten bloques en la misma línea).
+[expected_indented_suite]: Se esperaba un bloque indentado.
+[end_assignment]: Se esperaba el final de la asignación.
+[end_expression]: Se esperaba el final de la instrucción de expresión.
+[expected_attribute_name]: Se esperaba el nombre de un atributo.
+[expected_call_right_paren]: Se esperaba ')' después de los argumentos de llamada.
+[expected_index_right_bracket]: Se esperaba ']' después del índice.
+[expected_expression_right_paren]: Se esperaba ')' después de la expresión.
+[expected_list_right_bracket]: Se esperaba ']' después del literal de lista.
+[expected_dictionary_colon]: Se esperaba ':' entre la clave y el valor del diccionario.
+[expected_collection_right_brace]: Se esperaba '}' después del literal de colección.
+[static_module_missing_symbol]: El módulo '{{1}}' no contiene el símbolo '{{2}}'.
+[static_namespace_not_imported]: El espacio de nombres '{{1}}' no está importado.

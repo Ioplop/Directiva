@@ -1,0 +1,34 @@
+[MemberNotFound]: Member '{{2}}' is not available on type {{1}}.
+[ReadOnlyProperty]: Property '{{2}}' on {{1}} is read-only.
+[WriteOnlyProperty]: Property '{{2}}' on {{1}} is write-only.
+[InvalidMemberArgumentCount]: Member '{{2}}' on {{1}} expected {{3}} argument(s), got {{4}}.
+[expected_any]: any non-negative number
+[expected_minimum]: at least {{1}}
+[expected_exact]: {{1}}
+[expected_range]: between {{1}} and {{2}}
+[NotIterable]: Type {{1}} does not support iteration.
+[InvalidIterator]: ITER_NEXT needs an Iterator, received {{1}}.
+[IteratorModified]: {{1}} was modified during iteration.
+[DivisionByZero]: Division by zero.
+[Overflow]: Numeric overflow.
+[InvalidOperation]: Invalid operation. {{1}}
+[InvalidMemoryAccess]: Invalid heap reference {{1}}.
+[IndexOutOfRange]: {{1}} index {{2}} is out of range for {{3}} element(s).
+[UnhashableType]: Unhashable type {{1}}{{2}}.
+[unhashable_path]:  at tuple element {{1}}
+[StackOverflow]: Evaluation stack overflow.
+[StackUnderflow]: Evaluation stack underflow.
+[VariableUsedBeforeInitialization]: Variable used before initialization.
+[InvalidInstruction]: Invalid instruction. {{1}}
+[InvalidCallTarget]: Indirect call requires a Function, got {{1}}.
+[InvalidFunctionArgumentCount]: Function {{1}} expects {{2}} argument(s), got {{3}}.
+[ForeignFunctionProgram]: Function references in shared memory must belong to the same compiled CodeContext.
+[InvalidFunction]: Function id {{1}} does not exist.
+[InvalidLocalAccess]: Invalid local index {{1}}.
+[InvalidGlobalAccess]: Invalid global index {{1}}.
+[InvalidJumpTarget]: Invalid jump target {{1}}.
+[CallStackOverflow]: Call stack overflow.
+[OutOfMemory]: Directiva heap is out of memory.
+[InvalidCast]: Cannot cast {{1}} to {{2}}.
+[InvalidCastValue]: Cannot cast value from {{1}} to {{2}}. {{3}}
+[InternalVmError]: Internal VM error. {{1}}

@@ -1,0 +1,75 @@
+[native_entry_module]: Native modules are reserved and cannot be DIL entry modules.
+[global_limit]: Program requires {{1}} global slots, but the configured limit is {{2}}.
+[entry_requires_function]: The root DIL module must declare at least one function.
+[invalid_module]: Invalid module name '{{1}}'.
+[missing_module]: DIL module '{{1}}' could not be found.
+[imports_at_start]: # IMPORT annotations must appear at the beginning of the file.
+[invalid_import_name]: Invalid import module name '{{1}}'.
+[global_in_function]: # GLOBAL cannot appear inside a function.
+[invalid_global_name]: Invalid global name '{{1}}'.
+[function_before_end]: A function cannot begin before the previous # END_FUNCTION.
+[invalid_function_name]: Invalid function name '{{1}}'.
+[duplicate_function]: Function '{{1}}' is declared more than once in this file.
+[params_outside_function]: # PARAMS must appear inside a function.
+[params_before_body]: # PARAMS must appear before the function body.
+[duplicate_params]: # PARAMS is declared more than once for this function.
+[locals_outside_function]: # LOCALS must appear inside a function.
+[locals_before_body]: # LOCALS must appear before the function body.
+[duplicate_locals]: # LOCALS is declared more than once for this function.
+[end_function_value]: # END_FUNCTION does not take a value.
+[end_function_without_function]: # END_FUNCTION has no matching # FUNCTION.
+[executable_outside_function]: Executable DIL must appear inside a function.
+[missing_end_function]: Function '{{1}}' is missing # END_FUNCTION.
+[internal_state]: Internal DIL parser state is inconsistent.
+[duplicate_label]: Label '{{1}}' is declared more than once in this function.
+[internal_instruction]: Internal DIL parser error: executable line produced no instruction.
+[set_count]: SET requires a non-negative element count.
+[debug_file]: DEBUG_FILE requires a non-empty file path.
+[debug_line]: DEBUG_LINE requires a non-negative, zero-based line.
+[debug_span]: DEBUG_SPAN requires a valid half-open offset range.
+[tuple_count]: TUPLE requires a non-negative element count.
+[list_count]: LIST requires a non-negative element count.
+[range_operand_count]: RANGE requires exactly 1, 2, or 3 operands on the stack.
+[dict_pair_count]: DICT requires a non-negative pair count <= int.MaxValue/2.
+[invalid_property_name]: Invalid property name '{{1}}'.
+[invalid_method_name]: Invalid method name '{{1}}'.
+[call_method_arg_count]: CALL_METHOD requires a non-negative argument count below Int32.MaxValue.
+[invalid_cast_target]: Unknown or unsupported CAST target type '{{1}}'.
+[native_module_required]: Native module for '{{1}}' must be imported.
+[unknown_function]: Unknown function '{{1}}'.
+[invalid_native_symbol]: Invalid native symbol '{{1}}'.
+[native_module_not_imported]: Native module '{{1}}' must be imported.
+[unknown_native_symbol]: Unknown native symbol '{{1}}' (is its module imported?).
+[call_indirect_arg_count]: CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.
+[function_id_missing]: Function id {{1}} does not exist in this DIL program.
+[context_range]: CONTEXT_START range [{{1}}, {{2}}) is outside the {{3}} local slots of '{{4}}'.
+[unknown_instruction]: Unknown DIL instruction or operation '{{1}}'.
+[push_requires_type]: PUSH requires a type.
+[invalid_bool]: BOOL literal must be TRUE or FALSE.
+[unsupported_push_type]: Unsupported PUSH type '{{1}}' in the current DIL implementation.
+[invalid_jump_label]: Invalid jump label '{{1}}'.
+[unknown_label]: Unknown label '{{1}}' in function '{{2}}'.
+[label_past_function_end]: Label '{{1}}' points past the end of function '{{2}}'.
+[jump_outside_function]: Jump target {{1}} is outside function '{{2}}'.
+[int32_value_out_of_range]: Value '{{1}}' is outside the Int32 range required by this instruction.
+[invalid_int64]: '{{1}}' is not a valid Int64 value.
+[invalid_parse_symbol]: Invalid parse symbol '{{1}}'.
+[undefined_parse_symbol]: Undefined parse symbol '{{1}}'.
+[string_quotes]: STRING literal must be enclosed in double quotes.
+[string_incomplete_escape]: STRING literal ends with an incomplete escape sequence.
+[unicode_escape_digits]: \u escape requires exactly four hexadecimal digits.
+[invalid_unicode_escape]: Invalid Unicode escape '\u{{1}}'.
+[unsupported_string_escape]: Unsupported STRING escape '\{{1}}'.
+[empty_decimal]: Decimal literal cannot be empty.
+[invalid_decimal]: Invalid decimal literal '{{1}}'.
+[decimal_overflow]: Decimal literal '{{1}}' overflows the Directiva decimal range.
+[local_slot_out_of_range]: Local slot {{1}} is outside the {{2}} local slots of '{{3}}'.
+[global_slot_out_of_range]: Global slot {{1}} is outside the program's {{2}} global slots.
+[missing_params]: Function '{{1}}' is missing # PARAMS.
+[missing_locals]: Function '{{1}}' is missing # LOCALS.
+[function_locals_below_params]: Function '{{1}}' declares {{2}} parameters but only {{3}} local slots.
+[nonnegative_annotation_value]: # {{1}} requires a non-negative Int32 value.
+[invalid_symbol_name]: Invalid parse symbol name '{{1}}'.
+[symbol_requires_integer]: Parse symbol '{{1}}' must contain exactly one integer number.
+[annotation_requires_value]: # {{1}} requires a value after ':'.
+[operand_count]: {{1}} expects {{2}} operand(s), but received {{3}}.

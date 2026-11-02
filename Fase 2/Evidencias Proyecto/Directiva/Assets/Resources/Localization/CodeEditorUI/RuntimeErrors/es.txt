@@ -1,0 +1,34 @@
+[MemberNotFound]: El miembro '{{2}}' no está disponible para el tipo {{1}}.
+[ReadOnlyProperty]: La propiedad '{{2}}' del tipo {{1}} es de solo lectura.
+[WriteOnlyProperty]: La propiedad '{{2}}' del tipo {{1}} es de solo escritura.
+[InvalidMemberArgumentCount]: El miembro '{{2}}' del tipo {{1}} esperaba {{3}} argumento(s), pero recibió {{4}}.
+[expected_any]: cualquier cantidad no negativa
+[expected_minimum]: al menos {{1}}
+[expected_exact]: {{1}}
+[expected_range]: entre {{1}} y {{2}}
+[NotIterable]: El tipo {{1}} no admite iteración.
+[InvalidIterator]: ITER_NEXT requiere un Iterator; recibió {{1}}.
+[IteratorModified]: El valor de tipo {{1}} fue modificado durante la iteración.
+[DivisionByZero]: División por cero.
+[Overflow]: Desbordamiento numérico.
+[InvalidOperation]: Operación inválida. {{1}}
+[InvalidMemoryAccess]: Referencia de memoria inválida: {{1}}.
+[IndexOutOfRange]: Índice {{2}} fuera de rango en {{1}} con {{3}} elemento(s).
+[UnhashableType]: El tipo {{1}} no es hashable{{2}}.
+[unhashable_path]:  (elemento de tupla {{1}})
+[StackOverflow]: Desbordamiento de la pila de evaluación.
+[StackUnderflow]: Subdesbordamiento de la pila de evaluación.
+[VariableUsedBeforeInitialization]: Se usó una variable antes de inicializarla.
+[InvalidInstruction]: Instrucción inválida. {{1}}
+[InvalidCallTarget]: Una llamada indirecta requiere una Function; recibió {{1}}.
+[InvalidFunctionArgumentCount]: La función {{1}} esperaba {{2}} argumento(s), pero recibió {{3}}.
+[ForeignFunctionProgram]: Las referencias a funciones almacenadas en shared deben pertenecer al mismo CodeContext compilado.
+[InvalidFunction]: La función con ID {{1}} no existe.
+[InvalidLocalAccess]: Índice local inválido: {{1}}.
+[InvalidGlobalAccess]: Índice global inválido: {{1}}.
+[InvalidJumpTarget]: Destino de salto inválido: {{1}}.
+[CallStackOverflow]: Desbordamiento de la pila de llamadas.
+[OutOfMemory]: La memoria heap de Directiva se agotó.
+[InvalidCast]: No se puede convertir {{1}} a {{2}}.
+[InvalidCastValue]: No se pudo convertir el valor de {{1}} a {{2}}. {{3}}
+[InternalVmError]: Error interno de la VM. {{1}}

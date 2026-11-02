@@ -272,6 +272,17 @@
     margin-bottom: 2px;
 }
 
+/* Only messages with a source position behave like links. */
+.output-entry-link {
+    border-left-width: 2px;
+    border-left-color: rgba(130, 170, 225, 0.6);
+    padding-left: 4px;
+}
+
+.output-entry-link:hover {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+
 .output-message {
     color: rgb(238, 238, 238);
 }

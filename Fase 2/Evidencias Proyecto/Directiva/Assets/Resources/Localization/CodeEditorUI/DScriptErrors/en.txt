@@ -1,0 +1,92 @@
+[source_too_long]: Source exceeds the maximum length.
+[bracket_unclosed]: Unclosed bracket or parenthesis.
+[tabs_indent]: Tabs are not allowed for indentation; use spaces.
+[maximum_indentation]: Maximum indentation depth exceeded.
+[inconsistent_dedent]: Inconsistent dedent: no matching indentation level.
+[decimal_out_of_range]: Decimal literal exceeds fixed-point precision or range (four fractional digits).
+[integer_out_of_range]: Integer literal exceeds the supported Int64 magnitude.
+[unicode_escape]: Invalid Unicode escape; expected four hex digits.
+[string_escape]: Unsupported string escape: \{{1}}
+[unterminated_string]: Unterminated string literal.
+[unexpected_character]: Unexpected character '{{1}}'.
+[maximum_brackets]: Maximum bracket nesting depth exceeded.
+[bracket_mismatch]: Unmatched or mismatched closing bracket.
+[unexpected_indentation]: Unexpected indentation level.
+[module_scope]: Module scope allows only imports, shared declarations and functions.
+[global_not_supported]: 'global' is not a DScript declaration; use module-level 'shared'.
+[shared_scope]: 'shared' declarations are only permitted at module scope.
+[syntax_depth]: Maximum syntax nesting depth exceeded.
+[empty_suite]: An indented suite must contain at least one statement.
+[invalid_assignment_target]: Assignment target must be a variable, index or attribute.
+[expression_depth]: Maximum expression nesting depth exceeded.
+[unary_depth]: Maximum unary nesting depth exceeded.
+[chained_comparisons]: Chained comparisons are not supported yet; combine with 'and'.
+[power_depth]: Maximum power-expression depth exceeded.
+[expression_expected]: Expected expression, found {{1}}.
+[entry_module_invalid]: Invalid entry module name.
+[entry_native_module]: Entry module cannot be a reserved native module.
+[maximum_modules]: Maximum imported module count exceeded.
+[module_not_found]: Module '{{1}}' was not found.
+[module_read_failed]: Cannot read module '{{1}}': {{2}}
+[module_scope_binder]: Only imports, function declarations and shared declarations are allowed at module scope.
+[duplicate_module_symbol]: Duplicate module symbol '{{1}}'.
+[function_shared_collision]: Function and shared variable share the name '{{1}}'.
+[duplicate_shared_initializer]: Shared variable '{{1}}' has more than one initializer in the program.
+[no_exported_symbol]: Module '{{1}}' has no exported symbol '{{2}}'.
+[import_conflict]: Import '{{1}}' conflicts with a declaration in this module.
+[duplicate_import_alias]: Import alias '{{1}}' is already defined.
+[duplicate_parameter]: Duplicate parameter '{{1}}'.
+[parameter_shared_collision]: Parameter '{{1}}' conflicts with a shared variable.
+[semantic_depth]: Maximum semantic nesting depth exceeded.
+[return_outside]: Return is only allowed in a function.
+[loop_required]: '{{1}}' requires an enclosing loop.
+[nested_functions]: Nested functions and closures are not supported.
+[imports_scope]: Imports must be declared at module scope.
+[shared_scope_binder]: Shared variables must be declared at module scope.
+[cannot_assign]: Cannot assign to '{{1}}'.
+[import_assignment]: Only variables (not functions/constants) can be assigned through imported modules.
+[invalid_assignment]: Invalid assignment target.
+[semantic_expression_depth]: Maximum semantic expression depth exceeded.
+[integer_literal_out_of_range]: Integer literal exceeds Int64.MaxValue; use -9223372036854775808 only as a signed literal.
+[module_namespace_not_value]: Modules are compile-time namespaces, not runtime values: '{{1}}'.
+[wrong_function_arity]: Function '{{1}}' expects {{2}} arguments, got {{3}}.
+[module_namespace_not_value_plain]: A module namespace cannot be used as a value.
+[undefined_name]: Undefined name '{{1}}'.
+[generated_dil_invalid]: Generated DIL is invalid: {{1}}
+[numeric_limits]: Compilation exceeded numeric limits: {{1}}
+[backend_error]: Compiler error: {{1}}
+[end_indented_block]: Expected the end of an indented block.
+[end_return]: Expected end of return statement.
+[end_statement]: Expected end of statement.
+[expected_def]: Expected def.
+[expected_function_name]: Expected function name.
+[expected_function_left_paren]: Expected '(' after function name.
+[expected_param_name]: Expected parameter name.
+[expected_params_right_paren]: Expected ')' after parameters.
+[expected_import_alias]: Expected import alias.
+[end_import]: Expected end of import statement (one module per import).
+[expected_import_keyword]: Expected 'import' in from-import statement.
+[expected_imported_symbol]: Expected imported symbol name.
+[expected_symbol_alias]: Expected symbol alias.
+[end_from_import]: Expected end of from-import statement.
+[expected_module_name]: Expected module name.
+[expected_module_segment]: Expected module path segment.
+[expected_shared_name]: Expected shared variable name.
+[end_shared_declaration]: Expected end of shared declaration.
+[expected_if]: Expected if.
+[expected_for_target]: For loop target must be a single variable.
+[expected_for_in]: Expected 'in' in for loop.
+[expected_colon]: Expected ':' before indented block.
+[expected_newline_after_colon]: Expected newline after ':' (inline suites are not supported).
+[expected_indented_suite]: Expected an indented block.
+[end_assignment]: Expected end of assignment.
+[end_expression]: Expected end of expression statement.
+[expected_attribute_name]: Expected attribute name.
+[expected_call_right_paren]: Expected ')' after call arguments.
+[expected_index_right_bracket]: Expected ']' after index.
+[expected_expression_right_paren]: Expected ')' after expression.
+[expected_list_right_bracket]: Expected ']' after list literal.
+[expected_dictionary_colon]: Expected ':' between dictionary key and value.
+[expected_collection_right_brace]: Expected '}' after collection literal.
+[static_module_missing_symbol]: Module '{{1}}' has no symbol '{{2}}'.
+[static_namespace_not_imported]: Namespace '{{1}}' is not imported.

@@ -1,0 +1,34 @@
+[play]: Play
+[options]: Options
+[exit]: Quit
+[back]: Back
+[levels]: Levels
+[general]: General
+[sound]: Sound
+[graphics]: Graphics
+[controls]: Controls
+[language]: Language
+[lang_spanish]: Spanish
+[lang_english]: English
+[simulate_inactive]: Simulate while window is inactive
+[volume_master]: Master volume
+[volume_music]: Music volume
+[volume_ui]: Interface volume
+[volume_simulation]: Gameplay / simulation volume
+[fullscreen]: Full screen
+[resolution]: Resolution
+[mouse_capture]: Capture mouse
+[mouse_always]: Always
+[mouse_fullscreen]: In full screen
+[mouse_never]: Never
+[yes]: Yes
+[no]: No
+[keep_resolution]: Keep resolution
+[revert]: Revert
+[resolution_question]: Keep this resolution?
+[resolution_info]: If you do not confirm, the previous resolution will be restored.
+[time_remaining]: Time remaining: {{1}} s
+[resolution_preview_failed]: [Directiva Settings] Unable to preview selected resolution.
+[resolution_preview_expired]: [Directiva Settings] Resolution confirmation expired or the display mode became unavailable.
+[level_missing_scene]: [Directiva] Level '{{1}}' has no destination scene.
+[level_scene_unavailable]: [Directiva] Scene '{{1}}' is not included in Build Profiles.

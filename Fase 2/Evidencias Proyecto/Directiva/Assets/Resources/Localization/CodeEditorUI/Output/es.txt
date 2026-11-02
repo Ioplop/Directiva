@@ -1,5 +1,5 @@
-[title]: Output
+[title]: Consola
 [messages]: Mensajes
-[warnings]: Warnings
+[warnings]: Advertencias
 [errors]: Errores
 [clear]: Limpiar

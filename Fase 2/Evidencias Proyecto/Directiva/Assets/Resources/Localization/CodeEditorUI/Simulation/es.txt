@@ -1,0 +1,19 @@
+[editor]: Editor
+[main_menu]: Menú principal
+[back_to_menu]: Volver al menú principal
+[show_editor]: Abrir editor
+[hide_editor]: Ocultar editor
+[restore_editor]: Volver a ventana lateral
+[expand_editor]: Expandir editor
+[play]: Reproducir
+[stop]: Detener
+[pause]: Pausar
+[slow_motion]: Cámara lenta
+[double_speed]: Velocidad x2
+[quintuple_speed]: Velocidad x5
+[status_playing]: Ejecutando
+[status_stopped]: Detenida
+[status_paused]: Pausada
+[show_solution]: Mostrar solución
+[hide_solution]: Ocultar solución
+[menu_scene_unavailable]: [Directiva] La escena de menú '{{1}}' debe incluirse en los perfiles de compilación.

@@ -1,0 +1,34 @@
+[play]: Jugar
+[options]: Opciones
+[exit]: Salir
+[back]: Atrás
+[levels]: Niveles
+[general]: General
+[sound]: Sonido
+[graphics]: Gráficos
+[controls]: Controles
+[language]: Idioma
+[lang_spanish]: Español
+[lang_english]: Inglés
+[simulate_inactive]: Simular en ventana inactiva
+[volume_master]: Volumen general
+[volume_music]: Volumen de la música
+[volume_ui]: Volumen de la interfaz
+[volume_simulation]: Volumen de la partida / simulación
+[fullscreen]: Pantalla completa
+[resolution]: Resolución
+[mouse_capture]: Atrapar el mouse
+[mouse_always]: Siempre
+[mouse_fullscreen]: En pantalla completa
+[mouse_never]: Nunca
+[yes]: Sí
+[no]: No
+[keep_resolution]: Conservar resolución
+[revert]: Revertir
+[resolution_question]: ¿Conservar esta resolución?
+[resolution_info]: Si no confirmas, se restaurará la selección anterior.
+[time_remaining]: Tiempo restante: {{1}} s
+[resolution_preview_failed]: [Directiva Settings] No se pudo previsualizar la resolución elegida.
+[resolution_preview_expired]: [Directiva Settings] La confirmación de resolución expiró o dejó de estar disponible.
+[level_missing_scene]: [Directiva] El nivel '{{1}}' no tiene escena de destino.
+[level_scene_unavailable]: [Directiva] La escena '{{1}}' no está incluida en los perfiles de compilación.

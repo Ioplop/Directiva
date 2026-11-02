@@ -1,0 +1,75 @@
+[native_entry_module]: Los módulos nativos están reservados y no pueden ser módulos de entrada DIL.
+[global_limit]: El programa requiere {{1}} espacios globales, pero el límite configurado es {{2}}.
+[entry_requires_function]: El módulo DIL principal debe declarar al menos una función.
+[invalid_module]: Nombre de módulo inválido: '{{1}}'.
+[missing_module]: No se encontró el módulo DIL '{{1}}'.
+[imports_at_start]: Las anotaciones # IMPORT deben aparecer al principio del archivo.
+[invalid_import_name]: Nombre de módulo importado inválido: '{{1}}'.
+[global_in_function]: # GLOBAL no puede aparecer dentro de una función.
+[invalid_global_name]: Nombre de variable global inválido: '{{1}}'.
+[function_before_end]: No se puede comenzar una función antes del # END_FUNCTION anterior.
+[invalid_function_name]: Nombre de función inválido: '{{1}}'.
+[duplicate_function]: La función '{{1}}' está declarada más de una vez en este archivo.
+[params_outside_function]: # PARAMS debe aparecer dentro de una función.
+[params_before_body]: # PARAMS debe aparecer antes del cuerpo de la función.
+[duplicate_params]: # PARAMS está declarado más de una vez para esta función.
+[locals_outside_function]: # LOCALS debe aparecer dentro de una función.
+[locals_before_body]: # LOCALS debe aparecer antes del cuerpo de la función.
+[duplicate_locals]: # LOCALS está declarado más de una vez para esta función.
+[end_function_value]: # END_FUNCTION no admite un valor.
+[end_function_without_function]: # END_FUNCTION no tiene un # FUNCTION correspondiente.
+[executable_outside_function]: Las instrucciones ejecutables DIL deben estar dentro de una función.
+[missing_end_function]: La función '{{1}}' no tiene # END_FUNCTION.
+[internal_state]: Estado interno incoherente del parser DIL.
+[duplicate_label]: La etiqueta '{{1}}' está declarada más de una vez en esta función.
+[internal_instruction]: Error interno del parser DIL: una línea ejecutable no generó ninguna instrucción.
+[set_count]: SET requiere una cantidad de elementos no negativa.
+[debug_file]: DEBUG_FILE requiere una ruta no vacía.
+[debug_line]: DEBUG_LINE requiere un número de línea no negativo basado en cero.
+[debug_span]: DEBUG_SPAN requiere un rango válido de offsets semiabierto.
+[tuple_count]: TUPLE requiere una cantidad de elementos no negativa.
+[list_count]: LIST requiere una cantidad de elementos no negativa.
+[range_operand_count]: RANGE requiere exactamente 1, 2 o 3 operandos en la pila.
+[dict_pair_count]: DICT requiere una cantidad de pares no negativa, como máximo int.MaxValue/2.
+[invalid_property_name]: Nombre de propiedad inválido: '{{1}}'.
+[invalid_method_name]: Nombre de método inválido: '{{1}}'.
+[call_method_arg_count]: CALL_METHOD requiere una cantidad de argumentos no negativa, inferior a Int32.MaxValue.
+[invalid_cast_target]: Tipo de destino de CAST desconocido o no compatible: '{{1}}'.
+[native_module_required]: Se debe importar el módulo nativo para '{{1}}'.
+[unknown_function]: Función desconocida: '{{1}}'.
+[invalid_native_symbol]: Símbolo nativo inválido: '{{1}}'.
+[native_module_not_imported]: El módulo nativo '{{1}}' debe estar importado.
+[unknown_native_symbol]: Símbolo nativo desconocido '{{1}}'. ¿Está importado su módulo?
+[call_indirect_arg_count]: CALL_INDIRECT requiere una cantidad de argumentos no negativa, inferior a Int32.MaxValue.
+[function_id_missing]: El ID de función {{1}} no existe en este programa DIL.
+[context_range]: El rango CONTEXT_START [{{1}}, {{2}}) está fuera de los {{3}} espacios locales de '{{4}}'.
+[unknown_instruction]: Instrucción u operación DIL desconocida: '{{1}}'.
+[push_requires_type]: PUSH requiere un tipo.
+[invalid_bool]: Un literal BOOL debe ser TRUE o FALSE.
+[unsupported_push_type]: El tipo PUSH '{{1}}' no está soportado en esta versión de DIL.
+[invalid_jump_label]: Etiqueta de salto inválida: '{{1}}'.
+[unknown_label]: Etiqueta desconocida '{{1}}' en la función '{{2}}'.
+[label_past_function_end]: La etiqueta '{{1}}' apunta más allá del final de la función '{{2}}'.
+[jump_outside_function]: El destino de salto {{1}} está fuera de la función '{{2}}'.
+[int32_value_out_of_range]: El valor '{{1}}' está fuera del rango Int32 requerido por esta instrucción.
+[invalid_int64]: '{{1}}' no es un valor Int64 válido.
+[invalid_parse_symbol]: Símbolo de parseo inválido: '{{1}}'.
+[undefined_parse_symbol]: Símbolo de parseo no definido: '{{1}}'.
+[string_quotes]: El literal STRING debe estar encerrado entre comillas dobles.
+[string_incomplete_escape]: El literal STRING termina con una secuencia de escape incompleta.
+[unicode_escape_digits]: La secuencia \u requiere exactamente cuatro dígitos hexadecimales.
+[invalid_unicode_escape]: Secuencia Unicode inválida: '\u{{1}}'.
+[unsupported_string_escape]: Secuencia de escape STRING no admitida: '\{{1}}'.
+[empty_decimal]: El literal decimal no puede estar vacío.
+[invalid_decimal]: Literal decimal inválido: '{{1}}'.
+[decimal_overflow]: El literal decimal '{{1}}' excede el rango decimal de Directiva.
+[local_slot_out_of_range]: El espacio local {{1}} está fuera de los {{2}} espacios locales de '{{3}}'.
+[global_slot_out_of_range]: El espacio global {{1}} está fuera de los {{2}} espacios globales del programa.
+[missing_params]: La función '{{1}}' no declara # PARAMS.
+[missing_locals]: La función '{{1}}' no declara # LOCALS.
+[function_locals_below_params]: La función '{{1}}' declara {{2}} parámetros, pero solo {{3}} espacios locales.
+[nonnegative_annotation_value]: # {{1}} requiere un valor Int32 no negativo.
+[invalid_symbol_name]: Nombre de símbolo de parseo inválido: '{{1}}'.
+[symbol_requires_integer]: El símbolo de parseo '{{1}}' debe contener exactamente un entero.
+[annotation_requires_value]: # {{1}} requiere un valor después de ':'.
+[operand_count]: {{1}} espera {{2}} operando(s), pero recibió {{3}}.

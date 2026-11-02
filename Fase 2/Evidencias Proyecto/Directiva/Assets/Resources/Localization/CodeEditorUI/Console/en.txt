@@ -1,0 +1,23 @@
+[invalid_script_file]: The selected file is not a valid .dscript script.
+[breakpoint_hit]: [DScript] Breakpoint reached at {{1}}:{{2}}.
+[no_file]: [DScript] No file is selected.
+[compile_start]: [DScript] Compiling {{1}} and parsing DIL...
+[compile_success]: [DScript] Compilation successful ({{1}} modules). Running {{2}}...
+[stopped]: [DScript] Execution stopped.
+[completed]: [DScript] {{1}} returned {{2}}.
+[faulted]: [DScript] {{1}} failed ({{2}}): {{3}}
+[initializer_failed]: [DScript][shared] {{1}}.{{2}} ({{3}}:{{4}}) failed ({{5}}): {{6}}
+[start_failed]: [DScript] Could not start execution: {{1}}
+[cache_failed]: [DScript] Could not save generated DIL: {{1}}
+[diagnostic]: [DScript] {{1}}:{{2}}:{{3}} {{4}}: {{5}}
+[module_error]: [DScript] {{1}}
+[cache_warning]: [DScript] {{1}}
+[script_error]: [DScript] {{1}}
+[function_fallback]: function
+[script_no_function]: Module '{{1}}' does not declare an executable function.
+[script_function_not_found]: Function '{{1}}' does not exist in module '{{2}}'. The editor only runs functions from the selected file.
+[script_function_has_args]: Function '{{1}}' requires {{2}} argument(s). The editor can only run functions without arguments.
+[menu_scene_unavailable]: [Directiva] Menu scene '{{1}}' is not included in Build Profiles.
+[source_unavailable]: Cannot navigate to error: file '{{1}}' no longer exists.
+[source_open_failed]: Could not open '{{1}}' to show the error: {{2}}
+[invalid_module_path]: Path '{{1}}' is not a valid DScript module. Use identifiers without dots for folder and file names.

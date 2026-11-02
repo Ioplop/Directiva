@@ -1,0 +1,19 @@
+[editor]: Editor
+[main_menu]: Main menu
+[back_to_menu]: Return to main menu
+[show_editor]: Open editor
+[hide_editor]: Hide editor
+[restore_editor]: Restore docked editor
+[expand_editor]: Expand editor
+[play]: Play
+[stop]: Stop
+[pause]: Pause
+[slow_motion]: Slow motion
+[double_speed]: 2× speed
+[quintuple_speed]: 5× speed
+[status_playing]: Running
+[status_stopped]: Stopped
+[status_paused]: Paused
+[show_solution]: Show solution
+[hide_solution]: Hide solution
+[menu_scene_unavailable]: [Directiva] Menu scene '{{1}}' must be included in Build Profiles.
