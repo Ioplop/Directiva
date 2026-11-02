@@ -166,9 +166,11 @@ namespace DSCompilation.DScript.Semantics
                 if (stmt is ImportStatement import)
                 {
                     module.ImportedPaths.Add(import.ModuleName);
-                    string alias = import.Alias ?? import.ModuleName.Split('.')[0];
-                    string target = import.Alias == null ? import.ModuleName.Split('.')[0] : import.ModuleName;
-                    AddImport(module, alias, new DScriptSymbol(alias, target, SymbolKind.Module), stmt.Span, true);
+                    // The source path identifies the module; its last segment is the visible name.
+                    // An explicit 'as' replaces that name, never the module's full identity.
+                    string alias = import.Alias ?? import.ModuleName.Substring(import.ModuleName.LastIndexOf('.') + 1);
+                    AddImport(module, alias, new DScriptSymbol(alias, import.ModuleName, SymbolKind.Module),
+                        stmt.Span, true);
                 }
                 else if (stmt is FromImportStatement from)
                 {
@@ -216,7 +218,7 @@ namespace DSCompilation.DScript.Semantics
         }
 
         private void AddImport(DScriptModuleSymbols module, string alias, DScriptSymbol target,
-            SourceSpan span, bool allowSameModulePrefix)
+            SourceSpan span, bool allowSameModuleReimport)
         {
             if (module.ExportsInternal.TryGetValue(alias, out DScriptSymbol declared))
             {
@@ -228,8 +230,18 @@ namespace DSCompilation.DScript.Semantics
             }
             if (module.ImportsInternal.TryGetValue(alias, out var existing))
             {
-                if (allowSameModulePrefix && target.Kind == SymbolKind.Module &&
-                    existing.Kind == SymbolKind.Module && existing.QualifiedName == target.QualifiedName) return;
+                if (allowSameModuleReimport && target.Kind == SymbolKind.Module &&
+                    existing.Kind == SymbolKind.Module)
+                {
+                    // Reimporting the exact same module is unambiguous. Different modules
+                    // sharing a name must be distinguished explicitly with 'as'.
+                    if (existing.QualifiedName == target.QualifiedName) return;
+                    Error(module.Name, "DS4030", "Modules '" + existing.QualifiedName +
+                        "' and '" + target.QualifiedName + "' both use import name '" + alias +
+                        "'. Use 'as' to distinguish them.", span, "module_name_collision",
+                        alias, existing.QualifiedName, target.QualifiedName);
+                    return;
+                }
                 Error(module.Name, "DS4004", "Import alias '" + alias + "' is already defined.", span, "duplicate_import_alias", alias);
                 return;
             }

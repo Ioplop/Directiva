@@ -56,7 +56,7 @@ namespace Directiva.EditorTests.DScript
                 ("DirectArity", "def f(x):\n    return x\ndef main():\n    return f(1,2)\n", "DS4014"),
                 ("ImportedArity", "from util import twice\ndef main():\n    return twice()\n", "DS4014"),
                 ("ImportedModuleAsCall", "import math\ndef f():\n    return math(1)\n", "DS4013"),
-                ("ModuleNamespaceAsValue", "import util.mod\ndef f():\n    return util.mod\n", "DS4013")
+                ("ModuleNamespaceAsValue", "import util.mod\ndef f():\n    return mod\n", "DS4013")
             };
             foreach (var fixture in invalid)
                 Add(fixture.Name, "Reject invalid static construct: " + fixture.Name, t =>

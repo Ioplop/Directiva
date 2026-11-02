@@ -34,6 +34,7 @@
 [duplicate_shared_initializer]: La variable shared '{{1}}' tiene más de un inicializador en el programa.
 [no_exported_symbol]: El módulo '{{1}}' no exporta el símbolo '{{2}}'.
 [import_conflict]: El import '{{1}}' entra en conflicto con una declaración de este módulo.
+[module_name_collision]: Los módulos '{{2}}' y '{{3}}' usan el mismo nombre importado '{{1}}'. Usa 'as' para distinguirlos.
 [duplicate_import_alias]: El alias '{{1}}' ya está definido.
 [duplicate_parameter]: Parámetro duplicado: '{{1}}'.
 [parameter_shared_collision]: El parámetro '{{1}}' entra en conflicto con una variable shared.

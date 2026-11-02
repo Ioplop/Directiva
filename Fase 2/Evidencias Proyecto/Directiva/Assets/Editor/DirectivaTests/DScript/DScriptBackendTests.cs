@@ -205,6 +205,23 @@ namespace Directiva.EditorTests.DScript
                 var vm = Execute(t, p);
                 t.Equal(12L, unchecked((long)vm.ReturnValue.value), "imported function result");
             });
+            Add("ShortNamedModuleCall", "Full module path import compiles and calls through its basename", t =>
+            {
+                var p = Compile(t, "import Ejemplos.prime_testing\ndef main():\n    return prime_testing.primos()\n",
+                    new Dictionary<string, string> { ["Ejemplos.prime_testing"] = "def primos():\n    return 17\n" });
+                var vm = Execute(t, p);
+                t.Equal(17L, unchecked((long)vm.ReturnValue.value), "call through short module name");
+            });
+            Add("DisambiguatedModuleCalls", "Two modules with the same basename link to different functions", t =>
+            {
+                var p = Compile(t,
+                    "import alpha.calc\nimport beta.calc as other\ndef main():\n    return calc.value() + other.value()\n",
+                    new Dictionary<string, string> {
+                        ["alpha.calc"] = "def value():\n    return 4\n",
+                        ["beta.calc"] = "def value():\n    return 7\n" });
+                var vm = Execute(t, p);
+                t.Equal(11L, unchecked((long)vm.ReturnValue.value), "calls do not mix up module identities");
+            });
             Add("FromImportActual", "From-import links across module graph", t =>
             {
                 var p = Compile(t, "from helper import twice\ndef main():\n    return twice(6)\n",

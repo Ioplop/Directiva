@@ -51,12 +51,14 @@ namespace Directiva.EditorTests.DScript
                 t.Equal("utils.calc.square", a.ExpressionSymbols[call.Callee].QualifiedName, "qualified function");
                 t.Equal(2, a.Modules.Count, "module count");
             });
-            Add("NestedModule", "import utils.calc exposes namespace chain utils.calc.square", t =>
+            Add("ShortModuleName", "import utils.calc exposes calc.square by the filename", t =>
             {
-                var a = DScriptTestHarness.Ok(t, "import utils.calc\ndef f():\n    return utils.calc.square(3)\n",
+                var a = DScriptTestHarness.Ok(t, "import utils.calc\ndef f():\n    return calc.square(3)\n",
                     new Dictionary<string, string> { ["utils.calc"] = "def square(x):\n    return x*x\n" });
                 var call = ((ReturnStatement)DScriptTestHarness.Function(a, "f").Body[0]).Value as CallExpression;
-                t.Equal("utils.calc.square", a.ExpressionSymbols[call.Callee].QualifiedName, "qualified nested module");
+                t.Equal("utils.calc.square", a.ExpressionSymbols[call.Callee].QualifiedName, "qualified module function");
+                t.Equal("utils.calc", a.ModuleSymbols["test"].Imports["calc"].QualifiedName, "full source module identity");
+                t.Check(!a.ModuleSymbols["test"].Imports.ContainsKey("utils"), "parent path is not a namespace alias");
             });
             Add("ModuleAlias", "import utils.calc as c exposes c.square", t =>
             {
@@ -64,6 +66,75 @@ namespace Directiva.EditorTests.DScript
                     new Dictionary<string, string> { ["utils.calc"] = "def square(x):\n    return x*x\n" });
                 var call = ((ReturnStatement)DScriptTestHarness.Function(a, "f").Body[0]).Value as CallExpression;
                 t.Equal("utils.calc.square", a.ExpressionSymbols[call.Callee].QualifiedName, "renamed namespace");
+            });
+            Add("UnaliasedPathIsNotNamespace", "Importing a file does not implicitly bind its parent directories", t =>
+                DScriptTestHarness.Error(t,
+                    "import utils.calc\ndef f():\n    return utils.calc.square(3)\n", "DS4016",
+                    new Dictionary<string, string> { ["utils.calc"] = "def square(x):\n    return x*x\n" }));
+            Add("SameBasenameCollision", "Distinct imported files with the same basename require aliases", t =>
+            {
+                var a = DScriptTestHarness.Analyze(t,
+                    "import alpha.calc\nimport beta.calc\ndef f():\n    return calc.value()\n",
+                    new Dictionary<string, string> {
+                        ["alpha.calc"] = "def value():\n    return 1\n",
+                        ["beta.calc"] = "def value():\n    return 2\n" });
+                var conflict = a.Diagnostics.Single(d => d.Code == "DS4030");
+                t.Equal("test", conflict.Module, "diagnostic belongs to importer");
+                t.Equal(2, conflict.Span.Line, "second import is highlighted");
+                t.Equal("module_name_collision", conflict.LocalizationKey, "translatable diagnostic");
+                t.Equal("calc", conflict.LocalizationArguments[0], "colliding basename");
+                t.Equal("alpha.calc", conflict.LocalizationArguments[1], "first module");
+                t.Equal("beta.calc", conflict.LocalizationArguments[2], "second module");
+            });
+            Add("SameBasenameAliased", "Explicit aliases disambiguate equally named modules", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "import alpha.calc as first\nimport beta.calc as second\ndef f():\n    return first.value() + second.value()\n",
+                    new Dictionary<string, string> {
+                        ["alpha.calc"] = "def value():\n    return 1\n",
+                        ["beta.calc"] = "def value():\n    return 2\n" });
+                var expression = ((ReturnStatement)DScriptTestHarness.Function(a, "f").Body[0]).Value as BinaryExpression;
+                t.Equal("alpha.calc.value", a.ExpressionSymbols[((CallExpression)expression.Left).Callee].QualifiedName,
+                    "first module resolved uniquely");
+                t.Equal("beta.calc.value", a.ExpressionSymbols[((CallExpression)expression.Right).Callee].QualifiedName,
+                    "second module resolved uniquely");
+            });
+            Add("OneAliasDisambiguates", "Only one colliding module needs an explicit alias", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "import alpha.calc\nimport beta.calc as other\ndef f():\n    return calc.value() + other.value()\n",
+                    new Dictionary<string, string> {
+                        ["alpha.calc"] = "def value():\n    return 1\n",
+                        ["beta.calc"] = "def value():\n    return 2\n" });
+                t.Equal(2, a.ModuleSymbols["test"].Imports.Count, "two distinct names");
+            });
+            Add("RepeatedModuleIsIdempotent", "Repeating an import of the same module is not ambiguous", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "import alpha.calc\nimport alpha.calc\ndef f():\n    return calc.value()\n",
+                    new Dictionary<string, string> { ["alpha.calc"] = "def value():\n    return 1\n" });
+                t.Equal(1, a.ModuleSymbols["test"].Imports.Count, "same binding added only once");
+            });
+            Add("DuplicateExplicitModuleAlias", "Two different modules cannot reuse the same explicit alias", t =>
+                DScriptTestHarness.Error(t,
+                    "import alpha.calc as c\nimport beta.calc as c\n", "DS4030",
+                    new Dictionary<string, string> {
+                        ["alpha.calc"] = "def value():\n    return 1\n",
+                        ["beta.calc"] = "def value():\n    return 2\n" }));
+            Add("ShortNameDeclarationCollision", "A short module name cannot collide with a local declaration", t =>
+                DScriptTestHarness.Error(t, "import alpha.calc\ndef calc():\n    pass\n", "DS4004",
+                    new Dictionary<string, string> { ["alpha.calc"] = "def value():\n    return 1\n" }));
+            Add("ImportNamesAreModuleScoped", "Different importers can use the same basename independently", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "from x import call_x\nfrom y import call_y\ndef f():\n    return call_x() + call_y()\n",
+                    new Dictionary<string, string> {
+                        ["x"] = "import alpha.calc\ndef call_x():\n    return calc.value()\n",
+                        ["y"] = "import beta.calc\ndef call_y():\n    return calc.value()\n",
+                        ["alpha.calc"] = "def value():\n    return 1\n",
+                        ["beta.calc"] = "def value():\n    return 2\n" });
+                t.Equal("alpha.calc", a.ModuleSymbols["x"].Imports["calc"].QualifiedName, "x sees alpha");
+                t.Equal("beta.calc", a.ModuleSymbols["y"].Imports["calc"].QualifiedName, "y sees beta");
             });
             Add("FromUserWildcard", "User module wildcard imports functions and globals", t =>
             {
@@ -120,8 +191,8 @@ namespace Directiva.EditorTests.DScript
                 DScriptTestHarness.Error(t, "import math\ndef f():\n    math.pi = 3\n", "DS4012"));
             Add("NestedImportNotLoaded", "Imports inside functions are not valid scope declarations", t =>
                 DScriptTestHarness.Error(t, "def f():\n    import math\n", "DS4010"));
-            Add("NamespaceNotImported", "Missing intermediate import path is diagnosed", t =>
-                DScriptTestHarness.Error(t, "import util.mod\ndef f():\n    return util.other.value\n", "DS4015",
+            Add("NamespaceNotImported", "A member outside the imported module is diagnosed", t =>
+                DScriptTestHarness.Error(t, "import util.mod\ndef f():\n    return mod.other.value\n", "DS4015",
                     new Dictionary<string, string> { ["util.mod"] = "def value():\n    return 1\n" }));
             Add("DependencyOrder", "Dependencies-first graph traversal is deterministic", t =>
             {
@@ -130,12 +201,13 @@ namespace Directiva.EditorTests.DScript
                         ["b"] = "def f():\n    pass\n" });
                 t.Equal("b,a,test", string.Join(",", a.DependenciesFirst), "compilation order");
             });
-            Add("RepeatedRootImports", "Multiple submodule imports share their root namespace", t =>
+            Add("DistinctModuleBasenames", "Different module basenames are independently accessible", t =>
             {
-                var a = DScriptTestHarness.Ok(t, "import util.one\nimport util.two\ndef f():\n    return util.one.a() + util.two.b()\n",
+                var a = DScriptTestHarness.Ok(t, "import util.one\nimport util.two\ndef f():\n    return one.a() + two.b()\n",
                     new Dictionary<string, string> { ["util.one"] = "def a():\n    return 1\n",
                         ["util.two"] = "def b():\n    return 2\n" });
                 t.Equal(3, a.Modules.Count, "module count");
+                t.Equal(2, a.ModuleSymbols["test"].Imports.Count, "independent names");
             });
             Add("MaximumModules", "Imported module graph obeys a bounded module count", t =>
             {
