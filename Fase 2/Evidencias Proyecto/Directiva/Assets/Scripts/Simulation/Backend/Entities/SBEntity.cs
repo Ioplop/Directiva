@@ -1,4 +1,5 @@
 using DMath;
+using DSEvents;
 
 namespace DSimulation
 {
@@ -23,6 +24,9 @@ namespace DSimulation
                     rotation += 360;
             } 
         }
+        // These are the position and rotation before Update. Useful to see if anything changed and notify the frontend.
+        internal FixedVector2 OriginalPosition { get; private set; }
+        internal Fixed OriginalRotation { get; private set; }
 
         // COLLISION BEHAVIOR
         public Fixed Radius {  get; protected set; }
@@ -68,6 +72,43 @@ namespace DSimulation
         }
 
         /// <summary>
+        /// Creates an event that informs the current entity position and rotation when they have changed.
+        /// Then records the old position so any further changes trigger a new event.
+        /// </summary>
+        internal void NotifyTransform()
+        {
+            if (Position != OriginalPosition)
+                simulation.NotifyEvent(new EventPosition(id, Position));
+            if (Rotation != OriginalRotation)
+                simulation.NotifyEvent(new EventRotation(id, Rotation));
+            RecordTransform();
+        }
+
+        /// <summary>
+        /// Creates an event that informs the current entity shields.
+        /// </summary>
+        internal void NotifyShields()
+        {
+            simulation.NotifyEvent(new EventShields(id, Shields));
+        }
+
+        /// <summary>
+        /// Creates an event that informs the current entity health.
+        /// </summary>
+        internal void NotifyHealth()
+        {
+            simulation.NotifyEvent(new EventHealth(id, Health));
+        }
+
+        /// <summary>
+        /// Creates an event that informs of this entities' death.
+        /// </summary>
+        internal void NotifyDeath()
+        {
+            simulation.NotifyEvent(new EventDeath(id));
+        }
+
+        /// <summary>
         /// Called by Simulation to register an entity upon creation.
         /// </summary>
         /// <param name="simulation">Simulation to which this Entity belong.</param>
@@ -82,6 +123,17 @@ namespace DSimulation
 
             this.simulation = simulation;
             this.id = id;
+
+            RecordTransform();
+        }
+
+        /// <summary>
+        /// Records the current state of position and rotation so we can notify any changes in the future.
+        /// </summary>
+        internal void RecordTransform()
+        {
+            OriginalPosition = Position;
+            OriginalRotation = Rotation;
         }
 
         /// <summary>
@@ -91,7 +143,7 @@ namespace DSimulation
         {
             if (!alive)
                 return;
-            // Do something every tick!
+
             RegenShields();
         }
 
@@ -103,13 +155,16 @@ namespace DSimulation
         {
             if (!alive)
                 return;
+            NotifyTransform();
             alive = false;
             simulation.MarkRemoval(id);
+            NotifyDeath();
         }
 
         protected virtual void Heal(Fixed dmg)
         {
             Health = (Health + dmg).Clamp(0, MaxHealth);
+            NotifyHealth();
         }
 
         /// <summary>
@@ -123,19 +178,23 @@ namespace DSimulation
             {
                 // This is healing rather than damage. No healing is planned but we will still implement that, by default, heal only applies to health.
                 // (Like starcraft when you repair or heal a protoss!)
-                Heal(dmg);
+                Heal(-dmg);
                 return;
             }
             // TODO: Some sort of event thing that tells the front end to apply a damage animation?
             if (Shields >= dmg)
             {
                 Shields -= dmg;
+                NotifyShields();
             }
             else
             {
+
                 dmg -= Shields;
                 Shields = 0;
                 Health -= dmg;
+                NotifyShields();
+                NotifyHealth();
                 if (Health <= 0) Die();
             }
             LastDamage = simulation.Time;
@@ -149,6 +208,7 @@ namespace DSimulation
             if (Shields < MaxShields && simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
             {
                 Shields = (Shields + ShieldRegen * SConstants.deltaTime).Clamp(0, MaxShields);
+                NotifyShields();
             }
         }
 

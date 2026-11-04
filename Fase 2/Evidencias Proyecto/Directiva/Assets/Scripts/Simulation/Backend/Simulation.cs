@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DMath;
+using DSEvents;
 
 namespace DSimulation
 {
@@ -37,6 +38,9 @@ namespace DSimulation
         private readonly List<SBEntity>[,] worldSpace;
         // The size of the world. The world is a rectangle starting at (0, 0) and ending at this value.
         private readonly FixedVector2 dimensions;
+
+        // This is how the frontend sees the simulation.
+        private readonly Queue<Event> events = new();
         
         /// <summary>
         /// Creates a new simulation world.
@@ -74,6 +78,20 @@ namespace DSimulation
             }
         }
 
+        internal void NotifyEvent(Event e){
+            events.Enqueue(e);
+        }
+
+        /// <summary>
+        /// Tries to consume a single event.
+        /// </summary>
+        /// <param name="e">Event consumed</param>
+        /// <returns>true if an event was consumed. false otherwise.</returns>
+        public bool TryConsumeEvent(out Event e)
+        {
+            return events.TryDequeue(out e);
+        }
+
         /// <summary>
         /// Does the necessary processes to be ready to start updating the simulation. Should be called just before the first Update.
         /// </summary>
@@ -86,7 +104,7 @@ namespace DSimulation
             Tick = 0;
             UpdateWorldSpace();
         }
-        
+
         /// <summary>
         /// Performs a single tick simulation that lasts a fixed delta time declared in SimulationConstants.
         /// </summary>
@@ -94,6 +112,8 @@ namespace DSimulation
         {
             if (!started)
                 Start();
+
+            events.Enqueue(new EventAdvance(Time, Tick));
 
             // Update each entity according to their own behavior.
             foreach (var entity in entityList)
@@ -113,10 +133,24 @@ namespace DSimulation
             ApplyRemovalQueue();
             ApplyCreationQueue();
 
+            NotifyMovements();
+
             // Update time state
             Time += SConstants.deltaTime;
             Tick++;
             // Add LateUpdate here only if necessary
+        }
+
+        /// <summary>
+        /// Records movement and rotation events for each entity that changed.
+        /// </summary>
+        private void NotifyMovements()
+        {
+            foreach (SBEntity entity in entityList)
+            {
+                if (entity.alive)
+                    entity.NotifyTransform();
+            }
         }
 
         /// <summary>
@@ -200,6 +234,11 @@ namespace DSimulation
             entityList.Add(entity);
             entityRegistry.Add(id, entity);
             entity.Register(this, id);
+
+            if (entity is SBUnit unit)
+                NotifyEvent(EventCreateUnit.FromUnit(unit));
+            // TODO: Add creation events for nexus and resources when those classes exist
+
             return id;
         }
 

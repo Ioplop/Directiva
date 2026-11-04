@@ -2,7 +2,7 @@ using DMath;
 
 namespace DSimulation
 {
-    class SBUnit : SBEntity
+    public class SBUnit : SBVMEntity
     {
         internal static readonly Fixed followDistance = Fixed.Decimal(1, 1); // 0.1
         internal static readonly Fixed maxSpeed = 5;
@@ -27,13 +27,14 @@ namespace DSimulation
             Position,
         }
 
-        public SBUnit(FixedVector2 position, Fixed rotation) : base(
+        public SBUnit(int side, FixedVector2 position, Fixed rotation) : base(
+            side,
             position, rotation, 
             SConstants.UnitRadius, SConstants.UnitPriority, 
             SConstants.UnitHealth, SConstants.UnitShields, SConstants.UnitShieldRegen
             )
-        {
-            
+        { 
+
         }
 
         /// <summary>
