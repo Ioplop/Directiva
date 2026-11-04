@@ -111,6 +111,10 @@ namespace Directiva.EditorTests
         private static void SimulationCollisions() => DirectivaTestRunner.StartCategory("Simulation", "Collisions");
         [MenuItem("Directiva/Tests/Simulation/Determinism/TestEverything", false, 201)]
         private static void SimulationDeterminism() => DirectivaTestRunner.StartCategory("Simulation", "Determinism");
+        [MenuItem("Directiva/Tests/Simulation/Units/TestEverything", false, 201)]
+        private static void SimulationUnits() => DirectivaTestRunner.StartCategory("Simulation", "Units");
+        [MenuItem("Directiva/Tests/Simulation/Events/TestEverything", false, 201)]
+        private static void SimulationEvents() => DirectivaTestRunner.StartCategory("Simulation", "Events");
 
         [MenuItem("Directiva/Tests/Math/TestEverything", false, 210)]
         private static void MathAll() => DirectivaTestRunner.StartCategory("Math");

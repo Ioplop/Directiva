@@ -160,11 +160,16 @@ namespace DSimulation
             simulation.MarkRemoval(id);
             NotifyDeath();
         }
-
-        protected virtual void Heal(Fixed dmg)
+        
+        protected virtual void Heal(Fixed dmg) 
         {
-            Health = (Health + dmg).Clamp(0, MaxHealth);
-            NotifyHealth();
+            Fixed newHealth = (Health + dmg).Clamp(0, MaxHealth);
+
+            if (newHealth != Health)
+            {
+                Health = newHealth;
+                NotifyHealth();
+            }
         }
 
         /// <summary>
@@ -174,6 +179,10 @@ namespace DSimulation
         /// <param name="dmg">Damage to apply. Negative numbers heal, but only health.</param>
         protected virtual void Damage(Fixed dmg)
         {
+            if (dmg == 0)
+            {
+                return;
+            }
             if (dmg < 0)
             {
                 // This is healing rather than damage. No healing is planned but we will still implement that, by default, heal only applies to health.
@@ -189,11 +198,12 @@ namespace DSimulation
             }
             else
             {
-
-                dmg -= Shields;
-                Shields = 0;
+                if (Shields > 0){
+                    dmg -= Shields;
+                    Shields = 0;
+                    NotifyShields();
+                }
                 Health -= dmg;
-                NotifyShields();
                 NotifyHealth();
                 if (Health <= 0) Die();
             }
@@ -205,7 +215,7 @@ namespace DSimulation
         /// </summary>
         protected virtual void RegenShields()
         {
-            if (Shields < MaxShields && simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
+            if (Shields < MaxShields && ShieldRegen != 0 && simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
             {
                 Shields = (Shields + ShieldRegen * SConstants.deltaTime).Clamp(0, MaxShields);
                 NotifyShields();

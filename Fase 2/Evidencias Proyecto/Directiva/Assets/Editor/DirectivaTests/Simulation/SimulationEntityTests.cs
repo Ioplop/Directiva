@@ -70,10 +70,10 @@ namespace Directiva.EditorTests.SimulationTests
             {
                 World world = SimulationTestHarness.NewWorld();
                 var entity = SimulationTestHarness.Add(world, 5, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(1, entity.id, "registered on first update");
                 t.Equal(1L, world.Tick, "tick");
-                t.Equal((Fixed)1, world.Time, "time");
+                t.Equal(SConstants.deltaTime, world.Time, "one fixed timestep");
             });
 
             Add("WorldsHaveIndependentIds", "IDs are per simulation, not global", t =>
@@ -145,7 +145,7 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Check(!entity.alive, "entity must be dead");
                 t.Check(SimulationTestHarness.Registry(world).ContainsKey(entity.id),
                     "removal must be deferred until Update");
-                world.Update(1);
+                world.Update();
                 t.Check(!SimulationTestHarness.Registry(world).ContainsKey(entity.id),
                     "registry should no longer contain dead entity");
                 t.Equal(0, SimulationTestHarness.Entities(world).Count, "list after removal");
@@ -159,9 +159,9 @@ namespace Directiva.EditorTests.SimulationTests
                 SimulationTestHarness.Kill(entity);
                 t.Check(!entity.alive, "alive flag must change immediately");
                 t.Equal(1, SimulationTestHarness.Entities(world).Count, "still in list before tick");
-                world.Update(1);
+                world.Update();
                 t.Equal(0, SimulationTestHarness.Entities(world).Count, "removed after tick");
-                world.Update(1);
+                world.Update();
                 t.Equal(0, SimulationTestHarness.Entities(world).Count, "no repeated removal");
             });
 
@@ -172,9 +172,9 @@ namespace Directiva.EditorTests.SimulationTests
                 var second = SimulationTestHarness.Add(world, 7, 7, 1);
                 world.Start();
                 SimulationTestHarness.Kill(first);
-                world.Update(1);
+                world.Update();
                 var third = SimulationTestHarness.Add(world, 11, 11, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(1, first.id, "first ID preserved on dead object");
                 t.Equal(2, second.id, "second ID preserved");
                 t.Equal(3, third.id, "new ID must be monotonic");
@@ -189,7 +189,7 @@ namespace Directiva.EditorTests.SimulationTests
                 var entity = SimulationTestHarness.Add(world, 5, 5, 1);
                 t.Equal(0, entity.id, "pending entity has no ID");
                 t.Equal(0, SimulationTestHarness.Registry(world).Count, "pending entity not registered");
-                world.Update(1);
+                world.Update();
                 t.Equal(1, entity.id, "registered during tick");
                 t.Equal(1, SimulationTestHarness.Registry(world).Count, "registry updated");
             });
@@ -201,7 +201,7 @@ namespace Directiva.EditorTests.SimulationTests
                 world.Start();
                 SimulationTestHarness.Kill(oldEntity);
                 var newEntity = SimulationTestHarness.Add(world, 10, 10, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(2, newEntity.id, "new ID");
                 t.Equal(1, SimulationTestHarness.Registry(world).Count, "registry size");
                 t.Check(!SimulationTestHarness.Registry(world).ContainsKey(1), "dead ID removed");
@@ -209,27 +209,27 @@ namespace Directiva.EditorTests.SimulationTests
                     "entity list now contains new entity");
             });
 
-            Add("UpdateTimeAndTicks", "Time accumulates Fixed deltas while Tick increments by one", t =>
+            Add("UpdateTimeAndTicks", "Each Update advances exactly one fixed 0.02-second tick", t =>
             {
                 World world = SimulationTestHarness.NewWorld();
-                world.Update(1);
-                world.Update(SimulationTestHarness.Raw(5000));
-                world.Update(SimulationTestHarness.Raw(2500));
+                world.Update();
+                world.Update();
+                world.Update();
                 t.Equal(3L, world.Tick, "three ticks");
-                t.Equal(SimulationTestHarness.Raw(17500), world.Time, "1 + 0.5 + 0.25");
+                t.Equal(SConstants.deltaTime * 3, world.Time, "three fixed timesteps");
             });
 
             Add("IndependentClocks", "Simulations have independent Tick and Time counters", t =>
             {
                 World left = SimulationTestHarness.NewWorld();
                 World right = SimulationTestHarness.NewWorld();
-                left.Update(1);
-                left.Update(1);
-                right.Update(SimulationTestHarness.Raw(5000));
+                left.Update();
+                left.Update();
+                right.Update();
                 t.Equal(2L, left.Tick, "left tick");
                 t.Equal(1L, right.Tick, "right tick");
-                t.Equal((Fixed)2, left.Time, "left time");
-                t.Equal(SimulationTestHarness.Raw(5000), right.Time, "right time");
+                t.Equal(SConstants.deltaTime * 2, left.Time, "left time");
+                t.Equal(SConstants.deltaTime, right.Time, "right time");
             });
         }
     }

@@ -73,7 +73,7 @@ namespace Directiva.EditorTests.SimulationTests
                 var cells = SimulationTestHarness.Cells(world);
                 t.Check(cells[1, 1].Contains(entity), "initial cell");
                 SimulationTestHarness.Place(entity, 9, 9);
-                world.Update(1);
+                world.Update();
                 t.Check(!cells[1, 1].Contains(entity), "old cell cleared");
                 t.Check(cells[4, 4].Contains(entity), "new cell populated");
                 t.Equal(1, SimulationTestHarness.CountCellReferences(world, entity), "single cell occupancy");
@@ -83,7 +83,7 @@ namespace Directiva.EditorTests.SimulationTests
             {
                 World world = SimulationTestHarness.NewWorld();
                 var entity = SimulationTestHarness.Add(world, -5, -8, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(1, 1), entity.Position, "clamped position");
                 SimulationTestHarness.AssertInside(t, entity, 21, 21);
             });
@@ -92,7 +92,7 @@ namespace Directiva.EditorTests.SimulationTests
             {
                 World world = SimulationTestHarness.NewWorld();
                 var entity = SimulationTestHarness.Add(world, 30, 40, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(20, 20), entity.Position, "clamped position");
                 SimulationTestHarness.AssertInside(t, entity, 21, 21);
             });
@@ -102,7 +102,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var quarter = SimulationTestHarness.Raw(2500);
                 var entity = SimulationTestHarness.Add(world, 0, 0, quarter);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(quarter, quarter), entity.Position, "0.25 radius clamp");
                 SimulationTestHarness.AssertInside(t, entity, 21, 21);
             });
@@ -111,7 +111,7 @@ namespace Directiva.EditorTests.SimulationTests
             {
                 World world = SimulationTestHarness.NewWorld();
                 var entity = SimulationTestHarness.Add(world, 9, 13, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(9, 13), entity.Position, "no unwanted movement");
             });
 
@@ -120,7 +120,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 1, 1, 1);
                 var b = SimulationTestHarness.Add(world, 20, 20, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(1, 1), a.Position, "lower boundary");
                 t.Equal(SimulationTestHarness.P(20, 20), b.Position, "upper boundary");
             });

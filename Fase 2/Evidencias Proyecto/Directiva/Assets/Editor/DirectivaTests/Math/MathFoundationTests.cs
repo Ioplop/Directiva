@@ -43,6 +43,22 @@ namespace Directiva.EditorTests.MathTests
                 t.Equal(new Fixed(25000, raw: true), a / b, "division");
             });
 
+            Add("Fixed", "DecimalConstructor", "Decimal constructs exact base-10 values including negatives", t =>
+            {
+                t.Equal(new Fixed(2500, raw: true), Fixed.Decimal(25, 2), "0.25");
+                t.Equal(new Fixed(-12500, raw: true), Fixed.Decimal(-125, 2), "-1.25");
+                t.Equal((Fixed)5, Fixed.Decimal(5, 0), "whole number");
+                t.Equal(new Fixed(1, raw: true), Fixed.Decimal(1, 4), "minimum precision");
+            });
+
+            Add("Fixed", "DecimalNegativeDigitsRejected", "Decimal rejects negative decimal-digit counts", t =>
+            {
+                bool rejected = false;
+                try { Fixed.Decimal(10, -1); }
+                catch (ArgumentOutOfRangeException) { rejected = true; }
+                t.Check(rejected, "negative precision should be rejected");
+            });
+
             Add("Fixed", "RoundTies", "RoundToLong ties round away from zero", t =>
             {
                 t.Equal(2L, Fixed.RoundToLong(new Fixed(15000, raw: true)), "round +1.5");

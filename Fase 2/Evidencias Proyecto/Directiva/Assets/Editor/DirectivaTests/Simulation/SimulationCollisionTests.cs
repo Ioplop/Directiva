@@ -18,7 +18,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1);
                 var b = SimulationTestHarness.Add(world, 9, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(5, 5), a.Position, "first position");
                 t.Equal(SimulationTestHarness.P(9, 5), b.Position, "second position");
             });
@@ -28,7 +28,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1);
                 var b = SimulationTestHarness.Add(world, 7, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(5, 5), a.Position, "first tangent");
                 t.Equal(SimulationTestHarness.P(7, 5), b.Position, "second tangent");
             });
@@ -38,7 +38,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1);
                 var b = SimulationTestHarness.Add(world, 6, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(45000), 5),
                     a.Position, "first corrected position");
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(65000), 5),
@@ -52,7 +52,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1);
                 var b = SimulationTestHarness.Add(world, 7, 5, 2);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(45000), 5),
                     a.Position, "first position");
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(75000), 5),
@@ -66,7 +66,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1, collides: false);
                 var b = SimulationTestHarness.Add(world, 6, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(5, 5), a.Position, "noncolliding entity");
                 t.Equal(SimulationTestHarness.P(6, 5), b.Position, "other entity");
             });
@@ -78,7 +78,7 @@ namespace Directiva.EditorTests.SimulationTests
                 var live = SimulationTestHarness.Add(world, 6, 5, 1);
                 world.Start();
                 SimulationTestHarness.Kill(dead);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(6, 5), live.Position, "survivor stays put");
                 t.Equal(1, SimulationTestHarness.Registry(world).Count, "only survivor remains");
             });
@@ -88,7 +88,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1, priority: 3);
                 var b = SimulationTestHarness.Add(world, 6, 5, 1, priority: 1);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(4, 5), a.Position, "larger priority moves fully");
                 t.Equal(SimulationTestHarness.P(6, 5), b.Position, "smaller priority stays");
             });
@@ -98,7 +98,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 1, priority: 1);
                 var b = SimulationTestHarness.Add(world, 6, 5, 1, priority: 3);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(5, 5), a.Position, "smaller priority stays");
                 t.Equal(SimulationTestHarness.P(7, 5), b.Position, "larger priority moves fully");
             });
@@ -108,7 +108,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld(seed: 7);
                 var a = SimulationTestHarness.Add(world, 10, 10, 1);
                 var b = SimulationTestHarness.Add(world, 10, 10, 1);
-                world.Update(1);
+                world.Update();
                 t.Equal((Fixed)4, FixedVector2.SqrDistance(a.Position, b.Position),
                     "squared distance after separating two coincident radius-1 circles");
                 SimulationTestHarness.AssertInside(t, a, 21, 21);
@@ -120,7 +120,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 5, 5, 0);
                 var b = SimulationTestHarness.Add(world, 5, 5, 0);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(5, 5), a.Position, "first zero-radius entity");
                 t.Equal(SimulationTestHarness.P(5, 5), b.Position, "second zero-radius entity");
             });
@@ -131,7 +131,7 @@ namespace Directiva.EditorTests.SimulationTests
                 var radius = SimulationTestHarness.Raw(6000);
                 var a = SimulationTestHarness.Add(world, SimulationTestHarness.Raw(17000), 5, radius);
                 var b = SimulationTestHarness.Add(world, SimulationTestHarness.Raw(23000), 5, radius);
-                world.Update(1);
+                world.Update();
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(14000), 5),
                     a.Position, "first entity across border");
                 t.Equal(SimulationTestHarness.P(SimulationTestHarness.Raw(26000), 5),
@@ -143,7 +143,7 @@ namespace Directiva.EditorTests.SimulationTests
                 World world = SimulationTestHarness.NewWorld();
                 var a = SimulationTestHarness.Add(world, 1, 1, 1);
                 var b = SimulationTestHarness.Add(world, SimulationTestHarness.Raw(15000), 1, 1);
-                world.Update(1);
+                world.Update();
                 SimulationTestHarness.AssertInside(t, a, 21, 21);
                 SimulationTestHarness.AssertInside(t, b, 21, 21);
                 t.Check(b.Position.X > SimulationTestHarness.Raw(15000),
@@ -156,7 +156,7 @@ namespace Directiva.EditorTests.SimulationTests
                 var a = SimulationTestHarness.Add(world, 5, 5, 1);
                 var b = SimulationTestHarness.Add(world, SimulationTestHarness.Raw(55000), 5, 1);
                 var c = SimulationTestHarness.Add(world, 6, 5, 1);
-                world.Update(1);
+                world.Update();
                 t.Check(a.Position.X < 5, "first entity should move left");
                 t.Check(b.Position.X != SimulationTestHarness.Raw(55000), "middle should move");
                 t.Check(c.Position.X != 6, "last entity should move in subsequent pass");

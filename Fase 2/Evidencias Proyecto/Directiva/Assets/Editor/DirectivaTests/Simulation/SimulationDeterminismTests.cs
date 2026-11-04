@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using DMath;
+using DSimulation;
 using World = DSimulation.Simulation;
 
 namespace Directiva.EditorTests.SimulationTests
@@ -19,8 +20,8 @@ namespace Directiva.EditorTests.SimulationTests
                 World b = MakeCoincidentWorld(100);
                 for (int i = 0; i < 5; i++)
                 {
-                    a.Update(SimulationTestHarness.Raw(2500));
-                    b.Update(SimulationTestHarness.Raw(2500));
+                    a.Update();
+                    b.Update();
                     t.Equal(Snapshot(a), Snapshot(b), "matching world after tick " + (i + 1));
                 }
                 t.Attach("world_snapshot", Snapshot(a));
@@ -36,8 +37,8 @@ namespace Directiva.EditorTests.SimulationTests
                 SimulationTestHarness.Add(b, 6, 5, 1);
                 for (int i = 0; i < 3; i++)
                 {
-                    a.Update(1);
-                    b.Update(1);
+                    a.Update();
+                    b.Update();
                 }
                 t.Equal(Snapshot(a), Snapshot(b), "seed should not change nonrandom correction");
             });
@@ -54,8 +55,8 @@ namespace Directiva.EditorTests.SimulationTests
                 SimulationTestHarness.Add(right, 8, 8, 1);
                 for (int i = 0; i < 4; i++)
                 {
-                    left.Update(1);
-                    right.Update(1);
+                    left.Update();
+                    right.Update();
                     t.Equal(Snapshot(left), Snapshot(right), "matching state after tick " + (i + 1));
                 }
             });
@@ -66,8 +67,8 @@ namespace Directiva.EditorTests.SimulationTests
                 World b = MakeCrowdedWorld(321);
                 for (int tick = 0; tick < 8; tick++)
                 {
-                    a.Update(SimulationTestHarness.Raw(1250));
-                    b.Update(SimulationTestHarness.Raw(1250));
+                    a.Update();
+                    b.Update();
                     t.Equal(Snapshot(a), Snapshot(b), "state at tick " + tick);
                 }
                 t.Equal(20, SimulationTestHarness.Entities(a).Count, "entity count");
@@ -76,14 +77,13 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Attach("stress_final_state", Snapshot(a));
             });
 
-            Add("PreciseAccumulation", "Many identical Fixed ticks accumulate exactly without float drift", t =>
+            Add("PreciseAccumulation", "Many fixed-length ticks accumulate exactly without float drift", t =>
             {
                 World world = SimulationTestHarness.NewWorld();
-                Fixed delta = SimulationTestHarness.Raw(1250);
                 for (int i = 0; i < 123; i++)
-                    world.Update(delta);
+                    world.Update();
                 t.Equal(123L, world.Tick, "tick count");
-                t.Equal(SimulationTestHarness.Raw(153750), world.Time, "raw Fixed accumulated time");
+                t.Equal(SConstants.deltaTime * 123, world.Time, "exact accumulated fixed time");
             });
         }
 
