@@ -88,10 +88,9 @@ namespace DSimulation
         }
         
         /// <summary>
-        /// Performs a single tick simulation. delta should be fixed, constant through all updates.
+        /// Performs a single tick simulation that lasts a fixed delta time declared in SimulationConstants.
         /// </summary>
-        /// <param name="delta">Time elapsed since the last update.</param>
-        public void Update(Fixed delta)
+        public void Update()
         {
             if (!started)
                 Start();
@@ -101,7 +100,7 @@ namespace DSimulation
             {
                 if (entity.alive)
                 {
-                    entity.Update(delta);
+                    entity.Update();
                     // entity updates can cause movement. We must ensure the entity stays inside world bounds.
                     EnsureWorldLimits(entity);
                 }
@@ -115,7 +114,7 @@ namespace DSimulation
             ApplyCreationQueue();
 
             // Update time state
-            Time += delta;
+            Time += SConstants.deltaTime;
             Tick++;
             // Add LateUpdate here only if necessary
         }

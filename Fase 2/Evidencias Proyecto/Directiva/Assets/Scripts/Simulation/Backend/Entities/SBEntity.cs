@@ -14,7 +14,15 @@ namespace DSimulation
 
         // WORLD SPACE
         public FixedVector2 Position { get; internal set; }
-        public Fixed Rotation { get; protected set; }
+        private Fixed rotation;
+        public Fixed Rotation {
+            get { return rotation; }
+            protected set {
+                rotation = value % 360;
+                if (rotation < 0)
+                    rotation += 360;
+            } 
+        }
 
         // COLLISION BEHAVIOR
         public Fixed Radius {  get; protected set; }
@@ -79,9 +87,10 @@ namespace DSimulation
         /// <summary>
         /// Runs once per tick.
         /// </summary>
-        /// <param name="delta">The amount of time since the last Update call.</param>
-        internal virtual void Update(Fixed delta)
+        internal virtual void Update()
         {
+            if (!alive)
+                return;
             // Do something every tick!
             RegenShields();
         }
@@ -139,7 +148,7 @@ namespace DSimulation
         {
             if (Shields < MaxShields && simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
             {
-                Shields = (Shields + ShieldRegen).Clamp(0, MaxShields);
+                Shields = (Shields + ShieldRegen * SConstants.deltaTime).Clamp(0, MaxShields);
             }
         }
 
