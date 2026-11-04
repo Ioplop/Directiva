@@ -11,9 +11,11 @@ namespace DSEvents
         public readonly FixedVector2 position;
         public readonly Fixed rotation;
 
-        public EventMove(int id)
+        public EventMove(int id, FixedVector2 position, Fixed rotation)
         {
             this.id = id;
+            this.position = position;
+            this.rotation = rotation;
         }
     }
 }
