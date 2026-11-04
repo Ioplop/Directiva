@@ -29,7 +29,7 @@ namespace DSimulation
 
         // Regeneracion escudos
         public static readonly Fixed UnitShieldRegen = new Fixed(50) / 20; // Recharge the entire shield (50 points) in 20 seconds.
-        public static readonly Fixed NexusShieldRegen = new Fixed(10) / 6;// Recharge the entire shield (10 points) in 6 seconds.
+        public static readonly Fixed NexusShieldRegen = new Fixed(10) / 6; // Recharge the entire shield (10 points) in 6 seconds.
         public static readonly Fixed ResourceShieldRegen = 0;
 
         /// <summary> Time in seconds after taking damage before beginning shield regeneration. </summary>
