@@ -332,5 +332,26 @@ namespace DMath
 
             return decimalPart < 0 ? integerPart - 1 : integerPart;
         }
+
+        /// <summary>
+        /// Converts the number into a part-decimal Fixed value, downscaling it by "decimals" positions.
+        /// Numbers that are too big can cause overflow even if the resulting value wouldn't.
+        /// Numbers that are too precise can lose decimal precision.
+        /// </summary>
+        /// <param name="value">Value to convert to fixed</param>
+        /// <param name="decimalDigits">Number of positions to downscale. How many of the digits are decimal.</param>
+        /// <returns>A Fixed decimal value</returns>
+        public static Fixed Decimal(long value, int decimalDigits)
+        {
+            if (decimalDigits < 0)
+                throw new ArgumentOutOfRangeException(nameof(decimalDigits), decimalDigits, $"Decimals must be zero or positive.");
+
+            value = checked(value * Constants.FixedScale);
+            for (int i = 0; i < decimalDigits; i++)
+            {
+                value /= 10L;
+            }
+            return new Fixed(value, raw: true);
+        }
     }
 }
