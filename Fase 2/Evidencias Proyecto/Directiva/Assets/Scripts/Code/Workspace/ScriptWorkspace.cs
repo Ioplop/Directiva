@@ -171,78 +171,158 @@ namespace Directiva.CodeUI
             return _storage.ReadSaved(relativeScriptPath);
         }
 
+        private sealed class RefactoringFileUpdate
+        {
+            public string Path;
+            public string OldSaved;
+            public string OldBackup;
+            public bool HadBackup;
+            public string NewSaved;
+            public string NewWorking;
+        }
+
         /// <summary>
-        /// Commit a previously validated multi-script rename to working copies only.
-        /// Saved .dscript files are NEVER overwritten. Inactive scripts receive .back
-        /// copies; the active buffer is applied last through the editor's undo mechanism.
-        /// All sources are checked for intervening edits before changing anything.
+        /// Apply a validated semantic rename to working copies and, for functions/shared,
+        /// to their saved counterparts. A saved copy is independently refactored (never
+        /// replaced with the working copy), so Revert discards unrelated pending edits
+        /// without undoing the rename. A clean document becomes saved immediately.
+        /// Local renames remain ordinary unsaved editor edits.
         /// </summary>
-        public bool TryApplyRefactoring(IReadOnlyDictionary<string, string> originals,
-            IReadOnlyDictionary<string, string> changes, int caret,
-            Func<string, int, bool> applyActive, out string error)
+        public bool TryApplyRefactoring(DScriptSymbolRename.Plan workingPlan,
+            DScriptSymbolRename.Plan savedPlan, Func<string, int, bool> applyActive,
+            out string error)
         {
             error = null;
-            if (changes == null || changes.Count == 0) return true;
-            if (originals == null || Active == null || applyActive == null ||
-                !changes.ContainsKey(Active.RelativePath))
+            if (workingPlan == null || applyActive == null || Active == null)
+            { error = "rename_stale_source"; return false; }
+            var changes = workingPlan.Changes;
+            if (changes.Count == 0) return true;
+            if (!changes.ContainsKey(Active.RelativePath))
+            { error = "rename_stale_source"; return false; }
+            if (savedPlan != null &&
+                (savedPlan.Kind != workingPlan.Kind ||
+                 savedPlan.OldName != workingPlan.OldName ||
+                 savedPlan.NewName != workingPlan.NewName ||
+                 savedPlan.OwnerModule != workingPlan.OwnerModule))
             { error = "rename_stale_source"; return false; }
 
-            var paths = changes.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            foreach (string path in paths)
-            {
-                if (!originals.TryGetValue(path, out var expected) ||
-                    !_storage.ScriptExists(path) ||
-                    !string.Equals(NormalizeNewlines(GetWorkingContent(path)), expected,
-                        StringComparison.Ordinal))
-                { error = "rename_stale_source"; return false; }
-            }
-
-            var previousBackups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var withoutBackup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var modified = new List<string>();
+            // No safe saved plan? Keep the entire rename in working copies,
+            // rather than partially saving a project with inconsistent imports.
+            bool persist = savedPlan != null &&
+                (workingPlan.Kind == "function" || workingPlan.Kind == "shared");
+            var savedChanges = persist ? savedPlan?.Changes : null;
+            var savedOriginals = persist ? savedPlan?.Originals : null;
+            var paths = changes.Keys.Union(savedChanges?.Keys ?? Enumerable.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase).OrderBy(path => path, StringComparer.Ordinal).ToArray();
+            var updates = new List<RefactoringFileUpdate>();
             try
             {
+                // Stage the entire batch and check both snapshots before any write.
                 foreach (string path in paths)
                 {
-                    if (string.Equals(path, Active.RelativePath, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (_storage.BackupExists(path))
-                        previousBackups.Add(path, _storage.ReadBackup(path));
-                    else withoutBackup.Add(path);
-                    modified.Add(path);
-                    if (string.Equals(NormalizeNewlines(_storage.ReadSaved(path)),
-                        changes[path], StringComparison.Ordinal))
-                        _storage.DeleteBackup(path);
-                    else
-                        _storage.WriteBackup(path, changes[path]);
+                    if (!_storage.ScriptExists(path))
+                    { error = "rename_stale_source"; return false; }
+                    string oldWorking = GetWorkingContent(path);
+                    string oldSaved = _storage.ReadSaved(path);
+                    if (changes.TryGetValue(path, out string updatedWorking) &&
+                        (!workingPlan.Originals.TryGetValue(path, out string expectedWorking) ||
+                         !string.Equals(NormalizeNewlines(oldWorking), expectedWorking,
+                            StringComparison.Ordinal)))
+                    { error = "rename_stale_source"; return false; }
+                    if (savedChanges != null && savedChanges.ContainsKey(path) &&
+                        (savedOriginals == null || !savedOriginals.TryGetValue(path, out string expectedSaved) ||
+                         !string.Equals(NormalizeNewlines(oldSaved), expectedSaved,
+                             StringComparison.Ordinal)))
+                    { error = "rename_stale_source"; return false; }
+
+                    // Saved plans were independently bound and verified. If unavailable,
+                    // keep the whole operation in working copies (the old behavior).
+                    bool wasDirty = !string.Equals(NormalizeNewlines(oldWorking),
+                        NormalizeNewlines(oldSaved), StringComparison.Ordinal);
+                    string newSaved = oldSaved;
+                    if (persist && savedChanges != null && savedChanges.TryGetValue(path, out var updatedSaved))
+                        newSaved = updatedSaved;
+                    else if (persist && !wasDirty && updatedWorking != null)
+                        newSaved = updatedWorking;
+                    bool hadBackup = _storage.BackupExists(path);
+                    updates.Add(new RefactoringFileUpdate
+                    {
+                        Path = path,
+                        OldSaved = oldSaved,
+                        HadBackup = hadBackup,
+                        OldBackup = hadBackup ? _storage.ReadBackup(path) : null,
+                        NewSaved = newSaved,
+                        NewWorking = updatedWorking ?? oldWorking
+                    });
                 }
-                if (!applyActive(changes[Active.RelativePath], caret))
-                { error = "rename_apply_failed"; RestoreBackups(); return false; }
             }
             catch
             {
-                RestoreBackups();
-                error = "rename_apply_failed";
+                error = "rename_stale_source";
                 return false;
             }
-            foreach (string path in modified)
-                ScriptStateChanged?.Invoke(path);
-            return true;
 
-            void RestoreBackups()
+            string oldActiveSaved = Active.SavedContent;
+            string oldActiveSavedHash = Active.SavedHash;
+            string oldActiveWorking = Active.WorkingContent;
+            string oldActiveWorkingHash = Active.WorkingHash;
+            bool oldPreviousDirty = _previousDirty;
+            var written = new List<RefactoringFileUpdate>();
+            try
             {
-                // Best effort rollback if storage failed partway through the batch.
-                foreach (string path in modified)
+                foreach (var update in updates)
+                {
+                    // Add before writing: an IO operation may fail after partially
+                    // changing a file, and must therefore be included in rollback.
+                    written.Add(update);
+                    if (!string.Equals(update.OldSaved, update.NewSaved, StringComparison.Ordinal))
+                        _storage.WriteSaved(update.Path, update.NewSaved);
+                    if (string.Equals(NormalizeNewlines(update.NewSaved),
+                        NormalizeNewlines(update.NewWorking), StringComparison.Ordinal))
+                        _storage.DeleteBackup(update.Path);
+                    else
+                        _storage.WriteBackup(update.Path, update.NewWorking);
+                }
+
+                // Set the new base before dispatching the editor's TextChanged event,
+                // so it compares its working buffer against the refactored saved copy.
+                var activeUpdate = updates.First(u =>
+                    string.Equals(u.Path, Active.RelativePath, StringComparison.OrdinalIgnoreCase));
+                Active.SavedContent = activeUpdate.NewSaved;
+                Active.SavedHash = Hash(activeUpdate.NewSaved);
+                _previousDirty = Active.IsDirty;
+                if (!applyActive(changes[Active.RelativePath], workingPlan.Caret))
+                    throw new InvalidOperationException("Active editor rejected refactoring");
+            }
+            catch
+            {
+                // Best-effort rollback of both saved scripts and .back files.
+                Active.SavedContent = oldActiveSaved;
+                Active.SavedHash = oldActiveSavedHash;
+                Active.WorkingContent = oldActiveWorking;
+                Active.WorkingHash = oldActiveWorkingHash;
+                _previousDirty = oldPreviousDirty;
+                foreach (var update in written.AsEnumerable().Reverse())
                 {
                     try
                     {
-                        if (withoutBackup.Contains(path)) _storage.DeleteBackup(path);
-                        else if (previousBackups.TryGetValue(path, out var old))
-                            _storage.WriteBackup(path, old);
+                        if (!string.Equals(update.OldSaved, update.NewSaved, StringComparison.Ordinal))
+                            _storage.WriteSaved(update.Path, update.OldSaved);
+                        if (update.HadBackup) _storage.WriteBackup(update.Path, update.OldBackup);
+                        else _storage.DeleteBackup(update.Path);
                     }
-                    catch { /* The original exception is already reported. */ }
+                    catch { /* Report the original failure rather than hiding it. */ }
                 }
+                error = "rename_apply_failed";
+                return false;
             }
+
+            _previousDirty = Active.IsDirty;
+            foreach (var update in updates)
+                ScriptStateChanged?.Invoke(update.Path);
+            if (updates.Any(u => !string.Equals(u.OldSaved, u.NewSaved, StringComparison.Ordinal)))
+                TreeChanged?.Invoke();
+            return true;
         }
 
         private static string NormalizeNewlines(string text) =>

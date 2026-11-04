@@ -42,6 +42,13 @@ namespace Directiva.CodeUI
         private string _selectedPath;
         private string _creationTargetFolder = string.Empty;
         private VisualElement _contextMenu;
+        private VisualElement _contextMenuEventRoot;
+        private IVisualElementScheduledItem _contextMenuTimeout;
+        private Vector2 _contextMenuPointerPosition;
+        private bool _contextMenuEntered;
+
+        private const int ContextMenuUnvisitedTimeoutMs = 1000;
+        private const float ContextMenuCursorGap = 8f;
 
         private NodeInfo _dragSource;
         private Vector2 _dragStart;
@@ -679,6 +686,8 @@ namespace Directiva.CodeUI
             _contextMenu.style.left = localPosition.x;
             _contextMenu.style.top = localPosition.y;
             _contextMenu.style.visibility = Visibility.Hidden;
+            _contextMenuPointerPosition = new Vector2(position.x, position.y);
+            _contextMenuEntered = false;
 
             var rename = new Button(() =>
             {
@@ -706,7 +715,27 @@ namespace Directiva.CodeUI
             _contextMenu.Add(delete);
 
             var menu = _contextMenu;
+            menu.RegisterCallback<PointerEnterEvent>(_ => MarkContextMenuEntered(menu));
+            menu.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                if (ReferenceEquals(_contextMenu, menu) && _contextMenuEntered)
+                    HideContextMenu();
+            });
+
             _popupLayer.Add(menu);
+
+            // The popup layer ignores background picks, so listen on its parent
+            // for pointer moves, clicks outside the menu, and Escape.
+            _contextMenuEventRoot = _popupLayer.parent;
+            if (_contextMenuEventRoot != null)
+            {
+                _contextMenuEventRoot.RegisterCallback<PointerMoveEvent>(OnContextMenuPointerMove,
+                    TrickleDown.TrickleDown);
+                _contextMenuEventRoot.RegisterCallback<PointerDownEvent>(OnContextMenuPointerDown,
+                    TrickleDown.TrickleDown);
+                _contextMenuEventRoot.RegisterCallback<KeyDownEvent>(OnContextMenuKeyDown,
+                    TrickleDown.TrickleDown);
+            }
 
             // The menu's final size is only known after layout. Place it within
             // the available editor area before showing it, so menus opened near
@@ -718,10 +747,78 @@ namespace Directiva.CodeUI
 
                 var maxX = Mathf.Max(0f, _popupLayer.contentRect.width - menu.resolvedStyle.width);
                 var maxY = Mathf.Max(0f, _popupLayer.contentRect.height - menu.resolvedStyle.height);
-                menu.style.left = Mathf.Clamp(localPosition.x, 0f, maxX);
-                menu.style.top = Mathf.Clamp(localPosition.y, 0f, maxY);
+                // Keep a small gap from the right-click point: otherwise the
+                // pointer starts inside the menu, so "never entered" cannot expire.
+                var x = localPosition.x + ContextMenuCursorGap;
+                var y = localPosition.y + ContextMenuCursorGap;
+                if (x > maxX)
+                    x = localPosition.x - menu.resolvedStyle.width - ContextMenuCursorGap;
+                if (y > maxY)
+                    y = localPosition.y - menu.resolvedStyle.height - ContextMenuCursorGap;
+
+                menu.style.left = Mathf.Clamp(x, 0f, maxX);
+                menu.style.top = Mathf.Clamp(y, 0f, maxY);
                 menu.style.visibility = Visibility.Visible;
+
+                // Only expire menus that were never visited. Once hovered,
+                // they remain open until the pointer leaves or the user acts.
+                _contextMenuTimeout = menu.schedule.Execute(() =>
+                {
+                    if (ReferenceEquals(_contextMenu, menu) && !_contextMenuEntered)
+                        HideContextMenu();
+                });
+                _contextMenuTimeout.ExecuteLater(ContextMenuUnvisitedTimeoutMs);
+
+                // A menu can appear directly beneath the right-click position.
+                // Check again after its clamped position has reached layout,
+                // even if the pointer has not moved since opening it.
+                menu.schedule.Execute(() =>
+                {
+                    if (ReferenceEquals(_contextMenu, menu) &&
+                        menu.worldBound.Contains(_contextMenuPointerPosition))
+                    {
+                        MarkContextMenuEntered(menu);
+                    }
+                }).ExecuteLater(1);
             }).ExecuteLater(1);
+        }
+
+        private void MarkContextMenuEntered(VisualElement menu)
+        {
+            if (!ReferenceEquals(_contextMenu, menu))
+                return;
+
+            _contextMenuEntered = true;
+            _contextMenuTimeout?.Pause();
+            _contextMenuTimeout = null;
+        }
+
+        private void OnContextMenuPointerMove(PointerMoveEvent evt)
+        {
+            _contextMenuPointerPosition = evt.position;
+            if (_contextMenu == null ||
+                _contextMenu.resolvedStyle.visibility != Visibility.Visible)
+                return;
+
+            if (_contextMenu.worldBound.Contains(evt.position))
+                MarkContextMenuEntered(_contextMenu);
+            else if (_contextMenuEntered)
+                HideContextMenu();
+        }
+
+        private void OnContextMenuPointerDown(PointerDownEvent evt)
+        {
+            if (_contextMenu != null && !_contextMenu.worldBound.Contains(evt.position))
+                HideContextMenu();
+        }
+
+        private void OnContextMenuKeyDown(KeyDownEvent evt)
+        {
+            if (_contextMenu == null || evt.keyCode != KeyCode.Escape)
+                return;
+
+            HideContextMenu();
+            evt.StopPropagation();
         }
 
         private void PromptRename(string path, bool isFolder)
@@ -752,11 +849,23 @@ namespace Directiva.CodeUI
 
         private void HideContextMenu()
         {
-            if (_contextMenu == null)
-                return;
+            _contextMenuTimeout?.Pause();
+            _contextMenuTimeout = null;
 
-            _contextMenu.RemoveFromHierarchy();
+            if (_contextMenuEventRoot != null)
+            {
+                _contextMenuEventRoot.UnregisterCallback<PointerMoveEvent>(OnContextMenuPointerMove,
+                    TrickleDown.TrickleDown);
+                _contextMenuEventRoot.UnregisterCallback<PointerDownEvent>(OnContextMenuPointerDown,
+                    TrickleDown.TrickleDown);
+                _contextMenuEventRoot.UnregisterCallback<KeyDownEvent>(OnContextMenuKeyDown,
+                    TrickleDown.TrickleDown);
+                _contextMenuEventRoot = null;
+            }
+
+            _contextMenu?.RemoveFromHierarchy();
             _contextMenu = null;
+            _contextMenuEntered = false;
         }
 
         private void OnRootPointerMove(PointerMoveEvent evt)

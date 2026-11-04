@@ -135,6 +135,37 @@ namespace Directiva.EditorTests.DScript
                 t.Equal(2, dict.Keys.Count, "dictionary key count");
                 t.Equal(2, dict.Items.Count, "dictionary value count");
             });
+            Add("RecoverMissingRhsInFunction", "A missing right-hand expression preserves valid following statements", t =>
+            {
+                var ast = DScriptTestHarness.Parse(t,
+                    "def f(value):\n    broken =\n    return value * 2\n", out var diag);
+                t.Check(diag.Any(d => d.Code == "DS2005"), "the invalid assignment is diagnosed");
+                t.Equal(1, ast.Statements.Count, "function survives recovery");
+                if (ast.Statements.Count == 0) return;
+                var function = ast.Statements[0] as FunctionStatement;
+                t.Check(function != null, "first statement is a function");
+                if (function == null) return;
+                t.Equal(1, function.Body.Count, "next statement is not lost");
+                if (function.Body.Count > 0)
+                    t.Check(function.Body[0] is ReturnStatement,
+                        "the return following the broken assignment is preserved");
+            });
+
+            Add("RecoverMissingSharedInitializer", "A broken shared initializer does not consume the next declaration", t =>
+            {
+                var ast = DScriptTestHarness.Parse(t,
+                    "shared score = 2\nshared broken =\ndef use():\n    return score\n", out var diag);
+                t.Check(diag.Any(d => d.Code == "DS2005"), "the invalid initializer is diagnosed");
+                t.Equal(2, ast.Statements.Count, "both valid declarations survive recovery");
+                if (ast.Statements.Count < 2) return;
+                t.Check(ast.Statements[0] is SharedStatement, "valid shared declaration preserved");
+                var function = ast.Statements[1] as FunctionStatement;
+                t.Check(function != null, "function after broken shared initializer preserved");
+                if (function != null)
+                    t.Check(function.Body.Count == 1 && function.Body[0] is ReturnStatement,
+                        "references in the next function remain available for binding");
+            });
+
             // Regression cases for optional trailing commas (list, def and call).
             Add("TrailingCommaParameters", "A def accepts its final optional comma", t =>
             {

@@ -133,6 +133,52 @@ namespace Directiva.EditorTests.CodeUITests
                     "source matches the normalized editor buffer");
             });
 
+            Add("UnrelatedSyntaxError", "Locals can be renamed when another statement has a syntax error", t =>
+            {
+                const string source = "def f(value):\n    broken =\n    return value * 2\n";
+                bool ok = DScriptLocalRename.TryRename("test",
+                    new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                        { ["test"] = source }), source.IndexOf("value", StringComparison.Ordinal),
+                    "amount", out var plan, out string error);
+                t.Check(ok, "rename despite existing syntax error: " + error);
+                if (ok) t.Equal("def f(amount):\n    broken =\n    return amount * 2\n",
+                    plan.Content, "syntax error remains; valid references are renamed");
+            });
+
+            Add("UnrelatedSemanticError", "Local renames do not require an error-free workspace", t =>
+            {
+                const string source = "def f(value):\n    return value + unknown\n";
+                bool ok = DScriptLocalRename.TryRename("test",
+                    new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                        { ["test"] = source }), source.IndexOf("value", StringComparison.Ordinal),
+                    "amount", out var plan, out string error);
+                t.Check(ok, "rename despite existing undefined name: " + error);
+                if (ok) t.Equal("def f(amount):\n    return amount + unknown\n",
+                    plan.Content, "existing error is preserved");
+            });
+
+            Add("RejectDiscardedLocalReference", "A malformed expression might contain an unbound local use", t =>
+            {
+                const string source = "def f(value):\n    invalid = value +\n    return value\n";
+                bool ok = DScriptLocalRename.TryRename("test",
+                    new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                        { ["test"] = source }), source.IndexOf("value", StringComparison.Ordinal),
+                    "amount", out var plan, out _);
+                t.Check(!ok, "cannot prove all uses of local were discovered");
+                t.Check(plan == null, "reject before modifying code");
+            });
+
+            Add("RejectCaptureUndefined", "Renaming a local must not capture another previously undefined name", t =>
+            {
+                const string source = "def f(value):\n    return value + missing\n";
+                bool ok = DScriptLocalRename.TryRename("test",
+                    new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                        { ["test"] = source }), source.IndexOf("value", StringComparison.Ordinal),
+                    "missing", out var plan, out _);
+                t.Check(!ok, "unresolved reference must not become a use of renamed parameter");
+                t.Check(plan == null, "reject before producing edits");
+            });
+
             Add("NoOp", "Renaming to the same name is a no-op", t =>
             {
                 const string code = "def f(x):\n    return x\n";

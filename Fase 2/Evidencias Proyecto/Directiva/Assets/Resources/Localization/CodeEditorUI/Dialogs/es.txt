@@ -17,7 +17,8 @@
 [rename_collision_local]: Ya existe un parámetro o variable local con ese nombre en esta función.
 [rename_collision_scope]: El nombre ya se usa para una función, importación, variable shared o función incorporada.
 [rename_unavailable_module]: No se pudo leer el módulo activo.
-[rename_result_invalid]: El nuevo nombre haría inválido el programa.
+[rename_result_invalid]: El renombrado introduciría nuevos errores o dejaría referencias inconsistentes.
+[rename_incomplete_analysis]: Hay código incompleto que podría contener referencias al símbolo. Corrige esa parte antes de renombrar.
 [rename_fix_errors]: Corrige los errores de compilación antes de renombrar.
 [rename_only_local]: Coloca el cursor sobre una variable, parámetro, función o shared (no sobre un alias explícito).
 [rename_stale_source]: El código cambió desde que se preparó el renombrado o sus referencias dejaron de ser válidas.
@@ -26,3 +27,4 @@
 [rename_binding_changed]: El nuevo nombre cambiaría a qué símbolos apuntan algunas referencias.
 [rename_apply_failed]: No se pudo completar la modificación de las copias de trabajo.
 [rename_metadata_warning]: No se pudo actualizar la función inicial del editor: {{1}}
+[rename_saved_fallback]: No se pudo verificar el renombrado en las versiones guardadas. Se aplicó solamente a las copias de trabajo; al revertir un archivo podrías perder el renombrado.

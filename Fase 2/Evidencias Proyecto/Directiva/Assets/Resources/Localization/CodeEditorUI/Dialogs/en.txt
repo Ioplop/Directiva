@@ -17,7 +17,8 @@
 [rename_collision_local]: A parameter or local with that name already exists in this function.
 [rename_collision_scope]: That name is already used by a function, import, shared variable or builtin.
 [rename_unavailable_module]: Cannot read the active module.
-[rename_result_invalid]: The new name would make the program invalid.
+[rename_result_invalid]: Renaming would introduce new errors or leave inconsistent references.
+[rename_incomplete_analysis]: Incomplete code may contain references to this symbol. Fix that fragment before renaming.
 [rename_fix_errors]: Fix compilation errors before renaming.
 [rename_only_local]: Place the caret on a variable, parameter, function or shared symbol (not an explicit import alias).
 [rename_stale_source]: Source changed after preparing the rename, or its references are no longer valid.
@@ -26,3 +27,4 @@
 [rename_binding_changed]: The new name would change which symbols some references resolve to.
 [rename_apply_failed]: Could not finish modifying the working copies.
 [rename_metadata_warning]: Could not update the editor entry function: {{1}}
+[rename_saved_fallback]: The rename could not be verified against the saved versions. It was applied to working copies only; reverting a file might undo the rename.

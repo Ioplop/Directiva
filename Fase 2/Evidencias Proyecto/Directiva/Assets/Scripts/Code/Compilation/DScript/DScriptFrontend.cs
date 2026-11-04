@@ -13,7 +13,22 @@ namespace DSCompilation.DScript
     public static class DScriptFrontend
     {
         public static DScriptAnalysis Analyze(string entryModule, IDScriptSourceProvider sourceProvider,
-            DScriptFrontendOptions options = null)
+            DScriptFrontendOptions options = null) => AnalyzeCore(entryModule, sourceProvider, options, false);
+
+        /// <summary>
+        /// IDE-only analysis: bind the successfully recovered AST nodes even when the lexer,
+        /// parser or another module reported errors. Diagnostics are NOT suppressed, and
+        /// Success remains false. The ordinary compiler still uses strict Analyze().
+        /// Unrecoverable syntax fragments have no bindings and must be handled conservatively
+        /// by clients (such as symbol rename).
+        /// </summary>
+        public static DScriptAnalysis AnalyzeForRefactoring(string entryModule,
+            IDScriptSourceProvider sourceProvider, DScriptFrontendOptions options = null) =>
+            AnalyzeCore(entryModule, sourceProvider, options, true);
+
+        private static DScriptAnalysis AnalyzeCore(string entryModule,
+            IDScriptSourceProvider sourceProvider, DScriptFrontendOptions options,
+            bool allowPartialBindings)
         {
             if (sourceProvider == null) throw new ArgumentNullException(nameof(sourceProvider));
             options = options ?? new DScriptFrontendOptions();
@@ -27,7 +42,7 @@ namespace DSCompilation.DScript
             var globals = new List<DScriptSymbol>();
             var sharedDeclarations = new Dictionary<DSCompilation.DScript.Ast.SharedStatement, DScriptSymbol>();
             var sharedInitializers = new List<DScriptSharedInitializer>();
-            if (errors.Count == 0)
+            if (errors.Count == 0 || (allowPartialBindings && loader.Modules.Count != 0))
             {
                 var binder = new DScriptBinder(loader.Modules, options);
                 binder.Bind();

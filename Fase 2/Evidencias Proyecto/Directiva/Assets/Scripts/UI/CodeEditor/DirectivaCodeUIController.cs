@@ -825,12 +825,33 @@ namespace Directiva.CodeUI
                         Output.WriteWarning(Localization.Get("ScriptExplorer", "locked_action_blocked"));
                         return;
                     }
-                    if (!_workspace.TryApplyRefactoring(plan.Originals, plan.Changes,
-                        plan.Caret, _editor.ApplyRefactoredContent, out failure))
+                    // Saved and working documents can differ. Rebind the same function
+                    // or shared slot independently on the saved snapshot, so Revert
+                    // never undoes the rename while discarding other pending edits.
+                    DScriptSymbolRename.Plan savedPlan = null;
+                    bool savedFallback = false;
+                    if (plan.Kind != "local")
+                    {
+                        if (!Codebase.Scripts.Any(script => _workspace.IsDirty(script.RelativePath)))
+                            savedPlan = plan;
+                        else
+                        {
+                            var savedSources = currentModules.ToDictionary(name => name,
+                                name => _storage.ReadSaved(name.Replace('.', '/') +
+                                    FileSystemScriptStorage.ScriptExtension), StringComparer.Ordinal);
+                            savedFallback = !DScriptSymbolRename.TryRenameSavedSymbol(plan,
+                                new InMemoryDScriptSourceProvider(savedSources), currentModules,
+                                out savedPlan, out _);
+                        }
+                    }
+                    if (!_workspace.TryApplyRefactoring(plan, savedPlan,
+                        _editor.ApplyRefactoredContent, out failure))
                     {
                         Output.WriteWarning(Localization.Get("Dialogs", "rename_symbol_failed", Localization.Get("Dialogs", failure)));
                         return;
                     }
+                    if (savedFallback)
+                        Output.WriteWarning(Localization.Get("Dialogs", "rename_saved_fallback"));
                     // An explicitly selected entry function is editor metadata, not
                     // a DScript reference. Keep it aligned even when its defining
                     // module is currently closed in the editor.

@@ -43,6 +43,30 @@ namespace Directiva.EditorTests.CodeUITests
                         "all entry modules still compile: " + name);
             }
 
+            // For intentionally invalid fixtures, successful refactoring must preserve
+            // existing errors; requiring every result to compile would defeat the test.
+            void ExpectWithErrors(DirectivaTestContext t, Dictionary<string, string> sources,
+                string selectedModule, string identifier, string newName,
+                Dictionary<string, string> expected)
+            {
+                var provider = new InMemoryDScriptSourceProvider(sources);
+                int caret = TokenAt(sources[selectedModule], selectedModule, identifier, 0);
+                bool ok = DScriptSymbolRename.TryRename(selectedModule, provider,
+                    sources.Keys, caret, newName, out var plan, out string error);
+                t.Check(ok, "rename with pre-existing errors: " + error);
+                if (!ok) return;
+                t.Equal(expected.Count, plan.Changes.Count, "only expected files changed");
+                foreach (var pair in expected)
+                {
+                    string path = pair.Key.Replace('.', '/') + ".dscript";
+                    t.Check(plan.Changes.ContainsKey(path), "changed: " + path);
+                    if (plan.Changes.TryGetValue(path, out var content))
+                        t.Equal(pair.Value, content, "refactored " + path);
+                }
+                foreach (var pair in sources)
+                    t.Equal(pair.Value, sources[pair.Key], "planning does not mutate " + pair.Key);
+            }
+
             void Reject(DirectivaTestContext t, Dictionary<string, string> sources,
                 string selectedModule, string identifier, int occurrence, string newName)
             {
@@ -261,91 +285,512 @@ namespace Directiva.EditorTests.CodeUITests
                 if (ok) { t.Equal(0, plan.Count, "zero edits"); t.Equal(0, plan.Changes.Count, "zero files"); }
             });
 
-            Add("UnrelatedErrors", "Refuse to partially rename if another workspace script cannot be analyzed", t =>
-                Reject(t, new Dictionary<string, string>
+            Add("StrictCompilerUnchanged", "The IDE-only partial binder must not change normal compilation", t =>
+            {
+                var sources = new Dictionary<string, string>
+                {
+                    ["main"] = "def work():\n    broken =\n    return 1\n"
+                };
+                var provider = new InMemoryDScriptSourceProvider(sources);
+                var strict = DScriptFrontend.Analyze("main", provider);
+                var partial = DScriptFrontend.AnalyzeForRefactoring("main", provider);
+                t.Check(!strict.Success, "normal compiler still reports syntax errors");
+                t.Check(strict.ModuleSymbols.Count == 0, "normal compiler does not bind an invalid graph");
+                t.Check(!partial.Success, "IDE analysis keeps original diagnostics");
+                t.Check(partial.ModuleSymbols.ContainsKey("main"),
+                    "IDE analysis recovers the available function declaration");
+                t.Check(partial.ModuleSymbols["main"].Functions.ContainsKey("work"),
+                    "IDE partial binder exposes the function symbol");
+            });
+
+            Add("UnrelatedErrors", "A syntax error in an unrelated script does not block renaming", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
                 {
                     ["main"] = "def work():\n    return 1\n",
                     ["broken"] = "def broken(:\n    pass\n"
-                }, "main", "work", 0, "solve"));
-
-            Add("CommitBackups", "Coordinated edits modify working copies, not saved .dscript files", t =>
-            {
-                var files = new Dictionary<string, string>
+                }, "main", "work", "solve", new Dictionary<string, string>
                 {
-                    ["lib.dscript"] = "def work():\n    return 1\n",
-                    ["main.dscript"] = "from lib import work\ndef main():\n    return work()\n"
-                };
-                var storage = new MemoryStorage(files);
-                var workspace = new ScriptWorkspace(storage);
-                workspace.Open("main.dscript");
+                    ["main"] = "def solve():\n    return 1\n"
+                }));
+
+            Add("UnrelatedSemanticError", "An undefined name in another file does not block a function rename", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "from lib import work\ndef use():\n    return work()\n",
+                    ["broken"] = "def other():\n    return not_declared\n"
+                }, "lib", "work", "solve", new Dictionary<string, string>
+                {
+                    ["lib"] = "def solve():\n    return 1\n",
+                    ["consumer"] = "from lib import solve\ndef use():\n    return solve()\n"
+                }));
+
+            Add("OwnerSemanticError", "A function can be renamed when its body has unrelated semantic errors", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return not_declared\n",
+                    ["consumer"] = "import lib\ndef use():\n    return lib.work()\n"
+                }, "lib", "work", "solve", new Dictionary<string, string>
+                {
+                    ["lib"] = "def solve():\n    return not_declared\n",
+                    ["consumer"] = "import lib\ndef use():\n    return lib.solve()\n"
+                }));
+
+            Add("RecoveredSyntaxReferences", "Parser recovery keeps references on valid lines before and after a broken line", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "from lib import work\ndef use():\n    work()\n    invalid =\n    return work()\n"
+                }, "lib", "work", "solve", new Dictionary<string, string>
+                {
+                    ["lib"] = "def solve():\n    return 1\n",
+                    ["consumer"] = "from lib import solve\ndef use():\n    solve()\n    invalid =\n    return solve()\n"
+                }));
+
+            Add("MissingDependency", "An unrelated missing import does not hide a resolved function reference", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "from lib import work\nimport missing_module\ndef use():\n    return work()\n"
+                }, "lib", "work", "solve", new Dictionary<string, string>
+                {
+                    ["lib"] = "def solve():\n    return 1\n",
+                    ["consumer"] = "from lib import solve\nimport missing_module\ndef use():\n    return solve()\n"
+                }));
+
+            Add("SharedUnrelatedSyntax", "Broken independent scripts do not block a workspace-wide shared rename", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["state"] = "shared score = 2\n",
+                    ["other"] = "shared score\ndef use():\n    return score\n",
+                    ["broken"] = "def unfinished(:\n    pass\n"
+                }, "state", "score", "points", new Dictionary<string, string>
+                {
+                    ["state"] = "shared points = 2\n",
+                    ["other"] = "shared points\ndef use():\n    return points\n"
+                }));
+
+            Add("SharedRecoveredSyntax", "A shared declaration can be renamed alongside an unrelated broken statement", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["state"] = "shared score = 2\nshared broken =\ndef use():\n    return score\n"
+                }, "state", "score", "points", new Dictionary<string, string>
+                {
+                    ["state"] = "shared points = 2\nshared broken =\ndef use():\n    return points\n"
+                }));
+
+            Add("RejectDiscardedReference", "A possible reference lost by parser recovery must not be silently skipped", t =>
+                Reject(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "from lib import work\ndef use():\n    return (work + )\n"
+                }, "lib", "work", 0, "solve"));
+
+            Add("RejectCaptureUndefined", "A new function name must not capture a previously undefined reference", t =>
+                Reject(t, new Dictionary<string, string>
+                {
+                    ["main"] = "def work():\n    return 1\ndef use():\n    return missing()\n"
+                }, "main", "work", 0, "missing"));
+
+            Add("RejectCaptureUnresolvedImport", "A rename must not resolve an unrelated from-import that used to fail", t =>
+                Reject(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "from lib import solve\ndef use():\n    return solve()\n"
+                }, "lib", "work", 0, "solve"));
+
+            Add("RejectCaptureUnresolvedMember", "A rename must not make a previously invalid module member resolve", t =>
+                Reject(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["consumer"] = "import lib\ndef use():\n    return lib.solve()\n"
+                }, "lib", "work", 0, "solve"));
+
+            Add("UnrelatedBrokenName", "A same-spelled name in an unrelated malformed script is not a reference", t =>
+                ExpectWithErrors(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["broken"] = "def bad(:\n    print(work)\n"
+                }, "lib", "work", "solve", new Dictionary<string, string>
+                {
+                    ["lib"] = "def solve():\n    return 1\n"
+                }));
+
+            Add("RejectNewImportCollision", "Pre-existing errors do not authorize a new import alias collision", t =>
+                Reject(t, new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["other"] = "def solve():\n    return 2\n",
+                    ["consumer"] = "from lib import work\nfrom other import solve\ndef use():\n    return work()\n",
+                    ["broken"] = "def unfinished(:\n    pass\n"
+                }, "lib", "work", 0, "solve"));
+
+            Add("SavedWithUnrelatedErrors", "Saved-plan verification also tolerates independent broken scripts", t =>
+            {
                 var sources = new Dictionary<string, string>
                 {
-                    ["lib"] = files["lib.dscript"], ["main"] = files["main.dscript"]
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["user"] = "from lib import work\ndef use():\n    return work()\n",
+                    ["broken"] = "def broken(:\n    pass\n"
                 };
-                bool planned = DScriptSymbolRename.TryRename("main", new InMemoryDScriptSourceProvider(sources),
-                    sources.Keys, TokenAt(sources["main"], "main", "work", 0), "run",
-                    out var plan, out string error);
-                t.Check(planned, "plan: " + error);
-                if (!planned) return;
-                bool applied = workspace.TryApplyRefactoring(plan.Originals, plan.Changes,
-                    plan.Caret, (content, _) => { workspace.UpdateActiveWorkingContent(content); return true; }, out error);
-                t.Check(applied, "batch commit: " + error);
-                t.Equal(files["lib.dscript"], storage.ReadSaved("lib.dscript"), "saved library unchanged");
-                t.Equal(files["main.dscript"], storage.ReadSaved("main.dscript"), "saved main unchanged");
-                t.Equal(plan.Changes["lib.dscript"], storage.ReadBackup("lib.dscript"), "library backup modified");
-                t.Equal(plan.Changes["main.dscript"], workspace.Active.WorkingContent, "active buffer modified");
+                bool ok = DScriptSymbolRename.TryRename("lib",
+                    new InMemoryDScriptSourceProvider(sources), sources.Keys,
+                    TokenAt(sources["lib"], "lib", "work", 0), "solve",
+                    out var working, out string error);
+                t.Check(ok, "working plan: " + error);
+                if (!ok) return;
+                ok = DScriptSymbolRename.TryRenameSavedSymbol(working,
+                    new InMemoryDScriptSourceProvider(sources), sources.Keys,
+                    out var saved, out error);
+                t.Check(ok, "saved plan: " + error);
+                if (ok) t.Equal(working.Changes.Count, saved.Changes.Count,
+                    "both versions change the same number of files");
             });
 
-            Add("AbortStale", "A stale source aborts the complete batch without writing backups", t =>
+            bool Prepare(DirectivaTestContext t, Dictionary<string, string> working,
+                Dictionary<string, string> saved, string selectedModule, string name, string newName,
+                out DScriptSymbolRename.Plan workPlan, out DScriptSymbolRename.Plan diskPlan)
+            {
+                bool ok = DScriptSymbolRename.TryRename(selectedModule,
+                    new InMemoryDScriptSourceProvider(working), working.Keys,
+                    TokenAt(working[selectedModule], selectedModule, name, 0), newName,
+                    out workPlan, out string error);
+                t.Check(ok, "working rename plan: " + error);
+                diskPlan = null;
+                if (!ok) return false;
+                ok = DScriptSymbolRename.TryRenameSavedSymbol(workPlan,
+                    new InMemoryDScriptSourceProvider(saved), saved.Keys,
+                    out diskPlan, out error);
+                t.Check(ok, "saved rename plan: " + error);
+                return ok;
+            }
+
+            bool Apply(ScriptWorkspace workspace, DScriptSymbolRename.Plan workPlan,
+                DScriptSymbolRename.Plan diskPlan, out string error) =>
+                workspace.TryApplyRefactoring(workPlan, diskPlan,
+                    (content, _) => { workspace.UpdateActiveWorkingContent(content); return true; }, out error);
+
+            Add("CommitClean", "A clean cross-file rename saves every affected .dscript automatically", t =>
             {
                 var saved = new Dictionary<string, string>
                 {
-                    ["lib.dscript"] = "def work():\n    return 1\n",
-                    ["main.dscript"] = "from lib import work\ndef main():\n    return work()\n"
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
                 };
-                var storage = new MemoryStorage(saved);
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
                 var workspace = new ScriptWorkspace(storage);
                 workspace.Open("main.dscript");
-                var sources = new Dictionary<string, string>
+                if (!Prepare(t, saved, saved, "main", "work", "run", out var work, out var disk)) return;
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal(disk.Changes["lib.dscript"], storage.ReadSaved("lib.dscript"), "library saved");
+                t.Equal(disk.Changes["main.dscript"], storage.ReadSaved("main.dscript"), "main saved");
+                t.Check(!storage.BackupExists("lib.dscript"), "no library backup");
+                t.Check(!storage.BackupExists("main.dscript"), "no main backup");
+                t.Check(!workspace.Active.IsDirty, "active buffer is clean");
+                workspace.Revert("main.dscript");
+                t.Equal(disk.Changes["main.dscript"], workspace.Active.WorkingContent,
+                    "reverting clean document preserves the refactor");
+            });
+
+            Add("CommitDirtyInactive", "A dirty imported script retains unrelated edits and a refactored saved base", t =>
+            {
+                var saved = new Dictionary<string, string>
                 {
-                    ["lib"] = saved["lib.dscript"], ["main"] = saved["main.dscript"]
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
                 };
-                bool planned = DScriptSymbolRename.TryRename("main", new InMemoryDScriptSourceProvider(sources),
-                    sources.Keys, TokenAt(sources["main"], "main", "work", 0), "run",
-                    out var plan, out string error);
-                t.Check(planned, "plan: " + error);
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["lib"] = "def work():\n    return 2\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("lib.dscript", working["lib"]);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                if (!Prepare(t, working, saved, "main", "work", "run", out var work, out var disk)) return;
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal("def run():\n    return 1\n", storage.ReadSaved("lib.dscript"),
+                    "saved library has rename but not pending edit");
+                t.Equal("def run():\n    return 2\n", storage.ReadBackup("lib.dscript"),
+                    "working library retains rename and pending edit");
+                t.Check(workspace.IsDirty("lib.dscript"), "library stays dirty");
+                workspace.Revert("lib.dscript");
+                t.Equal("def run():\n    return 1\n", workspace.GetWorkingContent("lib.dscript"),
+                    "revert drops only the unrelated edit");
+            });
+
+            Add("CommitDirtyActive", "The active buffer's saved base is refactored without saving other edits", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
+                };
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["main"] = "from lib import work\ndef main():\n    print('draft')\n    return work()\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                workspace.UpdateActiveWorkingContent(working["main"]);
+                if (!Prepare(t, working, saved, "main", "work", "run", out var work, out var disk)) return;
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal("from lib import run\ndef main():\n    return run()\n",
+                    storage.ReadSaved("main.dscript"), "saved main has only rename");
+                t.Equal("from lib import run\ndef main():\n    print('draft')\n    return run()\n",
+                    workspace.Active.WorkingContent, "draft kept in editor");
+                t.Check(workspace.Active.IsDirty, "active file is still dirty");
+                t.Check(storage.BackupExists("main.dscript"), "active draft persisted in .back");
+                workspace.Revert("main.dscript");
+                t.Equal("from lib import run\ndef main():\n    return run()\n",
+                    workspace.Active.WorkingContent, "revert keeps rename and drops draft");
+                t.Check(!workspace.Active.IsDirty, "revert leaves clean editor");
+            });
+
+            Add("SavedOnlyReference", "Saved-only references are renamed even when removed in the working copy", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["user"] = "from lib import work\ndef main():\n    return work()\n"
+                };
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["user"] = "def main():\n    return 7\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("user.dscript", working["user"]);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("lib.dscript");
+                if (!Prepare(t, working, saved, "lib", "work", "run", out var work, out var disk)) return;
+                t.Check(!work.Changes.ContainsKey("user.dscript"), "working user has no symbol to rename");
+                t.Check(disk.Changes.ContainsKey("user.dscript"), "saved user still references symbol");
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal("from lib import run\ndef main():\n    return run()\n",
+                    storage.ReadSaved("user.dscript"), "saved-only reference updated");
+                t.Equal(working["user"], storage.ReadBackup("user.dscript"), "working code unchanged");
+                workspace.Revert("user.dscript");
+                t.Equal(storage.ReadSaved("user.dscript"), workspace.GetWorkingContent("user.dscript"),
+                    "revert restores renamed reference");
+            });
+
+            Add("CommitShared", "Shared rename updates clean and dirty declarations independently", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["a"] = "shared score = 1\n",
+                    ["b"] = "shared score\ndef get():\n    return score\n"
+                };
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["b"] = "shared score\ndef get():\n    print('pending')\n    return score\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("b.dscript", working["b"]);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("a.dscript");
+                if (!Prepare(t, working, saved, "a", "score", "total", out var work, out var disk)) return;
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal("shared total = 1\n", storage.ReadSaved("a.dscript"), "clean declaration saved");
+                t.Equal("shared total\ndef get():\n    return total\n", storage.ReadSaved("b.dscript"),
+                    "dirty declaration renamed without extra print");
+                t.Equal("shared total\ndef get():\n    print('pending')\n    return total\n",
+                    storage.ReadBackup("b.dscript"), "dirty copy retains print");
+            });
+
+            Add("UnrelatedDirty", "Refactor does not save unrelated dirty scripts", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n",
+                    ["other"] = "def another():\n    return 0\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                string extra = "def another():\n    return 999\n";
+                storage.WriteBackup("other.dscript", extra);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                if (!Prepare(t, saved, saved, "main", "work", "run", out var work, out var disk)) return;
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(ok, "commit: " + error);
+                t.Equal(saved["other"], storage.ReadSaved("other.dscript"), "unrelated saved unchanged");
+                t.Equal(extra, storage.ReadBackup("other.dscript"), "unrelated backup unchanged");
+            });
+
+            Add("FallbackInvalidSaved", "If a saved source no longer declares the symbol, only working copies are refactored", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def other():\n    return 1\n",
+                    ["main"] = "def main(:\n    pass\n"
+                };
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("lib.dscript", working["lib"]);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                workspace.UpdateActiveWorkingContent(working["main"]);
+                bool planned = DScriptSymbolRename.TryRename("main",
+                    new InMemoryDScriptSourceProvider(working), working.Keys,
+                    TokenAt(working["main"], "main", "work", 0), "run", out var work, out string error);
+                t.Check(planned, "working plan: " + error);
                 if (!planned) return;
-                workspace.UpdateActiveWorkingContent("def changed():\n    pass\n");
-                bool applied = workspace.TryApplyRefactoring(plan.Originals, plan.Changes,
-                    plan.Caret, (_, __) => true, out error);
-                t.Check(!applied, "stale snapshot rejected");
+                bool savedOk = DScriptSymbolRename.TryRenameSavedSymbol(work,
+                    new InMemoryDScriptSourceProvider(saved), saved.Keys, out _, out _);
+                t.Check(!savedOk, "saved sources do not contain lib.work");
+                bool ok = Apply(workspace, work, null, out error);
+                t.Check(ok, "fallback commit: " + error);
+                if (!ok) return;
+                t.Equal(saved["lib"], storage.ReadSaved("lib.dscript"),
+                    "saved library left unchanged in fallback");
+                t.Equal("def run():\n    return 1\n", storage.ReadBackup("lib.dscript"),
+                    "library rename remains in backup");
+                t.Equal(saved["main"], storage.ReadSaved("main.dscript"),
+                    "invalid saved copy stays untouched");
+                t.Equal("from lib import run\ndef main():\n    return run()\n",
+                    workspace.Active.WorkingContent, "working rename still applied");
+            });
+
+            Add("SavedUnrelatedSyntaxAutosaved", "A saved script with unrelated syntax errors does not block a safe saved rename", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "def main(:\n    pass\n"
+                };
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                workspace.UpdateActiveWorkingContent(working["main"]);
+                bool planned = DScriptSymbolRename.TryRename("main",
+                    new InMemoryDScriptSourceProvider(working), working.Keys,
+                    TokenAt(working["main"], "main", "work", 0), "run", out var work, out string error);
+                t.Check(planned, "working plan: " + error);
+                if (!planned) return;
+                bool savedOk = DScriptSymbolRename.TryRenameSavedSymbol(work,
+                    new InMemoryDScriptSourceProvider(saved), saved.Keys, out var disk, out error);
+                t.Check(savedOk, "saved symbol remains resolvable: " + error);
+                if (!savedOk) return;
+                bool ok = Apply(workspace, work, disk, out error);
+                t.Check(ok, "commit: " + error);
+                if (!ok) return;
+                t.Equal("def run():\n    return 1\n", storage.ReadSaved("lib.dscript"),
+                    "clean library saved despite unrelated invalid script");
+                t.Check(!storage.BackupExists("lib.dscript"), "clean library needs no backup");
+                t.Equal(saved["main"], storage.ReadSaved("main.dscript"),
+                    "unrelated invalid saved main remains unchanged");
+                t.Equal("from lib import run\ndef main():\n    return run()\n",
+                    workspace.Active.WorkingContent, "working main updated");
+                workspace.Revert("main.dscript");
+                t.Equal(saved["main"], workspace.Active.WorkingContent,
+                    "revert restores saved syntax error, not the old library name");
+            });
+
+            Add("AbortStale", "A stale working source aborts the complete batch without writing saved or backups", t =>
+            {
+                var saved = new Dictionary<string, string>
+                {
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                if (!Prepare(t, saved, saved, "main", "work", "run", out var work, out var disk)) return;
+                workspace.UpdateActiveWorkingContent("def modified():\n    pass\n");
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(!ok, "stale snapshot rejected");
+                t.Equal(saved["lib"], storage.ReadSaved("lib.dscript"), "saved library unchanged");
                 t.Check(!storage.BackupExists("lib.dscript"), "no unrelated backup written");
             });
 
-            Add("AbortEditorFailure", "A failed active edit restores inactive backups", t =>
+            Add("AbortStaleSaved", "Changing a saved base after planning aborts without touching working copies", t =>
             {
                 var saved = new Dictionary<string, string>
                 {
-                    ["lib.dscript"] = "def work():\n    return 1\n",
-                    ["main.dscript"] = "from lib import work\ndef main():\n    return work()\n"
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
                 };
-                var storage = new MemoryStorage(saved);
-                storage.WriteBackup("lib.dscript", "def work():\n    return 1\n");
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["lib"] = "def work():\n    return 2\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("lib.dscript", working["lib"]);
                 var workspace = new ScriptWorkspace(storage);
                 workspace.Open("main.dscript");
-                var sources = new Dictionary<string, string>
+                if (!Prepare(t, working, saved, "main", "work", "run", out var work, out var disk)) return;
+                storage.WriteSaved("lib.dscript", "def work():\n    return 3\n");
+                bool ok = Apply(workspace, work, disk, out string error);
+                t.Check(!ok, "stale saved snapshot rejected");
+                t.Equal("def work():\n    return 3\n", storage.ReadSaved("lib.dscript"),
+                    "external saved edit preserved");
+                t.Equal(working["lib"], storage.ReadBackup("lib.dscript"), "backup remains original");
+                t.Equal(saved["main"], storage.ReadSaved("main.dscript"), "other file not touched");
+            });
+
+            Add("AbortEditorFailure", "Editor failure restores saved scripts and backups", t =>
+            {
+                var saved = new Dictionary<string, string>
                 {
-                    ["lib"] = saved["lib.dscript"], ["main"] = saved["main.dscript"]
+                    ["lib"] = "def work():\n    return 1\n",
+                    ["main"] = "from lib import work\ndef main():\n    return work()\n"
                 };
-                bool planned = DScriptSymbolRename.TryRename("main", new InMemoryDScriptSourceProvider(sources),
-                    sources.Keys, TokenAt(sources["main"], "main", "work", 0), "run",
-                    out var plan, out string error);
-                t.Check(planned, "plan: " + error);
+                var working = new Dictionary<string, string>(saved)
+                {
+                    ["lib"] = "def work():\n    return 2\n"
+                };
+                var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
+                storage.WriteBackup("lib.dscript", working["lib"]);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                if (!Prepare(t, working, saved, "main", "work", "run", out var work, out var disk)) return;
+                bool ok = workspace.TryApplyRefactoring(work, disk, (_, __) => false, out string error);
+                t.Check(!ok, "editor rejects commit");
+                t.Equal(saved["lib"], storage.ReadSaved("lib.dscript"), "library saved restored");
+                t.Equal(saved["main"], storage.ReadSaved("main.dscript"), "main saved restored");
+                t.Equal(working["lib"], storage.ReadBackup("lib.dscript"), "old backup restored");
+                t.Check(!storage.BackupExists("main.dscript"), "no main backup after rollback");
+                t.Check(!workspace.Active.IsDirty, "editor state stays clean");
+            });
+
+            Add("LocalNotAutosaved", "Renaming a local still behaves like an ordinary unsaved text edit", t =>
+            {
+                string initial = "def main(value):\n    return value\n";
+                var saved = new Dictionary<string, string> { ["main.dscript"] = initial };
+                var storage = new MemoryStorage(saved);
+                var workspace = new ScriptWorkspace(storage);
+                workspace.Open("main.dscript");
+                var sources = new Dictionary<string, string> { ["main"] = initial };
+                bool planned = DScriptSymbolRename.TryRename("main",
+                    new InMemoryDScriptSourceProvider(sources), sources.Keys,
+                    TokenAt(initial, "main", "value", 0), "number", out var work, out string error);
+                t.Check(planned, "local plan: " + error);
                 if (!planned) return;
-                bool applied = workspace.TryApplyRefactoring(plan.Originals, plan.Changes,
-                    plan.Caret, (_, __) => false, out error);
-                t.Check(!applied, "editor rejects the commit");
-                t.Equal(saved["lib.dscript"], storage.ReadBackup("lib.dscript"), "old backup restored");
+                bool ok = Apply(workspace, work, null, out error);
+                t.Check(ok, "local edit: " + error);
+                t.Equal(initial, storage.ReadSaved("main.dscript"), "saved local remains unchanged");
+                t.Check(workspace.Active.IsDirty, "local rename requires manual save");
             });
 
             Add("LocalStillWorks", "F2 keeps local rename behavior and does not scan unrelated roots", t =>

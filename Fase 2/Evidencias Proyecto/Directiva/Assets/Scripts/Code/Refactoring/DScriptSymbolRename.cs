@@ -50,7 +50,8 @@ namespace Directiva.CodeUI
         {
             public string Module;
             public int Start;
-            public SymbolKind Kind;
+            // null means the expression existed, but the binder could not resolve it.
+            public SymbolKind? Kind;
             public string QualifiedName;
         }
 
@@ -99,6 +100,38 @@ namespace Directiva.CodeUI
             if (!TrySnapshot(provider, workspaceModules, out var snapshot, out error)) return false;
             if (!TrySelect(snapshot, module, caret, out var selected))
             { error = "rename_no_symbol"; return false; }
+            return TryBuildSymbolPlan(snapshot, selected, module, caret, proposedName, out plan, out error);
+        }
+
+        /// <summary>
+        /// Plan the same function/shared rename against a second, independent source snapshot.
+        /// Saved scripts can have different offsets and references from working copies;
+        /// identifying the symbol by its bound identity avoids textual guesswork.
+        /// </summary>
+        public static bool TryRenameSavedSymbol(Plan workingPlan, IDScriptSourceProvider savedProvider,
+            IEnumerable<string> workspaceModules, out Plan savedPlan, out string error)
+        {
+            savedPlan = null;
+            if (workingPlan == null || (workingPlan.Kind != "function" && workingPlan.Kind != "shared"))
+            { error = "rename_no_symbol"; return false; }
+            if (!TrySnapshot(savedProvider, workspaceModules, out var snapshot, out error)) return false;
+            string identity = workingPlan.Kind == "function"
+                ? workingPlan.OwnerModule + "." + workingPlan.OldName
+                : "shared." + workingPlan.OldName;
+            SymbolKind kind = workingPlan.Kind == "function" ? SymbolKind.Function : SymbolKind.Global;
+            var selected = snapshot.Occurrences.Values.FirstOrDefault(e =>
+                e.Kind == kind && e.Identity == identity && e.Rename && e.Selectable &&
+                snapshot.Sources[e.Module].Substring(e.Span.Start, e.Span.Length) == workingPlan.OldName);
+            if (selected == null)
+            { error = "rename_no_symbol"; return false; }
+            return TryBuildSymbolPlan(snapshot, selected, selected.Module, selected.Span.Start,
+                workingPlan.NewName, out savedPlan, out error);
+        }
+
+        private static bool TryBuildSymbolPlan(Snapshot snapshot, Edit selected, string module, int caret,
+            string proposedName, out Plan plan, out string error)
+        {
+            plan = null;
             string oldName = snapshot.Sources[module].Substring(selected.Span.Start, selected.Span.Length);
             string newName = (proposedName ?? string.Empty).Trim();
             if (!ValidIdentifier(newName))
@@ -108,6 +141,7 @@ namespace Directiva.CodeUI
                 plan = new Plan(oldName, newName, selected.Kind == SymbolKind.Function ? "function" : "shared",
                     selected.Kind == SymbolKind.Function ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null,
                     0, caret, new Dictionary<string, string>(), new Dictionary<string, string>());
+                error = null;
                 return true;
             }
 
@@ -137,14 +171,23 @@ namespace Directiva.CodeUI
                 updated[pair.Key] = text;
             }
 
-            // Verify every program in the workspace on the proposed, uncommitted snapshot.
-            // Also verify binding identities, since a valid rename can still accidentally
-            // capture a reference by an existing local/import with the requested spelling.
+            // Recovered syntax can leave references outside the AST. Never silently skip
+            // a potentially related name just because the parser could not bind it.
+            if (!HasCompleteReferenceCoverage(snapshot, selected, oldName, newName))
+            { error = "rename_incomplete_analysis"; return false; }
+
+            // Rebind the proposed snapshot without requiring existing errors to disappear.
+            // Keep the original diagnostics (adjusted for text offsets), and reject any
+            // NEW errors or change in an existing reference's semantic identity.
             var newProvider = new InMemoryDScriptSourceProvider(updated);
             foreach (var root in snapshot.Sources.Keys.OrderBy(n => n, StringComparer.Ordinal))
             {
-                var analysis = DScriptFrontend.Analyze(root, newProvider);
-                if (!analysis.Success)
+                var analysis = DScriptFrontend.AnalyzeForRefactoring(root, newProvider);
+                if (!analysis.ModuleSymbols.ContainsKey(root) ||
+                    DScriptRenameDiagnostics.IntroducesErrors(snapshot.Analyses[root], analysis,
+                        (name, position) => edits.TryGetValue(name, out var modified)
+                            ? DScriptRenameDiagnostics.MapPosition(position,
+                                modified.Select(e => e.Span), newName.Length) : position))
                 { error = "rename_result_invalid"; return false; }
                 if (!VerifyBindings(root, analysis, snapshot, edits, selected, newName))
                 { error = "rename_binding_changed"; return false; }
@@ -187,9 +230,11 @@ namespace Directiva.CodeUI
             var memory = new InMemoryDScriptSourceProvider(snapshot.Sources);
             foreach (var name in snapshot.Sources.Keys.OrderBy(n => n, StringComparer.Ordinal))
             {
-                var analysis = DScriptFrontend.Analyze(name, memory);
-                if (!analysis.Success)
-                { error = "rename_fix_errors"; return false; }
+                var analysis = DScriptFrontend.AnalyzeForRefactoring(name, memory);
+                // Syntax recovery cannot guarantee an AST for every possible input
+                // (e.g. an oversized source). Never invent missing symbol tables.
+                if (!analysis.ModuleSymbols.ContainsKey(name))
+                { error = "rename_incomplete_analysis"; return false; }
                 snapshot.Analyses.Add(name, analysis);
                 snapshot.Tokens.Add(name, new DScriptLexer(name, snapshot.Sources[name]).Tokenize().ToList());
             }
@@ -220,8 +265,12 @@ namespace Directiva.CodeUI
                 {
                     foreach (var imported in from.Names)
                     {
-                        if (symbols.Imports.TryGetValue(imported.Alias ?? imported.Name,
-                            out var target) && (target.Kind == SymbolKind.Function || target.Kind == SymbolKind.Global))
+                        symbols.Imports.TryGetValue(imported.Alias ?? imported.Name, out var target);
+                        // Include unresolved imports: a rename must not accidentally make
+                        // a previously invalid `from ... import newName` resolve.
+                        AddTrace(snapshot, module, imported.Span.Start, target);
+                        if (target != null &&
+                            (target.Kind == SymbolKind.Function || target.Kind == SymbolKind.Global))
                             AddOccurrence(snapshot, module, imported.Span, target, true, true);
                     }
                 }
@@ -236,7 +285,7 @@ namespace Directiva.CodeUI
             // positions in this module. Walk only nodes owned by symbols.Ast.
             WalkModule(symbols.Ast, expression =>
             {
-                if (!analysis.ExpressionSymbols.TryGetValue(expression, out var symbol)) return;
+                analysis.ExpressionSymbols.TryGetValue(expression, out var symbol);
                 SourceSpan location;
                 if (expression is NameExpression name)
                     location = name.Span;
@@ -249,7 +298,8 @@ namespace Directiva.CodeUI
                 }
                 else return;
                 AddTrace(snapshot, module, location.Start, symbol);
-                if (symbol.Kind != SymbolKind.Function && symbol.Kind != SymbolKind.Global) return;
+                if (symbol == null ||
+                    (symbol.Kind != SymbolKind.Function && symbol.Kind != SymbolKind.Global)) return;
                 // An explicit import alias remains local to the importing module.
                 bool alias = expression is NameExpression aliasName &&
                     explicitAliases.Contains(aliasName.Name) &&
@@ -258,9 +308,9 @@ namespace Directiva.CodeUI
                 AddOccurrence(snapshot, module, location, symbol, !alias, !alias);
             }, target =>
             {
-                if (!analysis.ForTargetSymbols.TryGetValue(target, out var symbol)) return;
+                analysis.ForTargetSymbols.TryGetValue(target, out var symbol);
                 AddTrace(snapshot, module, target.VariableSpan.Start, symbol);
-                if (symbol.Kind != SymbolKind.Global) return;
+                if (symbol == null || symbol.Kind != SymbolKind.Global) return;
                 bool alias = explicitAliases.Contains(target.Variable) &&
                     symbols.Imports.TryGetValue(target.Variable, out var imported) &&
                     imported.Kind == SymbolKind.Global && imported.QualifiedName == symbol.QualifiedName;
@@ -373,7 +423,7 @@ namespace Directiva.CodeUI
             string key = module + "\n" + start;
             if (!snapshot.Traces.ContainsKey(key))
                 snapshot.Traces.Add(key, new Trace
-                { Module = module, Start = start, Kind = symbol.Kind, QualifiedName = symbol.QualifiedName });
+                { Module = module, Start = start, Kind = symbol?.Kind, QualifiedName = symbol?.QualifiedName });
         }
 
         private static bool TrySelect(Snapshot snapshot, string module, int caret, out Edit selected)
@@ -388,6 +438,86 @@ namespace Directiva.CodeUI
             return selected != null;
         }
 
+        /// <summary>
+        /// Parser recovery discards malformed statements. In files with syntax/lexical
+        /// errors, a bare matching identifier in a discarded statement has no binding.
+        /// Refuse the rename when that token could denote the selected symbol. A broken
+        /// file with no plausible reference must not block an independent refactoring.
+        /// </summary>
+        private static bool HasCompleteReferenceCoverage(Snapshot snapshot, Edit selected,
+            string oldName, string newName)
+        {
+            string owner = selected.Kind == SymbolKind.Function
+                ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null;
+            foreach (var pair in snapshot.Tokens)
+            {
+                string module = pair.Key;
+                bool syntaxErrors = snapshot.Analyses[module].Diagnostics.Any(d =>
+                    d.Module == module && (d.Code.StartsWith("DS1", StringComparison.Ordinal) ||
+                                           d.Code.StartsWith("DS2", StringComparison.Ordinal)));
+                if (!syntaxErrors) continue;
+
+                // A function only exists in its own module or through an import.
+                // Raw import text also covers malformed import statements omitted by
+                // the parser. Shared slots additionally require a declaration/import.
+                bool couldReference = module == owner ||
+                    (owner != null && ImportsModule(pair.Value, owner));
+                if (selected.Kind == SymbolKind.Global)
+                {
+                    var symbols = snapshot.Analyses[module].ModuleSymbols[module];
+                    couldReference |= symbols.Globals.ContainsKey(oldName) ||
+                        symbols.Imports.Values.Any(s => s.QualifiedName == selected.Identity);
+                    for (int i = 0; i + 1 < pair.Value.Count; i++)
+                        if (pair.Value[i].Kind == TokenKind.Shared &&
+                            pair.Value[i + 1].Kind == TokenKind.Identifier &&
+                            pair.Value[i + 1].Text == oldName) couldReference = true;
+                    // For a shared slot there can be more than one declaring module.
+                    foreach (var declaration in snapshot.Occurrences.Values)
+                        if (declaration.Kind == SymbolKind.Global &&
+                            declaration.Identity == selected.Identity &&
+                            ImportsModule(pair.Value, declaration.Module))
+                        { couldReference = true; break; }
+                }
+                if (!couldReference) continue;
+
+                foreach (var token in pair.Value)
+                {
+                    if (token.Kind != TokenKind.Identifier ||
+                        (token.Text != oldName && token.Text != newName)) continue;
+                    string key = module + "\n" + token.Span.Start;
+                    if (snapshot.Occurrences.ContainsKey(key)) continue;
+                    if (snapshot.Traces.TryGetValue(key, out var trace) && trace.Kind != null)
+                        continue;
+                    // A name in an unfinished statement is unknowable. A previously
+                    // unresolved name with the proposed spelling could also be captured.
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool ImportsModule(IReadOnlyList<DScriptToken> tokens, string module)
+        {
+            // Lexer-level import recognition also sees import statements the parser
+            // discarded, without being fooled by module names inside comments/strings.
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                if (tokens[i].Kind != TokenKind.From &&
+                    tokens[i].Kind != TokenKind.Import) continue;
+                int at = i + 1;
+                if (at >= tokens.Count || tokens[at].Kind != TokenKind.Identifier) continue;
+                string path = tokens[at++].Text;
+                while (at + 1 < tokens.Count && tokens[at].Kind == TokenKind.Dot &&
+                    tokens[at + 1].Kind == TokenKind.Identifier)
+                {
+                    path += "." + tokens[at + 1].Text;
+                    at += 2;
+                }
+                if (path == module) return true;
+            }
+            return false;
+        }
+
         private static bool VerifyBindings(string module, DScriptAnalysis updated,
             Snapshot original, Dictionary<string, Edit[]> edits, Edit target, string newName)
         {
@@ -398,7 +528,7 @@ namespace Directiva.CodeUI
             // Only compare references that belong to the module being verified.
             WalkModule(updated.ModuleSymbols[module].Ast, expression =>
             {
-                if (!updated.ExpressionSymbols.TryGetValue(expression, out var symbol)) return;
+                updated.ExpressionSymbols.TryGetValue(expression, out var symbol);
                 SourceSpan position;
                 if (expression is NameExpression name) position = name.Span;
                 else if (expression is AttributeExpression attribute)
@@ -412,9 +542,16 @@ namespace Directiva.CodeUI
                 actual[position.Start] = symbol;
             }, targetNode =>
             {
-                if (updated.ForTargetSymbols.TryGetValue(targetNode, out var symbol))
-                    actual[targetNode.VariableSpan.Start] = symbol;
+                updated.ForTargetSymbols.TryGetValue(targetNode, out var symbol);
+                actual[targetNode.VariableSpan.Start] = symbol;
             });
+            foreach (var from in updated.ModuleSymbols[module].Ast.Statements.OfType<FromImportStatement>())
+                foreach (var imported in from.Names)
+                {
+                    updated.ModuleSymbols[module].Imports.TryGetValue(
+                        imported.Alias ?? imported.Name, out var symbol);
+                    actual[imported.Span.Start] = symbol;
+                }
             foreach (var originalTrace in original.Traces.Values.Where(t => t.Module == module))
             {
                 int at = originalTrace.Start;
@@ -422,8 +559,15 @@ namespace Directiva.CodeUI
                     foreach (var edit in changes)
                         if (edit.Span.Start < originalTrace.Start)
                             at += newName.Length - edit.Span.Length;
-                if (!actual.TryGetValue(at, out var symbol) || symbol.Kind != originalTrace.Kind)
-                    return false;
+                if (!actual.TryGetValue(at, out var symbol)) return false;
+                // An unresolved expression must stay unresolved; otherwise the new name
+                // has captured code that previously referred to no known symbol.
+                if (originalTrace.Kind == null)
+                {
+                    if (symbol != null) return false;
+                    continue;
+                }
+                if (symbol == null || symbol.Kind != originalTrace.Kind) return false;
                 string expected = originalTrace.QualifiedName;
                 if (expected == target.Identity)
                     expected = target.Kind == SymbolKind.Global ? "shared." + newName :

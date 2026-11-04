@@ -42,6 +42,7 @@ namespace Directiva.CodeUI
             public DScriptFunctionSymbols Function;
             public List<SourceSpan> Occurrences;
             public SourceSpan Selected;
+            public DScriptAnalysis Analysis;
         }
 
         private sealed class OverriddenSource : IDScriptSourceProvider
@@ -113,6 +114,11 @@ namespace Directiva.CodeUI
                 error = "rename_unavailable_module";
                 return false;
             }
+            if (!HasCompleteLocalCoverage(snapshot, module, NormalizeNewlines(original), name))
+            {
+                error = "rename_incomplete_analysis";
+                return false;
+            }
             // CodeEditorView normalizes line endings before calculating cursor offsets.
             original = NormalizeNewlines(original);
             string updated = original;
@@ -120,11 +126,17 @@ namespace Directiva.CodeUI
             foreach (var span in snapshot.Occurrences.OrderByDescending(s => s.Start))
                 updated = updated.Remove(span.Start, span.Length).Insert(span.Start, name);
 
-            // The rename must leave the original program semantically valid. A failed
-            // reanalysis aborts without changing a single byte in the editor.
-            var reanalysis = DScriptFrontend.Analyze(module,
+            // Existing errors outside the renamed symbol are not a reason to reject
+            // a refactor. Rebind the recovered AST, but ensure no new diagnostic or
+            // extra reference to the renamed local appears after the change.
+            var reanalysis = DScriptFrontend.AnalyzeForRefactoring(module,
                 new OverriddenSource(provider, module, updated));
-            if (!reanalysis.Success)
+            if (!reanalysis.ModuleSymbols.ContainsKey(module) ||
+                DScriptRenameDiagnostics.IntroducesErrors(snapshot.Analysis, reanalysis,
+                    (diagnosticModule, position) => diagnosticModule == module
+                        ? DScriptRenameDiagnostics.MapPosition(position, snapshot.Occurrences, name.Length)
+                        : position) ||
+                !VerifyRenamedLocal(snapshot, reanalysis, module, name))
             {
                 error = "rename_result_invalid";
                 return false;
@@ -152,10 +164,10 @@ namespace Directiva.CodeUI
             }
             text = NormalizeNewlines(text);
             var effective = new OverriddenSource(provider, module, text);
-            var analysis = DScriptFrontend.Analyze(module, effective);
-            if (!analysis.Success)
+            var analysis = DScriptFrontend.AnalyzeForRefactoring(module, effective);
+            if (!analysis.ModuleSymbols.ContainsKey(module))
             {
-                error = "rename_fix_errors";
+                error = "rename_incomplete_analysis";
                 return false;
             }
             var functions = analysis.FunctionSymbols
@@ -223,9 +235,69 @@ namespace Directiva.CodeUI
             result = new Snapshot
             {
                 Symbol = selected.Symbol, Function = eligible[selected.Symbol],
-                Occurrences = spans, Selected = selected.Span
+                Occurrences = spans, Selected = selected.Span, Analysis = analysis
             };
             return true;
+        }
+
+        private static bool HasCompleteLocalCoverage(Snapshot snapshot, string module,
+            string source, string newName)
+        {
+            if (!snapshot.Analysis.Diagnostics.Any(d => d.Module == module &&
+                (d.Code.StartsWith("DS1", StringComparison.Ordinal) ||
+                 d.Code.StartsWith("DS2", StringComparison.Ordinal)))) return true;
+            var statements = snapshot.Function.Module.Ast.Statements;
+            int start = snapshot.Function.Ast.Span.Start;
+            int end = source.Length;
+            foreach (var statement in statements)
+                if (statement.Span.Start > start && statement.Span.Start < end)
+                    end = statement.Span.Start;
+            var known = new HashSet<int>(snapshot.Occurrences.Select(span => span.Start));
+            foreach (var token in new DScriptLexer(module, source).Tokenize())
+                if (token.Kind == TokenKind.Identifier && token.Span.Start >= start &&
+                    token.Span.Start < end &&
+                    (token.Text == snapshot.Symbol.Name || token.Text == newName) &&
+                    !known.Contains(token.Span.Start))
+                    return false;
+            return true;
+        }
+
+        private static bool VerifyRenamedLocal(Snapshot before, DScriptAnalysis after,
+            string module, string newName)
+        {
+            string functionName = before.Function.Ast.Name;
+            int functionAt = DScriptRenameDiagnostics.MapPosition(before.Function.Ast.Span.Start,
+                before.Occurrences, newName.Length);
+            var updatedFunction = after.FunctionSymbols.Values.FirstOrDefault(table =>
+                table.Module.Name == module && table.Ast.Name == functionName &&
+                table.Ast.Span.Start == functionAt);
+            if (updatedFunction == null ||
+                !updatedFunction.Locals.TryGetValue(newName, out var renamed) ||
+                renamed.Kind != before.Symbol.Kind) return false;
+
+            // Parameter declarations are tokens, not NameExpression bindings. All
+            // *uses*, including for-loop targets and assignments, must have precisely
+            // the same semantic identity after the rename. No previously unresolved
+            // expression may be captured by the newly introduced spelling.
+            string oldIdentity = before.Symbol.QualifiedName;
+            var expected = new HashSet<int>();
+            foreach (var pair in before.Analysis.ExpressionSymbols)
+                if (pair.Key is NameExpression n && pair.Value.QualifiedName == oldIdentity)
+                    expected.Add(DScriptRenameDiagnostics.MapPosition(n.Span.Start,
+                        before.Occurrences, newName.Length));
+            foreach (var pair in before.Analysis.ForTargetSymbols)
+                if (pair.Value.QualifiedName == oldIdentity)
+                    expected.Add(DScriptRenameDiagnostics.MapPosition(pair.Key.VariableSpan.Start,
+                        before.Occurrences, newName.Length));
+
+            var actual = new HashSet<int>();
+            foreach (var pair in after.ExpressionSymbols)
+                if (pair.Key is NameExpression n && pair.Value.QualifiedName == renamed.QualifiedName)
+                    actual.Add(n.Span.Start);
+            foreach (var pair in after.ForTargetSymbols)
+                if (pair.Value.QualifiedName == renamed.QualifiedName)
+                    actual.Add(pair.Key.VariableSpan.Start);
+            return expected.SetEquals(actual);
         }
 
         private static string NormalizeNewlines(string text) =>

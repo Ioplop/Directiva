@@ -384,7 +384,18 @@ namespace DSCompilation.DScript.Parsing
         }
         private Expression ReadPrimary()
         {
-            var t = Advance();
+            // A missing expression at the end of a line must not consume the
+            // newline (or DEDENT/END). ReadStatements uses these tokens to
+            // recover, so consuming them would also discard the next statement.
+            var t = Current;
+            if (t.Kind == TokenKind.Newline || t.Kind == TokenKind.Dedent ||
+                t.Kind == TokenKind.End)
+            {
+                Error("DS2005", "Expected expression, found " + t.Kind + ".", t.Span,
+                    "expression_expected", t.Kind);
+                throw new BadSyntax();
+            }
+            Advance();
             switch (t.Kind)
             {
                 case TokenKind.Identifier: return new NameExpression(t.Text, t.Span);
