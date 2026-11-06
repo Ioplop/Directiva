@@ -42,5 +42,15 @@ namespace DSimulation
 
         /// <summary> Time in seconds after taking damage before beginning shield regeneration. </summary>
         public static readonly Fixed ShieldRegenCooldown = 4;
+
+        // Recursos
+        /// <summary> The number of seconds it takes to gather a resource. </summary>
+        public static readonly Fixed resourceGatherSpeed = 1;
+        /// <summary> How many resources are gathered each time. </summary>
+        public const int resourceGatherAmount = 1; // 1 resource per gather
+        /// <summary> How many resource units are contained in a single resource entity. </summary>
+        public const int resourceMaxAmount = 100; // 100 resources per resource entity
+        /// <summary> How many resources it costs to build a unit. </summary>
+        public const int unitCost = 10; // 10 resources per unit
     }
 }

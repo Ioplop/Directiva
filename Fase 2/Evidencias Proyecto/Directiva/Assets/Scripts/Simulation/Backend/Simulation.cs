@@ -238,7 +238,9 @@ namespace DSimulation
             // Make creation events.
             if (entity is SBUnit unit)
                 NotifyEvent(unit.CreateUnitEvent());
-            // TODO: Add creation events for nexus and resources when those classes exist
+            if (entity is SBResource resource)
+                resource.NotifyCreateResource();
+            // TODO: Add creation events for nexus when the class exists
 
             return id;
         }
