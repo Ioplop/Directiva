@@ -162,6 +162,11 @@ namespace DSimulation
             NotifyDeath();
         }
         
+        /// <summary>
+        /// Applies damage to the entity with the intention of healing it.
+        /// This means it bypasses shields and doesn't apply regeneration cooldown.
+        /// </summary>
+        /// <param name="dmg"></param>
         protected virtual void Heal(Fixed dmg) 
         {
             Fixed newHealth = (Health + dmg).Clamp(0, MaxHealth);
@@ -229,7 +234,6 @@ namespace DSimulation
                 }
             }
         }
-
 
         public override string ToString()
         {

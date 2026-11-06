@@ -51,11 +51,18 @@ namespace DSimulation
             aimDistance = SConstants.UnitRange * Fixed.Decimal(15, 1);
         }
 
+        /// <summary>
+        /// Creates an event that informs the current entity shields.
+        /// </summary>
         internal EventCreateUnit CreateUnitEvent()
         {
             return new EventCreateUnit(id, side, MaxHealth, MaxShields, Position, Rotation);
         }
 
+        /// <inheritdoc/>
+        /// <remarks>
+        /// This implementation also requires the unit to be aligned with the target.
+        /// </remarks>
         protected override bool CanAttack(SBEntity target)
         {
             if (!base.CanAttack(target))
@@ -216,7 +223,7 @@ namespace DSimulation
         }
 
         /// <summary>
-        /// If the current movement mode is "Entity" but the entity is either null or dead, we change to Hold.
+        /// If the current movement mode is "Entity" but the entity is either null or dead, change mode to Hold.
         /// </summary>
         private void EnsureMoveTarget()
         {
@@ -227,6 +234,9 @@ namespace DSimulation
             }
         }
 
+        /// <summary>
+        /// If the current attack mode is "Entity" but the entity is either null or dead, change mode to Hold.
+        /// </summary>
         private void EnsureAttackTarget()
         {
             if (attackMode == AttackMode.Enitity && (attackTarget == null || !attackTarget.alive))
@@ -236,6 +246,9 @@ namespace DSimulation
             }
         }
 
+        /// <summary>
+        /// When the unit is in attack mode: Entity, it will try to attack the target if possible.
+        /// </summary>
         private void AttackTarget()
         {
             if (attackMode == AttackMode.Enitity)

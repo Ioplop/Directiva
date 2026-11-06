@@ -20,6 +20,12 @@ namespace DSimulation
             simulation.NotifyEvent(new EventAttack(id, target.id));
         }
 
+        /// <summary>
+        /// Checks if the entity can attack the target.
+        /// This means the target is alive, within range and the attack cooldown has finished.
+        /// </summary>
+        /// <param name="target">Entity to check against</param>
+        /// <returns>true if the entity can attack the target, false otherwise</returns>
         protected virtual bool CanAttack(SBEntity target)
         {
             return target.alive // El objetivo aún está vivo
@@ -27,6 +33,10 @@ namespace DSimulation
                 && (target.Position - Position).SqrMagnitude <= range * range; // El objetivo está a nuestro alcance
         }
 
+        /// <summary>
+        /// Attacks the target if possible.
+        /// </summary>
+        /// <param name="target">Entity to be attacked</param>
         protected virtual void Attack(SBEntity target)
         {
             if (!CanAttack(target))
