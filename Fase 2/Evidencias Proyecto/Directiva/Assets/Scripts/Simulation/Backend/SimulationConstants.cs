@@ -17,6 +17,14 @@ namespace DSimulation
         public static readonly Fixed ResourceRadius = 1;
         public static readonly Fixed UnitRadius = Fixed.Decimal(5, 1); // 0.5
 
+        // Dano y ataques
+        public static readonly Fixed UnitDamage = 5;
+        public static readonly Fixed UnitAttackSpeed = 1;
+        public static readonly Fixed UnitRange = 4;
+        public static readonly Fixed NexusDamage = 5;
+        public static readonly Fixed NexusAttackSpeed = 1;
+        public static readonly Fixed NexusRange = 6;
+
         // Vida
         public static readonly Fixed NexusHealth = 100;
         public static readonly Fixed UnitHealth = 10;
@@ -33,6 +41,6 @@ namespace DSimulation
         public static readonly Fixed ResourceShieldRegen = 0;
 
         /// <summary> Time in seconds after taking damage before beginning shield regeneration. </summary>
-        public static readonly Fixed ShieldRegenCooldown = 10;
+        public static readonly Fixed ShieldRegenCooldown = 4;
     }
 }

@@ -235,8 +235,9 @@ namespace DSimulation
             entityRegistry.Add(id, entity);
             entity.Register(this, id);
 
+            // Make creation events.
             if (entity is SBUnit unit)
-                NotifyEvent(EventCreateUnit.FromUnit(unit));
+                NotifyEvent(unit.CreateUnitEvent());
             // TODO: Add creation events for nexus and resources when those classes exist
 
             return id;

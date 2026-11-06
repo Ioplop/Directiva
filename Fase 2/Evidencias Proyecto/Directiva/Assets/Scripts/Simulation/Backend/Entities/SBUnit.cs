@@ -1,4 +1,5 @@
 using DMath;
+using DSEvents;
 
 namespace DSimulation
 {
@@ -11,14 +12,26 @@ namespace DSimulation
         internal static readonly Fixed rotationSoftness = 10;
         /// How aggressively we close the distance.
         internal static readonly Fixed followGain = 4;
+        internal static readonly Fixed aimAlignment = Fixed.Decimal(99, 2); // ~8 degrees of missalignment or less required to shoot
 
         // Speed
         internal FixedVector2 linearVelocity = FixedVector2.Zero;
 
         // Movement status
-        internal FixedVector2 positionTarget;
-        internal SBEntity entityTarget;
+        internal FixedVector2 positionMoveTarget;
+        internal SBEntity entityMoveTarget;
         internal MoveMode moveMode = MoveMode.Hold;
+
+        // Attack status
+        internal AttackMode attackMode = AttackMode.Hold;
+        internal SBEntity attackTarget;
+        internal readonly Fixed aimDistance;
+
+        internal enum AttackMode
+        {
+            Hold,
+            Enitity
+        }
 
         internal enum MoveMode
         {
@@ -29,12 +42,27 @@ namespace DSimulation
 
         public SBUnit(int side, FixedVector2 position, Fixed rotation) : base(
             side,
+            SConstants.UnitDamage, SConstants.UnitRange, SConstants.UnitAttackSpeed,
             position, rotation, 
             SConstants.UnitRadius, SConstants.UnitPriority, 
             SConstants.UnitHealth, SConstants.UnitShields, SConstants.UnitShieldRegen
             )
-        { 
+        {
+            aimDistance = SConstants.UnitRange * Fixed.Decimal(15, 1);
+        }
 
+        internal EventCreateUnit CreateUnitEvent()
+        {
+            return new EventCreateUnit(id, side, MaxHealth, MaxShields, Position, Rotation);
+        }
+
+        protected override bool CanAttack(SBEntity target)
+        {
+            if (!base.CanAttack(target))
+                return false;
+            var dist = target.Position - Position;
+            Fixed alignment = dist.Normalized.Dot(Forward);
+            return alignment >= aimAlignment;
         }
 
         /// <summary>
@@ -123,9 +151,29 @@ namespace DSimulation
         }
 
         /// <summary>
-        /// Uses the current move mode to decide how to move towards a target, changing linear velocity and rotating towards a the target.
+        /// Decides how to aim depending on current orders and applies the correct rotation.
         /// </summary>
-        private void Target()
+        private void Aim()
+        {
+            if (attackMode == AttackMode.Enitity)
+            {
+                var direction = attackTarget.Position - Position;
+                if (direction.SqrMagnitude <= aimDistance * aimDistance)
+                {
+                    AimTarget(direction);
+                    return;
+                }
+            }
+            if (linearVelocity != FixedVector2.Zero)
+            {
+                AimTarget(linearVelocity);
+            }
+        }
+
+        /// <summary>
+        /// Uses the current move mode to decide how to move towards a target, changing linear velocity towards a the target.
+        /// </summary>
+        private void UpdateVelocity()
         {
             FixedVector2 target;
             FixedVector2 targetVelocity;
@@ -134,18 +182,18 @@ namespace DSimulation
             switch (moveMode)
             {
                 case MoveMode.Follow:
-                    target = entityTarget.Position;
+                    target = entityMoveTarget.Position;
 
                     // Capture velocity of a unit, if the target is one. Otherwise, it's velocity is zero.
-                    targetVelocity = entityTarget is SBUnit unit
+                    targetVelocity = entityMoveTarget is SBUnit unit
                         ? unit.linearVelocity
                         : FixedVector2.Zero;
 
-                    minDistance = entityTarget.Radius + Radius + followDistance;
+                    minDistance = entityMoveTarget.Radius + Radius + followDistance;
                     break;
 
                 case MoveMode.Position:
-                    target = positionTarget;
+                    target = positionMoveTarget;
                     targetVelocity = FixedVector2.Zero;
                     minDistance = followDistance;
                     break;
@@ -156,10 +204,6 @@ namespace DSimulation
             }
 
             FixedVector2 offset = target - Position;
-
-            if (offset != FixedVector2.Zero)
-                AimTarget(offset);
-
             FollowTarget(offset, targetVelocity, minDistance);
         }
 
@@ -176,10 +220,27 @@ namespace DSimulation
         /// </summary>
         private void EnsureMoveTarget()
         {
-            if (moveMode == MoveMode.Follow && (entityTarget == null || !entityTarget.alive))
+            if (moveMode == MoveMode.Follow && (entityMoveTarget == null || !entityMoveTarget.alive))
             {
-                entityTarget = null;
+                entityMoveTarget = null;
                 moveMode = MoveMode.Hold;
+            }
+        }
+
+        private void EnsureAttackTarget()
+        {
+            if (attackMode == AttackMode.Enitity && (attackTarget == null || !attackTarget.alive))
+            {
+                attackTarget = null;
+                attackMode = AttackMode.Hold;
+            }
+        }
+
+        private void AttackTarget()
+        {
+            if (attackMode == AttackMode.Enitity)
+            {
+                Attack(attackTarget);
             }
         }
 
@@ -192,10 +253,16 @@ namespace DSimulation
 
             // Ensure that we are not pursuing a dead entity.
             EnsureMoveTarget();
-            // Rotates and updates velocity
-            Target();
-            // Applies velocity
+            // Ensure that we are not attacking a dead entity.
+            EnsureAttackTarget();
+            // Updates velocity
+            UpdateVelocity();
+            // Applies velocity as movement.
             Move();
+            // Rotates based on targets and velocity.
+            Aim();
+            // Attacks valid targets in range and aligned to this unit.
+            AttackTarget();
         }
     }
 }

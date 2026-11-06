@@ -1,5 +1,4 @@
 using DMath;
-using DSimulation;
 
 namespace DSEvents
 {
@@ -23,18 +22,6 @@ namespace DSEvents
             this.maxShields = maxShields;
             this.position = position;
             this.rotation = rotation;
-        }
-
-        public static EventCreateUnit FromUnit(SBUnit unit)
-        {
-            return new EventCreateUnit(
-                unit.id,
-                unit.side,
-                unit.MaxHealth,
-                unit.MaxShields,
-                unit.Position,
-                unit.Rotation
-            );
         }
     }
 }

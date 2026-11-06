@@ -27,6 +27,7 @@ namespace DSimulation
         // These are the position and rotation before Update. Useful to see if anything changed and notify the frontend.
         internal FixedVector2 OriginalPosition { get; private set; }
         internal Fixed OriginalRotation { get; private set; }
+        internal FixedVector2 Forward => FixedVector2.FromAngle(Rotation);
 
         // COLLISION BEHAVIOR
         public Fixed Radius {  get; protected set; }
@@ -177,7 +178,7 @@ namespace DSimulation
         /// First takes from shields. Then from health. If by the end health is <= 0, kills the entity.
         /// </summary>
         /// <param name="dmg">Damage to apply. Negative numbers heal, but only health.</param>
-        protected virtual void Damage(Fixed dmg)
+        internal virtual void Damage(Fixed dmg)
         {
             if (dmg == 0)
             {
@@ -203,7 +204,7 @@ namespace DSimulation
                     Shields = 0;
                     NotifyShields();
                 }
-                Health -= dmg;
+                Health = (Health - dmg).Clamp( 0, MaxHealth);
                 NotifyHealth();
                 if (Health <= 0) Die();
             }
@@ -215,10 +216,17 @@ namespace DSimulation
         /// </summary>
         protected virtual void RegenShields()
         {
-            if (Shields < MaxShields && ShieldRegen != 0 && simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
+            if (ShieldRegen * SConstants.deltaTime != 0 &&
+                simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
             {
-                Shields = (Shields + ShieldRegen * SConstants.deltaTime).Clamp(0, MaxShields);
-                NotifyShields();
+                Fixed newShields = (Shields + ShieldRegen * SConstants.deltaTime)
+                    .Clamp(0, MaxShields);
+
+                if (newShields != Shields)
+                {
+                    Shields = newShields;
+                    NotifyShields();
+                }
             }
         }
 
