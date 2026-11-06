@@ -241,5 +241,13 @@ namespace DMath
 
             return low;
         }
+
+        public static FixedVector2 FromAngle(Fixed angle)
+        {
+            return new FixedVector2(
+                Trigonometry.Cos(angle),
+                Trigonometry.Sin(angle)
+                );
+        }
     }
 }
