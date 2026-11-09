@@ -10,6 +10,7 @@ namespace DSimulation
     {
         // IDENTITY
         public Simulation simulation { get; private set; }
+        public SBSide side { get; }
         public int id { get; private set; }
         public bool alive { get; protected set; }
 
@@ -42,8 +43,9 @@ namespace DSimulation
         public Fixed ShieldRegen { get; protected set; }
         public Fixed LastDamage {  get; protected set; }
 
-        public SBEntity()
+        public SBEntity(SBSide side)
         {
+            this.side = side;
             alive = true;
             Position = FixedVector2.Zero;
             Rotation = 0;
@@ -57,8 +59,9 @@ namespace DSimulation
             ShieldRegen = 0;
         }
 
-        public SBEntity(FixedVector2 position, Fixed rotation, Fixed radius, int collisionPriority, Fixed maxHealth, Fixed maxShields, Fixed shieldRegen)
+        public SBEntity(SBSide side, FixedVector2 position, Fixed rotation, Fixed radius, int collisionPriority, Fixed maxHealth, Fixed maxShields, Fixed shieldRegen)
         {
+            this.side = side;
             alive = true;
             Position = position;
             Rotation = rotation;

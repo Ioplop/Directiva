@@ -5,7 +5,6 @@ namespace DSimulation
 {
     public class SBVMEntity : SBEntity
     {
-        public readonly int side;
         /// <summary> How much damage the entity causes per attack. </summary>
         internal readonly Fixed damage;
         /// <summary> How far away the entity can shoot. </summary>
@@ -48,7 +47,7 @@ namespace DSimulation
         }
 
         public SBVMEntity(
-            int side,
+            SBSide side,
             Fixed damage,
             Fixed range,
             Fixed attackSpeed,
@@ -59,12 +58,11 @@ namespace DSimulation
             Fixed maxHealth, 
             Fixed maxShields, 
             Fixed shieldRegen) : base(
-                position, rotation,
+                side, position, rotation,
                 radius, collisionPriority,
                 maxHealth, maxShields, shieldRegen
             )
         {
-            this.side = side;
             this.damage = damage;
             this.range = range;
             this.attackSpeed = attackSpeed;

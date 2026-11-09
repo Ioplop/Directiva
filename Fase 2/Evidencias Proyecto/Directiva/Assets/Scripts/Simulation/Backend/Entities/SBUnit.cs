@@ -97,7 +97,7 @@ namespace DSimulation
             Position,
         }
 
-        public SBUnit(int side, FixedVector2 position, Fixed rotation) : base(
+        public SBUnit(SBSide side, FixedVector2 position, Fixed rotation) : base(
             side,
             SConstants.UnitDamage, SConstants.UnitRange, SConstants.UnitAttackSpeed,
             position, rotation, 
@@ -124,7 +124,7 @@ namespace DSimulation
         /// </summary>
         internal EventCreateUnit CreateUnitEvent()
         {
-            return new EventCreateUnit(id, side, MaxHealth, MaxShields, Position, Rotation);
+            return new EventCreateUnit(id, side.id, MaxHealth, MaxShields, Position, Rotation);
         }
 
         /// <summary>

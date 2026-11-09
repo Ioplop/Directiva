@@ -24,7 +24,7 @@ namespace Directiva.EditorTests.SimulationTests
             Add("UnitCreatedOnRegistration", "A registered unit emits its complete initial visual state", t =>
             {
                 World world = SimulationTestHarness.NewWorld();
-                var unit = SimulationTestHarness.AddUnit(world, 3, 5, 6, 90);
+                var unit = SimulationTestHarness.AddUnit(world, 2, 5, 6, 90);
                 t.Equal(0, SimulationTestHarness.DrainEvents(world).Count,
                     "queueing an unregistered unit emits nothing");
                 world.Start();
@@ -33,7 +33,7 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Equal(1, events.Count, "one creation event");
                 var created = Require<EventCreateUnit>(t, events, 0, "creation");
                 t.Equal(unit.id, created.id, "unit ID");
-                t.Equal(3, created.side, "side");
+                t.Equal(2, created.side, "side");
                 t.Equal(unit.MaxHealth, created.maxHealth, "maximum health");
                 t.Equal(unit.MaxShields, created.maxShields, "maximum shields");
                 t.Equal(unit.Position, created.position, "initial position");

@@ -15,8 +15,10 @@ namespace Directiva.EditorTests.SimulationTests
 
             Add("ConstructorInitialState", "Unit construction takes side, position and rotation plus current simulation stats", t =>
             {
-                var unit = new SBUnit(3, SimulationTestHarness.P(5, 6), 45);
-                t.Equal(3, unit.side, "side");
+                World world = SimulationTestHarness.NewWorld();
+                SBSide side = world.GetSide(2);
+                var unit = new SBUnit(side, SimulationTestHarness.P(5, 6), 45);
+                t.Check(ReferenceEquals(side, unit.side), "side reference");
                 t.Equal(SimulationTestHarness.P(5, 6), unit.Position, "position");
                 t.Equal((Fixed)45, unit.Rotation, "rotation");
                 t.Equal(SConstants.UnitRadius, unit.Radius, "radius");

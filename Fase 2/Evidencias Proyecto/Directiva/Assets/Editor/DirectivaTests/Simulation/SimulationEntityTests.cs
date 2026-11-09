@@ -15,7 +15,9 @@ namespace Directiva.EditorTests.SimulationTests
 
             Add("Defaults", "Entities start alive, unregistered and with default collision settings", t =>
             {
-                var entity = new SimulationTestHarness.StubEntity(1);
+                World world = SimulationTestHarness.NewWorld();
+                var entity = new SimulationTestHarness.StubEntity(world.GetSide(0), 1);
+                t.Check(ReferenceEquals(world.GetSide(0), entity.side), "neutral side");
                 t.Equal(0, entity.id, "id before registration");
                 t.Check(entity.simulation == null, "simulation should be null");
                 t.Check(entity.alive, "entity should start alive");
@@ -29,7 +31,8 @@ namespace Directiva.EditorTests.SimulationTests
 
             Add("CustomCollisionSettings", "Derived entities may configure collision properties", t =>
             {
-                var entity = new SimulationTestHarness.StubEntity(2, false, 7);
+                World world = SimulationTestHarness.NewWorld();
+                var entity = new SimulationTestHarness.StubEntity(world.GetSide(0), 2, false, 7);
                 t.Equal((Fixed)2, entity.Radius, "radius");
                 t.Check(!entity.Collides, "collision opt-out");
                 t.Equal(7, entity.CollisionPriority, "collision priority");

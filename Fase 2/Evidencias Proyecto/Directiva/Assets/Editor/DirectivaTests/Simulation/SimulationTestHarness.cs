@@ -20,17 +20,17 @@ namespace Directiva.EditorTests.SimulationTests
 
         internal sealed class StubEntity : SBEntity
         {
-            internal StubEntity(Fixed radius, bool collides = true, int priority = 0)
-                : base()
+            internal StubEntity(SBSide side, Fixed radius, bool collides = true, int priority = 0)
+                : base(side)
             {
                 Radius = radius;
                 Collides = collides;
                 CollisionPriority = priority;
             }
 
-            internal StubEntity(FixedVector2 position, Fixed radius,
+            internal StubEntity(SBSide side, FixedVector2 position, Fixed radius,
                 Fixed maxHealth, Fixed maxShields, Fixed shieldRegen)
-                : base(position, 0, radius, 0, maxHealth, maxShields, shieldRegen)
+                : base(side, position, 0, radius, 0, maxHealth, maxShields, shieldRegen)
             {
             }
 
@@ -51,9 +51,9 @@ namespace Directiva.EditorTests.SimulationTests
         private static readonly FieldInfo UnitModeField =
             typeof(SBUnit).GetField("moveMode", PrivateInstance);
         private static readonly FieldInfo UnitPositionTargetField =
-            typeof(SBUnit).GetField("positionTarget", PrivateInstance);
+            typeof(SBUnit).GetField("positionMoveTarget", PrivateInstance);
         private static readonly FieldInfo UnitEntityTargetField =
-            typeof(SBUnit).GetField("entityTarget", PrivateInstance);
+            typeof(SBUnit).GetField("entityMoveTarget", PrivateInstance);
         private static readonly FieldInfo UnitVelocityField =
             typeof(SBUnit).GetField("linearVelocity", PrivateInstance);
 
@@ -68,7 +68,7 @@ namespace Directiva.EditorTests.SimulationTests
         internal static StubEntity Add(World world, Fixed x, Fixed y, Fixed radius,
             bool collides = true, int priority = 0)
         {
-            var entity = new StubEntity(radius, collides, priority);
+            var entity = new StubEntity(world.GetSide(0), radius, collides, priority);
             Place(entity, x, y);
             world.EnqueueCreation(entity);
             return entity;
@@ -77,14 +77,14 @@ namespace Directiva.EditorTests.SimulationTests
         internal static StubEntity AddWithStats(World world, Fixed x, Fixed y, Fixed radius,
             Fixed maxHealth, Fixed maxShields, Fixed shieldRegen)
         {
-            var entity = new StubEntity(P(x, y), radius, maxHealth, maxShields, shieldRegen);
+            var entity = new StubEntity(world.GetSide(0), P(x, y), radius, maxHealth, maxShields, shieldRegen);
             world.EnqueueCreation(entity);
             return entity;
         }
 
         internal static SBUnit AddUnit(World world, int side, Fixed x, Fixed y, Fixed rotation)
         {
-            var unit = new SBUnit(side, P(x, y), rotation);
+            var unit = new SBUnit(world.GetSide(side), P(x, y), rotation);
             world.EnqueueCreation(unit);
             return unit;
         }

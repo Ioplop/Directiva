@@ -12,8 +12,8 @@ namespace DSimulation
         public int GatherAmount { get; protected set; }
         public SBUnit GatheringUnit { get; internal set; }
 
-        public SBResource(FixedVector2 position, Fixed rotation, int resources, int richness = 1) : base(
-            position, rotation,
+        public SBResource(SBSide side, FixedVector2 position, Fixed rotation, int resources, int richness = 1) : base(
+            side, position, rotation,
             SConstants.ResourceRadius, SConstants.ResourcePriority,
             SConstants.ResourceHealth, SConstants.ResourceShields, SConstants.ResourceShieldRegen)
         { 
@@ -87,7 +87,7 @@ namespace DSimulation
         internal override void Die()
         {
             base.Die();
-            DetachGatherer();
+            DetachGatherer(GatheringUnit);
         }
     }
 }

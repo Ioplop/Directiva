@@ -15,6 +15,11 @@ namespace DSimulation
         private int nextId = 1;
         private int NextId { get { return nextId++; } }
 
+        // Sides are indexed by their ID: neutral (0), player 1 (1), player 2 (2).
+        private readonly SBSide[] sides = { new SBSide(0), new SBSide(1), new SBSide(2) };
+
+        public SBSide GetSide(int side) => sides[side];
+
         // Maintains entities on a strict ordered structure to sequentially update and do as needed.
         // ID does not match position after entities are removed from the simulation.
         private List<SBEntity> entityList = new();
@@ -215,6 +220,14 @@ namespace DSimulation
             SBEntity entity = entityRegistry[id];
             entityRegistry.Remove(id);
             entityList.Remove(entity);
+
+            if (entity is SBUnit unit)
+                unit.side.units.Remove(unit);
+            else if (entity is SBResource resource)
+                resource.side.resourceEntities.Remove(resource);
+            else if (entity is SBNexus nexus)
+                nexus.side.Nexus = null;
+
             return entity;
         }
 
@@ -235,12 +248,22 @@ namespace DSimulation
             entityRegistry.Add(id, entity);
             entity.Register(this, id);
 
-            // Make creation events.
+            // Register each entity with its side and notify its creation.
             if (entity is SBUnit unit)
+            {
+                unit.side.units.Add(unit);
                 NotifyEvent(unit.CreateUnitEvent());
-            if (entity is SBResource resource)
+            }
+            else if (entity is SBResource resource)
+            {
+                resource.side.resourceEntities.Add(resource);
                 resource.NotifyCreateResource();
-            // TODO: Add creation events for nexus when the class exists
+            }
+            else if (entity is SBNexus nexus)
+            {
+                nexus.side.Nexus = nexus;
+                NotifyEvent(nexus.CreateNexusEvent());
+            }
 
             return id;
         }
