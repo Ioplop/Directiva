@@ -11,6 +11,7 @@ namespace DSimulation
         internal static readonly Fixed angularVelocity = 360;
         internal static readonly Fixed rotationSoftness = 10;
         internal static readonly Fixed gatherDistance = Fixed.Decimal(2, 1);
+        internal static readonly Fixed unloadDistance = 1;
         internal static readonly Fixed cargoSlowdown = Fixed.Decimal(9, 1);
         internal const int maxCargo = 15;
         /// How aggressively we close the distance.
@@ -86,10 +87,14 @@ namespace DSimulation
             get { return cargo; }
             private set
             {
+                if (cargo == value)
+                    return;
                 cargo = value;
                 currentMaxSpeed = maxSpeed;
                 for (int i = 1; i <= cargo; i++)
                     currentMaxSpeed *= cargoSlowdown;
+
+                NotifyCargo();
             }
         }
         internal Fixed timeGathering = 0;
@@ -144,7 +149,25 @@ namespace DSimulation
             dropResource = false;
             Cargo = 0;
             simulation.NotifyEvent(new EventDropCargo(id));
-            NotifyCargo();
+        }
+
+        /// <summary>
+        /// Automatically unloads carried resources when the unit is close enough to its nexus.
+        /// </summary>
+        private void UnloadCargo()
+        {
+            SBNexus nexus = side.Nexus;
+            if (cargo == 0 || nexus == null || !nexus.alive)
+                return;
+
+            var dist = nexus.Position - Position;
+            var maxDist = Radius + nexus.Radius + unloadDistance;
+            if (dist.SqrMagnitude > maxDist * maxDist)
+                return;
+
+            side.Resources += Cargo;
+            Cargo = 0;
+            simulation.NotifyEvent(new EventUnloadCargo(id, nexus.id));
         }
 
         /// <summary>
@@ -428,7 +451,6 @@ namespace DSimulation
                     {
                         Cargo += resource.TryGather(maxCargo - Cargo);
                         timeGathering = 0;
-                        NotifyCargo();
                         // Immediately stop gathering if we are full or the resource depletes.
                         // This makes the unit respond immediately to this rather than in the next update.
                         if (!resource.alive || Cargo >= maxCargo)
@@ -471,6 +493,8 @@ namespace DSimulation
             AttackTarget();
             // Gathers valid targets in range and aligned to this unit.
             GatherTarget();
+            // Unloading is automatic and does not interrupt movement or other actions.
+            UnloadCargo();
         }
 
         /// <summary>
