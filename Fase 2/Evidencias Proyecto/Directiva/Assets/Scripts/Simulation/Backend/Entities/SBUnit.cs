@@ -29,6 +29,20 @@ namespace DSimulation
         internal ActionMode actionMode = ActionMode.Hold;
         internal SBEntity actionTarget;
         internal readonly Fixed aimDistance;
+        private bool dropResource = false;
+        internal bool DropResource
+        {
+            get { return dropResource; }
+            set
+            {
+                dropResource = value;
+
+                // Dropping cargo is incompatible with gathering, so we need to stop gathering.
+                // It does not interrupt attacking or movement.
+                if (value && actionMode == ActionMode.Gather)
+                    StopAction();
+            }
+        }
         private bool isGathering = false;
         internal bool IsGathering
         {
@@ -117,6 +131,20 @@ namespace DSimulation
             actionMode = ActionMode.Hold;
             actionTarget = null;
             IsGathering = false;
+        }
+
+        /// <summary>
+        /// Drops all carried resources when a drop order is pending.
+        /// </summary>
+        private void DropCargo()
+        {
+            if (!dropResource)
+                return;
+
+            dropResource = false;
+            Cargo = 0;
+            simulation.NotifyEvent(new EventDropCargo(id));
+            NotifyCargo();
         }
 
         /// <summary>
@@ -427,6 +455,8 @@ namespace DSimulation
             if (!alive)
                 return;
 
+            // Process a pending cargo drop without affecting movement or attacks.
+            DropCargo();
             // Ensure that we are not pursuing a dead entity.
             EnsureMoveTarget();
             // Ensure that we are not attacking a dead entity.
