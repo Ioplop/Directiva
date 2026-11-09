@@ -23,6 +23,8 @@ namespace DSimulation
         // Maintains entities on a strict ordered structure to sequentially update and do as needed.
         // ID does not match position after entities are removed from the simulation.
         private List<SBEntity> entityList = new();
+        // Read-only access for targeting, preserving the deterministic registration order.
+        internal IReadOnlyList<SBEntity> Entities => entityList;
         // Maintains entities on a dictionary for quick fixed access time by ID
         private Dictionary<int, SBEntity> entityRegistry = new();
         
