@@ -4,11 +4,13 @@ using DSEvents;
 namespace DSimulation
 {
     /// <summary>
-    /// The nexus belonging to a side. Automatically attacks non-neutral enemies in range.
+    /// The nexus belonging to a side. Automatically attacks enemies and builds units.
     /// </summary>
     public class SBNexus : SBVMEntity
     {
         private SBEntity lockedTarget;
+        private int? buildingRequestId;
+        private Fixed buildTime;
 
         public SBNexus(SBSide side, FixedVector2 position) : base(
             side,
@@ -17,6 +19,58 @@ namespace DSimulation
             SConstants.NexusRadius, SConstants.NexusPriority,
             SConstants.NexusHealth, SConstants.NexusShield, SConstants.NexusShieldRegen)
         {
+        }
+
+        internal bool IsBuilding => buildingRequestId.HasValue;
+
+        /// <summary>
+        /// Begins a construction that has already been accepted and paid for by Simulation.
+        /// </summary>
+        internal void BeginBuild(int requestId)
+        {
+            buildingRequestId = requestId;
+            buildTime = 0;
+        }
+
+        /// <summary>
+        /// Chooses a spawn point tangent to this nexus, toward the geometric center of all existing nexuses.
+        /// </summary>
+        private FixedVector2 GetSpawnPosition()
+        {
+            FixedVector2 sum = FixedVector2.Zero;
+            int count = 0;
+            foreach (SBSide candidateSide in simulation.Sides)
+            {
+                if (candidateSide.Nexus != null)
+                {
+                    sum += candidateSide.Nexus.Position;
+                    count++;
+                }
+            }
+
+            FixedVector2 direction = sum / count - Position;
+            // A lone nexus (or coincident centers) has no defined direction.
+            direction = direction == FixedVector2.Zero ? FixedVector2.Right : direction.Normalized;
+            return Position + direction * (Radius + SConstants.UnitRadius);
+        }
+
+        /// <summary>
+        /// Advances the active build and enqueues a unit when its construction is complete.
+        /// </summary>
+        internal void BuildUnit()
+        {
+            if (!buildingRequestId.HasValue)
+                return;
+
+            buildTime += SConstants.deltaTime;
+            if (buildTime < SConstants.unitBuildTime)
+                return;
+
+            FixedVector2 spawnPosition = GetSpawnPosition();
+            SBUnit unit = new SBUnit(side, spawnPosition, Trigonometry.Atan2(spawnPosition - Position));
+            simulation.EnqueueBuiltUnit(unit, buildingRequestId.Value);
+            buildingRequestId = null;
+            buildTime = 0;
         }
 
         /// <summary>
@@ -56,7 +110,7 @@ namespace DSimulation
         }
 
         /// <summary>
-        /// Updates the nexus and performs its automatic attack behavior.
+        /// Updates the nexus, its automatic attacks and its current construction.
         /// </summary>
         internal override void Update()
         {
@@ -66,6 +120,8 @@ namespace DSimulation
 
             // Automatically attack the locked enemy or acquire the nearest one.
             AutoAttack();
+            // Continue constructing a unit without interrupting defensive attacks.
+            BuildUnit();
         }
 
         internal EventCreateNexus CreateNexusEvent()

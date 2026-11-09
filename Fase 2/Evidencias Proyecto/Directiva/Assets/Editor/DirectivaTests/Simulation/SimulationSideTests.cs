@@ -9,6 +9,12 @@ namespace Directiva.EditorTests.SimulationTests
 {
     internal static class SimulationSideTests
     {
+        private static void SetResources(SBSide side, int value)
+        {
+            // The editor test assembly cannot invoke SBSide's internal setter directly.
+            typeof(SBSide).GetProperty(nameof(SBSide.Resources)).SetValue(side, value);
+        }
+
         internal static void Register(List<DirectivaTestCase> tests)
         {
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
@@ -228,6 +234,132 @@ namespace Directiva.EditorTests.SimulationTests
                     "first nexus shields damaged");
                 t.Equal(SConstants.NexusShield - SConstants.NexusDamage, nexus2.Shields,
                     "second nexus shields damaged");
+            });
+
+            Add("BuildRequestValidation", "A nexus charges resources only for accepted builds and builds one unit at a time", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 60, height: 40);
+                var nexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(10, 10));
+                world.EnqueueCreation(nexus);
+                world.Start();
+
+                t.Check(!world.TryRequestUnitBuild(999, out _), "invalid nexus ID rejected");
+                t.Check(!world.TryRequestUnitBuild(nexus.id, out _), "insufficient resources rejected");
+
+                SetResources(world.GetSide(1), 25);
+                t.Check(world.TryRequestUnitBuild(nexus.id, out UnitBuildRequest request),
+                    "first request accepted");
+                t.Equal(1, request.requestId, "first accepted request ID");
+                t.Equal(nexus.id, request.nexusId, "source nexus ID");
+                t.Equal(15, world.GetSide(1).Resources, "cost deducted on acceptance");
+                t.Equal(0, world.GetSide(1).Units.Count, "unit is not created or assigned an ID yet");
+
+                t.Check(!world.TryRequestUnitBuild(nexus.id, out _), "busy nexus rejects another build");
+                t.Equal(15, world.GetSide(1).Resources, "rejection does not charge resources");
+                t.Check(!world.TryConsumeCreatedUnit(out _), "no completion before production");
+            });
+
+            Add("BuildAfterTenSeconds", "A completed build creates and registers the unit at its nexus facing the center", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 60, height: 40);
+                var nexus1 = new SBNexus(world.GetSide(1), SimulationTestHarness.P(10, 10));
+                var nexus2 = new SBNexus(world.GetSide(2), SimulationTestHarness.P(30, 10));
+                world.EnqueueCreation(nexus1);
+                world.EnqueueCreation(nexus2);
+                world.Start();
+                SimulationTestHarness.DrainEvents(world);
+                SetResources(world.GetSide(1), 20);
+
+                t.Equal((Fixed)10, SConstants.unitBuildTime, "build time constant is 10 seconds");
+                t.Check(world.TryRequestUnitBuild(nexus1.id, out UnitBuildRequest request),
+                    "request accepted");
+                for (int i = 0; i < 499; i++)
+                    world.Update();
+                t.Equal(0, world.GetSide(1).Units.Count, "no unit before 500 ticks");
+                t.Check(!world.TryConsumeCreatedUnit(out _), "no early completion result");
+
+                world.Update();
+                t.Equal((Fixed)10, world.Time, "500 ticks advance 10 seconds");
+                t.Equal(1, world.GetSide(1).Units.Count, "unit registered at 10 seconds");
+                SBUnit unit = world.GetSide(1).Units[0];
+                t.Equal(nexus2.id + 1, unit.id, "unit receives its ID only on registration");
+                t.Equal(SimulationTestHarness.P(Fixed.Decimal(125, 1), 10), unit.Position,
+                    "spawn tangent to nexus toward the other nexus");
+                t.Equal((Fixed)0, unit.Rotation, "unit faces the center");
+                t.Check(world.TryConsumeCreatedUnit(out UnitCreationResult result),
+                    "completed build result available");
+                t.Equal(request.requestId, result.requestId, "result matches request");
+                t.Equal(unit.id, result.unitId, "result matches registered unit");
+                t.Check(!world.TryConsumeCreatedUnit(out _), "completion consumed only once");
+                var events = SimulationTestHarness.DrainEvents(world);
+                t.Check(events.Exists(e => e is EventCreateUnit created && created.id == unit.id),
+                    "normal frontend creation event still emitted");
+            });
+
+            Add("BuildCompletionsFIFO", "Simultaneous builds return independent requests and units in completion order", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 60, height: 40);
+                var nexus1 = new SBNexus(world.GetSide(1), SimulationTestHarness.P(10, 10));
+                var nexus2 = new SBNexus(world.GetSide(2), SimulationTestHarness.P(30, 10));
+                world.EnqueueCreation(nexus1);
+                world.EnqueueCreation(nexus2);
+                world.Start();
+                SetResources(world.GetSide(1), 10);
+                SetResources(world.GetSide(2), 10);
+
+                t.Check(world.TryRequestUnitBuild(nexus2.id, out UnitBuildRequest request2),
+                    "second nexus request accepted first");
+                t.Check(world.TryRequestUnitBuild(nexus1.id, out UnitBuildRequest request1),
+                    "first nexus request accepted second");
+                t.Equal(request2.requestId + 1, request1.requestId, "request IDs increment on acceptance");
+
+                for (int i = 0; i < 500; i++)
+                    world.Update();
+                t.Check(world.TryConsumeCreatedUnit(out UnitCreationResult result1),
+                    "first completion available");
+                t.Check(world.TryConsumeCreatedUnit(out UnitCreationResult result2),
+                    "second completion available");
+                t.Equal(request1.requestId, result1.requestId,
+                    "first nexus completes first due to deterministic update order");
+                t.Equal(request2.requestId, result2.requestId, "second nexus completes second");
+                t.Equal(world.GetSide(1).Units[0].id, result1.unitId, "first unit ID");
+                t.Equal(world.GetSide(2).Units[0].id, result2.unitId, "second unit ID");
+                t.Equal(SimulationTestHarness.P(Fixed.Decimal(275, 1), 10),
+                    world.GetSide(2).Units[0].Position, "second unit spawns toward center");
+                t.Check(!world.TryConsumeCreatedUnit(out _), "FIFO is empty after both results");
+            });
+
+            Add("BuildSingleNexus", "A lone nexus uses a fixed spawn direction when the center coincides with itself", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 40, height: 40);
+                var nexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(10, 10));
+                world.EnqueueCreation(nexus);
+                world.Start();
+                SetResources(world.GetSide(1), 20);
+                t.Check(world.TryRequestUnitBuild(nexus.id, out UnitBuildRequest first),
+                    "first build accepted");
+                for (int i = 0; i < 500; i++)
+                    world.Update();
+                t.Equal(SimulationTestHarness.P(Fixed.Decimal(125, 1), 10),
+                    world.GetSide(1).Units[0].Position, "fallback spawn direction is right");
+                t.Check(world.TryConsumeCreatedUnit(out UnitCreationResult result), "first completion available");
+                t.Equal(first.requestId, result.requestId, "first request correlates");
+
+                t.Check(world.TryRequestUnitBuild(nexus.id, out UnitBuildRequest second),
+                    "nexus accepts another build after finishing");
+                t.Equal(first.requestId + 1, second.requestId, "new request gets a new ID");
+            });
+
+            Add("DeadNexusCannotBuild", "Destroyed nexuses cannot accept new production orders", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 40, height: 40);
+                var nexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(10, 10));
+                world.EnqueueCreation(nexus);
+                world.Start();
+                SetResources(world.GetSide(1), 100);
+                SimulationTestHarness.Kill(nexus);
+                t.Check(!world.TryRequestUnitBuild(nexus.id, out _), "dead nexus rejects orders");
+                t.Equal(100, world.GetSide(1).Resources, "no cost deducted from rejected order");
             });
 
             Add("RemovalUpdatesSides", "Removed entities disappear from their corresponding side", t =>

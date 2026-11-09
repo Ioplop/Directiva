@@ -52,5 +52,7 @@ namespace DSimulation
         public const int resourceMaxAmount = 100; // 100 resources per resource entity
         /// <summary> How many resources it costs to build a unit. </summary>
         public const int unitCost = 10; // 10 resources per unit
+        /// <summary> Time in seconds required to build a unit. </summary>
+        public static readonly Fixed unitBuildTime = 10;
     }
 }

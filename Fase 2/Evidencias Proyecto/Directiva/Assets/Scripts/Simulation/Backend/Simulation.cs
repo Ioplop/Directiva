@@ -14,11 +14,15 @@ namespace DSimulation
         // to be a rare occurence.
         private int nextId = 1;
         private int NextId { get { return nextId++; } }
+        // Request IDs are separate from entity IDs; no unit ID is reserved before registration.
+        private int nextBuildRequestId = 1;
 
         // Sides are indexed by their ID: neutral (0), player 1 (1), player 2 (2).
         private readonly SBSide[] sides = { new SBSide(0), new SBSide(1), new SBSide(2) };
 
         public SBSide GetSide(int side) => sides[side];
+        // Allows nexus spawn calculations to inspect all existing nexuses.
+        internal IReadOnlyList<SBSide> Sides => sides;
 
         // Maintains entities on a strict ordered structure to sequentially update and do as needed.
         // ID does not match position after entities are removed from the simulation.
@@ -33,6 +37,9 @@ namespace DSimulation
         private HashSet<int> nextRemovals = new();
         // A list of all entities that need to be added into the simulation.
         private List<SBEntity> nextCreations = new();
+        // Links built units to their requests until they receive an actual entity ID.
+        private readonly Dictionary<SBUnit, int> pendingBuildRegistrations = new();
+        private readonly Queue<UnitCreationResult> createdUnits = new();
 
         // Wether or not Start was called at least once
         private bool started = false;
@@ -97,6 +104,33 @@ namespace DSimulation
         public bool TryConsumeEvent(out Event e)
         {
             return events.TryDequeue(out e);
+        }
+
+        /// <summary>
+        /// Starts a unit build at the given nexus if it is alive, idle and has enough resources.
+        /// A request ID is assigned only after the build is accepted.
+        /// </summary>
+        public bool TryRequestUnitBuild(int nexusId, out UnitBuildRequest request)
+        {
+            request = default;
+            if (!entityRegistry.TryGetValue(nexusId, out SBEntity entity) ||
+                entity is not SBNexus nexus || !nexus.alive || nexus.side.id == 0 ||
+                nexus.IsBuilding || nexus.side.Resources < SConstants.unitCost)
+                return false;
+
+            request = new UnitBuildRequest(nextBuildRequestId++, nexusId);
+            nexus.side.Resources -= SConstants.unitCost;
+            nexus.BeginBuild(request.requestId);
+            return true;
+        }
+
+        /// <summary>
+        /// Consumes the next completed unit construction, independently of frontend events.
+        /// The returned unit ID is already registered in this simulation.
+        /// </summary>
+        public bool TryConsumeCreatedUnit(out UnitCreationResult result)
+        {
+            return createdUnits.TryDequeue(out result);
         }
 
         /// <summary>
@@ -184,6 +218,15 @@ namespace DSimulation
             nextCreations.Add(entity);
         }
 
+        /// <summary>
+        /// Enqueues a constructed unit and remembers its request until registration assigns an ID.
+        /// </summary>
+        internal void EnqueueBuiltUnit(SBUnit unit, int requestId)
+        {
+            EnqueueCreation(unit);
+            pendingBuildRegistrations.Add(unit, requestId);
+        }
+
         internal void MarkRemoval(int id)
         {
             nextRemovals.Add(id);
@@ -194,7 +237,13 @@ namespace DSimulation
             // Adds all new entities to the simulation
             foreach (var entity in nextCreations)
             {
-                RegisterEntity(entity);
+                int unitId = RegisterEntity(entity);
+                if (entity is SBUnit unit &&
+                    pendingBuildRegistrations.TryGetValue(unit, out int requestId))
+                {
+                    createdUnits.Enqueue(new UnitCreationResult(requestId, unitId));
+                    pendingBuildRegistrations.Remove(unit);
+                }
             }
             nextCreations.Clear();
         }
