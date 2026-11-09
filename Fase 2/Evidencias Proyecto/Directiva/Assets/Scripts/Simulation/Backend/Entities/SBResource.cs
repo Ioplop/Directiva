@@ -57,9 +57,10 @@ namespace DSimulation
         /// <summary>
         /// Called by the unit when it no longer is gathering from this resource.
         /// </summary>
-        internal void DetachGatherer()
+        internal void DetachGatherer(SBUnit gatherUnit)
         {
-            GatheringUnit = null;
+            if (GatheringUnit == gatherUnit)
+                GatheringUnit = null;
         }
 
         /// <summary>

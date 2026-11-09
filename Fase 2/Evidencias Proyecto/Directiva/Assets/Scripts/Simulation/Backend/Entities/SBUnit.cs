@@ -10,6 +10,9 @@ namespace DSimulation
         internal static readonly Fixed acceleration = 5;
         internal static readonly Fixed angularVelocity = 360;
         internal static readonly Fixed rotationSoftness = 10;
+        internal static readonly Fixed gatherDistance = Fixed.Decimal(2, 1);
+        internal static readonly Fixed cargoSlowdown = Fixed.Decimal(9, 1);
+        internal const int maxCargo = 15;
         /// How aggressively we close the distance.
         internal static readonly Fixed followGain = 4;
         internal static readonly Fixed aimAlignment = Fixed.Decimal(99, 2); // ~8 degrees of missalignment or less required to shoot
@@ -23,14 +26,68 @@ namespace DSimulation
         internal MoveMode moveMode = MoveMode.Hold;
 
         // Attack status
-        internal AttackMode attackMode = AttackMode.Hold;
-        internal SBEntity attackTarget;
+        internal ActionMode actionMode = ActionMode.Hold;
+        internal SBEntity actionTarget;
         internal readonly Fixed aimDistance;
+        private bool isGathering = false;
+        internal bool IsGathering
+        {
+            get { return isGathering; }
+            set
+            {
+                // We already know that we are gathering from this resource or that we are not gathering at all.
+                if (isGathering == value && (!value || actionTarget == attachedResource))
+                    return;
+                timeGathering = 0;
+                if (value)
+                {
+                    if (isGathering)
+                    {
+                        // We were gathering from a different resource, so we need to detach from it first and inform the frontend.
+                        attachedResource.DetachGatherer(this);
+                        isGathering = false;
+                        NotifyGatheringStatus();
+                    }
+                    // We are now gathering from a resource, so we need to set the attached resource to the action target.
+                    attachedResource = actionTarget as SBResource;
+                }
+                else
+                {
+                    // We are no longer gathering, so we need to detach from the resource if we were attached to one.
+                    if (attachedResource != null)
+                    {
+                        attachedResource.DetachGatherer(this);
+                        attachedResource = null;
+                    }
+                }
+                isGathering = value;
+                NotifyGatheringStatus();
+            }
+        }
 
-        internal enum AttackMode
+        // Gathering status
+        protected int cargo = 0;
+        internal int Cargo
+        {
+            get { return cargo; }
+            private set
+            {
+                cargo = value;
+                currentMaxSpeed = maxSpeed;
+                for (int i = 1; i <= cargo; i++)
+                    currentMaxSpeed *= cargoSlowdown;
+            }
+        }
+        internal Fixed timeGathering = 0;
+        internal Fixed currentMaxSpeed;
+        internal SBResource attachedResource = null;
+
+
+        internal enum ActionMode
         {
             Hold,
-            Enitity
+            Attack,
+            Gather
         }
 
         internal enum MoveMode
@@ -49,6 +106,17 @@ namespace DSimulation
             )
         {
             aimDistance = SConstants.UnitRange * Fixed.Decimal(15, 1);
+            currentMaxSpeed = maxSpeed;
+        }
+
+        /// <summary>
+        /// Stops the current action, whether it is attacking or gathering, and sets the unit to hold mode.
+        /// </summary>
+        internal void StopAction()
+        {
+            actionMode = ActionMode.Hold;
+            actionTarget = null;
+            IsGathering = false;
         }
 
         /// <summary>
@@ -59,6 +127,38 @@ namespace DSimulation
             return new EventCreateUnit(id, side, MaxHealth, MaxShields, Position, Rotation);
         }
 
+        /// <summary>
+        /// Creates an event that informs the current entity cargo.
+        /// </summary>
+        protected void NotifyCargo()
+        {
+            simulation.NotifyEvent(new EventCargo(id, Cargo));
+        }
+
+        /// <summary>
+        /// Creates an event that informs that the unit is gathering from a resource or has stopped doing so.
+        /// </summary>
+        protected void NotifyGatheringStatus()
+        {
+            if (isGathering)
+                simulation.NotifyEvent(new EventGather(id, actionTarget.id));
+            else
+                simulation.NotifyEvent(new EventStopGather(id));
+        }
+
+        /// <summary>
+        /// Checks that the unit is properly aligned with the target to either attack or gather from it.
+        /// This is used to prevent units from attacking or gathering from targets that are not in front of them.
+        /// </summary>
+        /// <param name="target">The target entity to check alignment with.</param>
+        /// <returns>true if the unit is aligned with the target, false otherwise.</returns>
+        protected bool Aligned(SBEntity target)
+        {
+            var dist = target.Position - Position;
+            Fixed alignment = dist.Normalized.Dot(Forward);
+            return alignment >= aimAlignment;
+        }
+
         /// <inheritdoc/>
         /// <remarks>
         /// This implementation also requires the unit to be aligned with the target.
@@ -67,9 +167,7 @@ namespace DSimulation
         {
             if (!base.CanAttack(target))
                 return false;
-            var dist = target.Position - Position;
-            Fixed alignment = dist.Normalized.Dot(Forward);
-            return alignment >= aimAlignment;
+            return Aligned(target);
         }
 
         /// <summary>
@@ -117,7 +215,7 @@ namespace DSimulation
                     offset.Normalized * (excessDistance * followGain);
             }
 
-            desiredVelocity = desiredVelocity.ClampMagnitude(maxSpeed);
+            desiredVelocity = desiredVelocity.ClampMagnitude(currentMaxSpeed);
 
             ApproachVelocity(desiredVelocity);
         }
@@ -162,9 +260,9 @@ namespace DSimulation
         /// </summary>
         private void Aim()
         {
-            if (attackMode == AttackMode.Enitity)
+            if (actionMode == ActionMode.Attack || actionMode == ActionMode.Gather)
             {
-                var direction = attackTarget.Position - Position;
+                var direction = actionTarget.Position - Position;
                 if (direction.SqrMagnitude <= aimDistance * aimDistance)
                 {
                     AimTarget(direction);
@@ -235,26 +333,91 @@ namespace DSimulation
         }
 
         /// <summary>
-        /// If the current attack mode is "Entity" but the entity is either null or dead, change mode to Hold.
+        /// If the entity is in attack mode but the entity is either null or dead, change mode to Hold.
         /// </summary>
-        private void EnsureAttackTarget()
+        private void EnsureActionTarget()
         {
-            if (attackMode == AttackMode.Enitity && (attackTarget == null || !attackTarget.alive))
+            if ((actionMode == ActionMode.Attack || actionMode == ActionMode.Gather) && (actionTarget == null || !actionTarget.alive))
             {
-                attackTarget = null;
-                attackMode = AttackMode.Hold;
+                StopAction();
             }
         }
 
         /// <summary>
-        /// When the unit is in attack mode: Entity, it will try to attack the target if possible.
+        /// When the unit is in attack mode, it will try to attack the target if possible.
         /// </summary>
         private void AttackTarget()
         {
-            if (attackMode == AttackMode.Enitity)
+            if (actionMode == ActionMode.Attack)
             {
-                Attack(attackTarget);
+                Attack(actionTarget);
             }
+        }
+
+        /// <summary>
+        /// When the unit is in gather mode, it will try to gather from the target if possible.
+        /// </summary>
+        /// <returns>True if the unit is gathering, false otherwise.</returns>
+        private void GatherTarget()
+        {
+            // We only try to gather if we are in gather mode. If we are not, we don't do anything.
+            if (actionMode != ActionMode.Gather)
+                return;
+
+            // We don't try to gather if we are already full, we just stop gathering and go back to hold mode.
+            if (cargo >= maxCargo)
+            {
+                StopAction();
+                return;
+            }
+
+            if (actionTarget is SBResource resource)
+            {
+                // Find distance to the resource and check if we are close enough to gather from it.
+                var dist = resource.Position - Position;
+                var maxDist = Radius + resource.Radius + gatherDistance;
+                
+                // We can't gather yet because we are too far away.
+                if (dist.SqrMagnitude > maxDist * maxDist)
+                {
+                    IsGathering = false;
+                    return;
+                }
+
+                // We can't gather yet because we are not aligned with the resource.
+                if (!Aligned(resource))
+                {
+                    IsGathering = false;
+                    return;
+                }
+
+                // We meet the requirements to gather from the resource, so we can start gathering.
+                // First check that we are attached to it.
+                if (resource.GatheringUnit == this && resource == attachedResource) // Two way check. Sure either match both sides or none if the logic is good.
+                {
+                    timeGathering += SConstants.deltaTime;
+                    if (timeGathering >= SConstants.resourceGatherSpeed)
+                    {
+                        Cargo += resource.TryGather(maxCargo - Cargo);
+                        timeGathering = 0;
+                        NotifyCargo();
+                        // Immediately stop gathering if we are full or the resource depletes.
+                        // This makes the unit respond immediately to this rather than in the next update.
+                        if (!resource.alive || Cargo >= maxCargo)
+                            StopAction();
+                    }
+                    return;
+                }
+
+                // We are not attached to the resource yet. We can try to attach.
+                IsGathering = false;
+                if (resource.TryAttachGatherer(this))
+                    IsGathering = true;
+                return;
+            }
+            // Invalid target for gathering!
+            // Just cancel the action.
+            StopAction();
         }
 
         internal override void Update()
@@ -267,7 +430,7 @@ namespace DSimulation
             // Ensure that we are not pursuing a dead entity.
             EnsureMoveTarget();
             // Ensure that we are not attacking a dead entity.
-            EnsureAttackTarget();
+            EnsureActionTarget();
             // Updates velocity
             UpdateVelocity();
             // Applies velocity as movement.
@@ -276,6 +439,18 @@ namespace DSimulation
             Aim();
             // Attacks valid targets in range and aligned to this unit.
             AttackTarget();
+            // Gathers valid targets in range and aligned to this unit.
+            GatherTarget();
+        }
+
+        /// <summary>
+        /// Ensures that the unit stops any action it was doing before dying, then calls the base Die method to handle the rest of the death process.
+        /// Critical to ensure resource detachment and proper event notifications.
+        /// </summary>
+        internal override void Die()
+        {
+            StopAction();
+            base.Die();
         }
     }
 }
