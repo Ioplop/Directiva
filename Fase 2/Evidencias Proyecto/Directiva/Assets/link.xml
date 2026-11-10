@@ -5,5 +5,11 @@
     <type fullname="DSExecution.Native.NativeMath" preserve="all" />
     <type fullname="DSExecution.Native.NativeRandom" preserve="all" />
     <type fullname="DSExecution.Native.DScriptNativeFunctionAttribute" preserve="all" />
+    <!-- SimulationApiCatalog discovers these members through reflection. -->
+    <type fullname="DSimulation.SimulationObserver" preserve="all" />
+    <type fullname="DSimulation.SimulationController" preserve="all" />
+    <type fullname="DSimulation.SimulationObservationAttribute" preserve="all" />
+    <type fullname="DSimulation.SimulationOrderAttribute" preserve="all" />
+    <type fullname="DSimulation.SimulationEntityArgumentAttribute" preserve="all" />
   </assembly>
 </linker>
