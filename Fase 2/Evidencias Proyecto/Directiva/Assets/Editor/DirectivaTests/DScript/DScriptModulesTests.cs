@@ -16,6 +16,51 @@ namespace Directiva.EditorTests.DScript
             void Add(string id, string description, Action<DirectivaTestContext> action)
                 => DScriptTestHarness.Add(tests, "Modules", id, description, action);
 
+            Add("BuiltinEnumNamespacesNotImports", "Enum constants resolve without polluting explicit module imports", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "def side():\n    return Side.Enemy\n" +
+                    "def kind():\n    return Type.Unit\n" +
+                    "def movement():\n    return MoveMode.Follow\n" +
+                    "def action():\n    return ActionMode.Attack\n");
+                t.Equal(0, a.ModuleSymbols["test"].Imports.Count, "no implicit imports");
+                var compiled = DSCompilation.DScript.Backend.DScriptCompiler.Compile(a);
+                t.Check(compiled.Success, "implicit enum constants must compile to DIL: " +
+                    string.Join("; ", compiled.Diagnostics));
+                foreach (var (function, qualified) in new[]
+                {
+                    ("side", "Side.Enemy"), ("kind", "Type.Unit"),
+                    ("movement", "MoveMode.Follow"), ("action", "ActionMode.Attack")
+                })
+                {
+                    var attribute = ((ReturnStatement)DScriptTestHarness.Function(a, function).Body[0]).Value;
+                    t.Equal(qualified, a.ExpressionSymbols[attribute].QualifiedName, "built-in enum constant " + function);
+                    t.Equal(SymbolKind.NativeConstant, a.ExpressionSymbols[attribute].Kind,
+                        "enum constant symbol kind " + function);
+                }
+            });
+            Add("ExplicitEnumImportsCountOnce", "Explicit native enum imports count only as declared", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "import Side\nfrom Type import Unit\ndef f():\n    return Side.Enemy\n");
+                t.Equal(2, a.ModuleSymbols["test"].Imports.Count, "two explicit bindings");
+                t.Equal("Side", a.ModuleSymbols["test"].Imports["Side"].QualifiedName, "explicit Side module");
+                t.Equal("Type.Unit", a.ModuleSymbols["test"].Imports["Unit"].QualifiedName, "explicit enum constant");
+            });
+            Add("BuiltinEnumShadowing", "Explicit aliases and declarations override implicit enum namespaces", t =>
+            {
+                var a = DScriptTestHarness.Ok(t,
+                    "import math as Side\ndef f():\n    return Side.pi\n");
+                t.Equal(1, a.ModuleSymbols["test"].Imports.Count, "one aliased import");
+                var attribute = ((ReturnStatement)DScriptTestHarness.Function(a, "f").Body[0]).Value;
+                t.Equal("math.pi", a.ExpressionSymbols[attribute].QualifiedName, "explicit import wins");
+
+                var b = DScriptTestHarness.Ok(t,
+                    "def Side():\n    return 7\ndef f():\n    return Side()\n");
+                t.Equal(0, b.ModuleSymbols["test"].Imports.Count, "declaration is not an import");
+                var call = ((ReturnStatement)DScriptTestHarness.Function(b, "f").Body[0]).Value as CallExpression;
+                t.Equal("test.Side", b.ExpressionSymbols[call.Callee].QualifiedName, "function declaration wins");
+            });
             Add("NativeMath", "math is a reserved native module, not a disk source", t =>
             {
                 var a = DScriptTestHarness.Ok(t, "import math\ndef f():\n    return math.sin(math.pi)\n");

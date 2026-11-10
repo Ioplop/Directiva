@@ -47,6 +47,10 @@ namespace DSCompilation.DScript.Semantics
             this.options = options ?? new DScriptFrontendOptions();
             foreach (var qname in NativeLibrary.GetFunctionNames(string.Empty))
                 builtins.Add(qname, new DScriptSymbol(qname, qname, SymbolKind.NativeFunction));
+            // Built-in enum namespaces are available without imports, but they must not
+            // appear in ModuleSymbols.Imports or interfere with explicit import aliases.
+            foreach (string enumModule in NativeLibrary.SimulationEnumModules)
+                builtins.Add(enumModule, new DScriptSymbol(enumModule, enumModule, SymbolKind.Module));
         }
 
         public void Bind()
@@ -173,16 +177,10 @@ namespace DSCompilation.DScript.Semantics
 
         private void RegisterImports(DScriptModuleSymbols module)
         {
-            // Typed simulation constants are language-level namespaces. Explicit imports
-            // remain valid; ordinary modules and local declarations can shadow them.
+            // Static member lookup needs these paths even when an enum namespace is not
+            // explicitly imported. The names themselves live only in 'builtins'.
             foreach (string name in NativeLibrary.SimulationEnumModules)
-            {
-                if (!module.ExportsInternal.ContainsKey(name))
-                {
-                    module.ImportedPaths.Add(name);
-                    module.ImportsInternal[name] = new DScriptSymbol(name, name, SymbolKind.Module);
-                }
-            }
+                module.ImportedPaths.Add(name);
             foreach (var stmt in module.Ast.Statements)
             {
                 if (stmt is ImportStatement import)
@@ -532,9 +530,13 @@ namespace DSCompilation.DScript.Semantics
             while (root is AttributeExpression access) { parts.Insert(0, access.Attribute); root = access.Receiver; }
             if (!(root is NameExpression name)) return false;
             if (currentFunction != null && currentFunction.LocalsInternal.ContainsKey(name.Name)) return false;
-            if (currentModule.GlobalsInternal.ContainsKey(name.Name)) return false;
-            if (!currentModule.ImportsInternal.TryGetValue(name.Name, out DScriptSymbol imported) ||
-                imported.Kind != SymbolKind.Module) return false;
+            if (currentModule.GlobalsInternal.ContainsKey(name.Name) ||
+                currentModule.FunctionsInternal.ContainsKey(name.Name)) return false;
+            // An explicit import shadows a built-in enum namespace. Resolve using the
+            // same priority as FindName: locals, declarations, imports, then built-ins.
+            if (!currentModule.ImportsInternal.TryGetValue(name.Name, out DScriptSymbol imported) &&
+                !builtins.TryGetValue(name.Name, out imported)) return false;
+            if (imported.Kind != SymbolKind.Module) return false;
             string path = imported.QualifiedName;
             foreach (string part in parts) path += "." + part;
             int lastDot = path.LastIndexOf('.');
