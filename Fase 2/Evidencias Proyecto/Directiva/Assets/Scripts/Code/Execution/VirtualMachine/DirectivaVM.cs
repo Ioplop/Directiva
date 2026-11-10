@@ -213,6 +213,33 @@ namespace DSExecution.VirtualMachine
         }
 
         /// <summary>
+        /// Re-enters a naturally completed function with fresh private execution state.
+        /// Globals, heap, random state and VM identity remain shared/unchanged. A faulted
+        /// VM cannot restart: the orchestrator reports the error and stops scheduling it.
+        /// </summary>
+        public void RestartCompleted()
+        {
+            if (Status != VMExecutionStatus.Completed)
+                throw new InvalidOperationException("Only naturally completed VMs can restart.");
+            if (!Code.TryGetFunction(EntryFunctionId, out FunctionContext entry))
+                throw new InvalidOperationException("The VM entry function no longer exists.");
+            if (entry.ParameterCount != 0)
+                throw new InvalidOperationException("Automatic restart requires a zero-argument entry function.");
+
+            evaluationStack.TrimTo(0);
+            callStack.Clear();
+            pendingOperation = null;
+            activeOperationArguments = null;
+            activeCastValue = null;
+            operationAuxPointer = 0;
+            fault = null;
+            returnValue = DataValue.None();
+            Debug.Reset();
+            callStack.Add(new CallFrame(entry, 0, Array.Empty<DataValue>()));
+            Status = VMExecutionStatus.Running;
+        }
+
+        /// <summary>
         /// Executes exactly one deterministic VM step.
         /// Any script/runtime failure is returned as Faulted instead of escaping as an exception.
         /// </summary>

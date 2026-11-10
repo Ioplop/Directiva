@@ -117,6 +117,8 @@ namespace Directiva.EditorTests
         private static void SimulationEvents() => DirectivaTestRunner.StartCategory("Simulation", "Events");
         [MenuItem("Directiva/Tests/Simulation/OrchestrationLink/TestEverything", false, 201)]
         private static void SimulationOrchestrationLink() => DirectivaTestRunner.StartCategory("Simulation", "OrchestrationLink");
+        [MenuItem("Directiva/Tests/Simulation/Orchestrator/TestEverything", false, 201)]
+        private static void SimulationOrchestrator() => DirectivaTestRunner.StartCategory("Simulation", "Orchestrator");
 
         [MenuItem("Directiva/Tests/Math/TestEverything", false, 210)]
         private static void MathAll() => DirectivaTestRunner.StartCategory("Math");
