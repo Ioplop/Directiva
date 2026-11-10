@@ -22,6 +22,8 @@ Este componente ejecuta una partida completamente en memoria; **no** construye e
 
 ## Fin de partida
 
+`maxDurationSeconds` configura la duracion maxima **simulada** (300 segundos / cinco minutos por defecto, 15000 ticks a 50 Hz). Se convierte a un numero entero de ticks redondeando hacia arriba. `MaxDurationSeconds` y `MaxSimulationTicks` exponen el limite. Al alcanzar ese limite sin muerte de nexos, la partida termina en `MatchOutcome.Draw`, con `EndReason == MatchEndReason.TimeLimit`. La victoria por destruccion (`EndReason == MatchEndReason.NexusDestroyed`) tiene prioridad si ocurre en el mismo tick donde vence el plazo.
+
 Una vez iniciado el mundo con ambos nexos, si uno muere gana el otro bando. Si ambos estan muertos en el mismo limite de simulacion, `Outcome == MatchOutcome.Draw`. `FinishedAtTick` identifica el limite donde termino la partida. No se ejecutan VMs ni fisica despues de `IsFinished == true`. La muerte se evalua al entrar a Update (si ocurrio externamente) y justo despues de Simulation.Update (para detectar muertes de ese tick en conjunto).
 
 ## Consola y trazabilidad
@@ -30,4 +32,6 @@ Una vez iniciado el mundo con ambos nexos, si uno muere gana el otro bando. Si a
 
 ## Pruebas
 
-`Directiva > Tests > Simulation > Orchestrator > TestEverything`. Incluye planificacion, presupuesto, reinicio, fallos, ordenes implicitas, logging por VM/bando, construcciones, muerte de nexos y determinismo. `Directiva > Tests > TestAll` cubre las regresiones existentes.
+`Directiva > Tests > Simulation > Orchestrator > TestEverything`. Incluye planificacion, presupuesto, reinicio, fallos, ordenes implicitas, logging por VM/bando, construcciones, muerte de nexos y determinismo. `Directiva > Tests > Simulation > FullMatch > TestEverything` contiene una prueba de **dos partidas independientes completas** con dos programas DScript distintos. Ambos nexos construyen unidades; estas recolectan, descargan, actualizan una bandera `shared` y atacan. La prueba compone un SHA-256 incremental del estado de cada tick, los eventos y los mensajes de VM (con campos y entidades ordenados), y compara ambas ejecuciones. Adjunta los fuentes `.dscript`, los hashes y el resumen de cada partida al reporte. Usa 90 s simulados como tope para mantener practico `TestAll`; el limite productivo sigue siendo 300 s. Incluye ademas pruebas del timeout exacto, del valor predeterminado y de la validacion de configuracion. El hash compara ejecuciones en **el mismo runtime/maquina**; no afirma igualdad entre arquitecturas.
+
+`Directiva > Tests > TestAll` cubre las regresiones existentes.

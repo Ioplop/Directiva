@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using DSCompilation.DScript.Backend;
 using DSExecution.Errors;
+using DMath;
 using DSExecution.VirtualMachine;
 using DSimulation;
 
@@ -14,6 +15,14 @@ namespace DOrchestration
         Side1Won,
         Side2Won,
         Draw
+    }
+
+    /// <summary>Why the match finished; independent of who won.</summary>
+    public enum MatchEndReason
+    {
+        None,
+        NexusDestroyed,
+        TimeLimit
     }
 
     /// <summary>
@@ -35,6 +44,13 @@ namespace DOrchestration
         private int stepsPerTick;
         private long outputSequence;
         private bool hasAdvanced;
+        private readonly long startTick;
+
+        /// <summary>Maximum number of simulated ticks, counted from this match's start.</summary>
+        public long MaxSimulationTicks { get; }
+        /// <summary>Configured simulated duration (not wall-clock time), in whole seconds.</summary>
+        public int MaxDurationSeconds { get; }
+        public MatchEndReason EndReason { get; private set; } = MatchEndReason.None;
 
         public Simulation Simulation => simulation;
         public MatchOutcome Outcome { get; private set; } = MatchOutcome.InProgress;
@@ -66,7 +82,8 @@ namespace DOrchestration
         public Orchestrator(Simulation simulation,
             DScriptCompiledProgram side1Program, DScriptCompiledProgram side2Program,
             int stepsPerTick = 10, int outputCapacityPerSide = 4096,
-            VMOptions vmOptions = null, int initializerBudget = 100000)
+            VMOptions vmOptions = null, int initializerBudget = 100000,
+            int maxDurationSeconds = 300)
         {
             this.simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
             if (side1Program == null) throw new ArgumentNullException(nameof(side1Program));
@@ -75,6 +92,15 @@ namespace DOrchestration
                 throw new ArgumentOutOfRangeException(nameof(outputCapacityPerSide));
             if (initializerBudget <= 0)
                 throw new ArgumentOutOfRangeException(nameof(initializerBudget));
+            if (maxDurationSeconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds));
+            if (SConstants.deltaTime.RawValue <= 0)
+                throw new InvalidOperationException("Simulation tick duration must be positive.");
+            MaxDurationSeconds = maxDurationSeconds;
+            // Round up instead of ending before the requested simulated duration.
+            long durationRaw = checked((long)maxDurationSeconds * Constants.FixedScale);
+            MaxSimulationTicks = checked(durationRaw + SConstants.deltaTime.RawValue - 1) /
+                SConstants.deltaTime.RawValue;
             StepsPerTick = stepsPerTick;
             this.outputCapacityPerSide = outputCapacityPerSide;
             outputBySide = new Queue<VMOutputMessage>[3];
@@ -82,6 +108,7 @@ namespace DOrchestration
             outputBySide[2] = new Queue<VMOutputMessage>();
 
             simulation.Start();
+            startTick = simulation.Tick;
             if (simulation.GetSide(1).Nexus == null || simulation.GetSide(2).Nexus == null ||
                 !simulation.GetSide(1).Nexus.alive || !simulation.GetSide(2).Nexus.alive)
                 throw new InvalidOperationException(
@@ -188,7 +215,9 @@ namespace DOrchestration
 
             // Physics, attacks, build progression, collisions and removals happen once.
             simulation.Update();
-            EvaluateOutcome(); // Both nexuses are checked together; death order is irrelevant.
+            EvaluateOutcome(); // Nexus deaths win priority over reaching the time limit.
+            if (!IsFinished && simulation.Tick - startTick >= MaxSimulationTicks)
+                Finish(MatchOutcome.Draw, MatchEndReason.TimeLimit);
             CompleteBuilds();
             RemoveDeadBindings();
         }
@@ -254,10 +283,18 @@ namespace DOrchestration
             bool firstAlive = simulation.GetSide(1).Nexus?.alive == true;
             bool secondAlive = simulation.GetSide(2).Nexus?.alive == true;
             if (firstAlive && secondAlive) return;
-            Outcome = firstAlive ? MatchOutcome.Side1Won :
-                secondAlive ? MatchOutcome.Side2Won : MatchOutcome.Draw;
+            Finish(firstAlive ? MatchOutcome.Side1Won :
+                secondAlive ? MatchOutcome.Side2Won : MatchOutcome.Draw,
+                MatchEndReason.NexusDestroyed);
+        }
+
+        private void Finish(MatchOutcome outcome, MatchEndReason reason)
+        {
+            if (IsFinished) return;
+            Outcome = outcome;
+            EndReason = reason;
             FinishedAtTick = simulation.Tick;
-            MatchEnded?.Invoke(Outcome);
+            MatchEnded?.Invoke(outcome);
         }
 
         private SideRuntime GetSide(int sideId) => sideId switch
