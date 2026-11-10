@@ -236,12 +236,13 @@ namespace Directiva.EditorTests.SimulationTests
                 entity.ApplyDamage(1);
                 SimulationTestHarness.DrainEvents(world);
 
-                for (int i = 0; i < 500; i++)
+                int cooldownTicks = (int)Fixed.CeilToLong(SConstants.ShieldRegenCooldown / SConstants.deltaTime);
+                for (int i = 0; i < cooldownTicks; i++)
                     world.Update();
-                t.Equal((Fixed)10, world.Time, "500 fixed ticks equal ten seconds");
+                t.Equal(SConstants.ShieldRegenCooldown, world.Time, "fixed ticks reach the cooldown boundary");
                 t.Equal((Fixed)9, entity.Shields, "cooldown prevents early regeneration");
                 var cooldownEvents = SimulationTestHarness.DrainEvents(world);
-                t.Equal(500, cooldownEvents.Count, "advance markers only during cooldown");
+                t.Equal(cooldownTicks, cooldownEvents.Count, "advance markers only during cooldown");
 
                 world.Update();
                 t.Equal(Fixed.Decimal(905, 2), entity.Shields, "one tick of 2.5 shields/second");
