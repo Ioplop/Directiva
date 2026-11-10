@@ -1,0 +1,704 @@
+using System.Collections.Generic;
+using DMath;
+
+namespace DSimulation
+{
+    /// <summary>
+    /// Read-only interface to the live simulation state. All operations receive the ID of
+    /// the entity whose perspective is being observed. No SBEntity or SBSide references
+    /// leave this interface; entity references are represented by IDs.
+    ///
+    /// Except for id and alive, every observation returns null when the receiver is
+    /// dead or absent. Inapplicable receiver types also return null (and will produce
+    /// a warning when called through the future DScript orchestrator).
+    /// </summary>
+    public sealed class SimulationObserver
+    {
+        private readonly Simulation simulation;
+
+        /// <summary>Creates a read-only observer for the given simulation.</summary>
+        internal SimulationObserver(Simulation simulation)
+        {
+            this.simulation = simulation;
+        }
+
+        /// <summary>Resolves an entity ID only when the entity exists and is alive.</summary>
+        private bool TryAlive(int id, out SBEntity entity)
+        {
+            if (simulation.TryGetEntity(id, out entity) && entity.alive)
+                return true;
+            entity = null;
+            return false;
+        }
+
+        /// <summary>Resolves an ID to a living unit.</summary>
+        private bool TryUnit(int id, out SBUnit unit)
+        {
+            bool valid = TryAlive(id, out SBEntity entity) && entity is SBUnit;
+            unit = valid ? (SBUnit)entity : null;
+            return valid;
+        }
+
+        /// <summary>Resolves an ID to a living nexus.</summary>
+        private bool TryNexus(int id, out SBNexus nexus)
+        {
+            bool valid = TryAlive(id, out SBEntity entity) && entity is SBNexus;
+            nexus = valid ? (SBNexus)entity : null;
+            return valid;
+        }
+
+        /// <summary>Resolves an ID to a living resource deposit.</summary>
+        private bool TryResource(int id, out SBResource resource)
+        {
+            bool valid = TryAlive(id, out SBEntity entity) && entity is SBResource;
+            resource = valid ? (SBResource)entity : null;
+            return valid;
+        }
+
+        /// <summary>Resolves an ID to a living unit or nexus.</summary>
+        private bool TryVMEntity(int id, out SBVMEntity vmEntity)
+        {
+            bool valid = TryAlive(id, out SBEntity entity) && entity is SBVMEntity;
+            vmEntity = valid ? (SBVMEntity)entity : null;
+            return valid;
+        }
+
+        /// <summary>Identifies the concrete simulation entity type.</summary>
+        private static SimulationEntityType? TypeOf(SBEntity entity)
+        {
+            if (entity is SBUnit) return SimulationEntityType.Unit;
+            if (entity is SBNexus) return SimulationEntityType.Nexus;
+            if (entity is SBResource) return SimulationEntityType.Resource;
+            return null;
+        }
+
+        /// <summary>Checks whether an entity matches an optional entity type filter.</summary>
+        private static bool MatchesType(SBEntity entity, SimulationEntityType? type)
+        {
+            SimulationEntityType? actual = TypeOf(entity);
+            return actual.HasValue && (!type.HasValue || actual.Value == type.Value);
+        }
+
+        /// <summary>Determines the side relationship between two entities.</summary>
+        private static SimulationSideRelation Relate(SBEntity receiver, SBEntity other)
+        {
+            // Neutral entities are neutral to every side, including one another.
+            if (receiver.side.id == 0 || other.side.id == 0)
+                return SimulationSideRelation.Neutral;
+            return receiver.side == other.side
+                ? SimulationSideRelation.Ally
+                : SimulationSideRelation.Enemy;
+        }
+
+        /// <summary>Checks whether two entities have the requested side relationship.</summary>
+        private static bool MatchesRelation(SBEntity receiver, SBEntity other, SimulationSideRelation side)
+        {
+            return Relate(receiver, other) == side;
+        }
+
+        /// <summary>Finds the closest living entity matching the given filters.</summary>
+        private int? FindClosest(int receiverId, SimulationSideRelation? relation,
+            SimulationEntityType? type)
+        {
+            if (!TryAlive(receiverId, out SBEntity receiver) || receiver.side.id == 0)
+                return null;
+
+            int? closestId = null;
+            Fixed nearest = 0;
+            foreach (SBEntity candidate in simulation.Entities)
+            {
+                if (!candidate.alive || candidate.id == receiverId || !MatchesType(candidate, type))
+                    continue;
+                if (relation.HasValue && !MatchesRelation(receiver, candidate, relation.Value))
+                    continue;
+
+                Fixed distance = (candidate.Position - receiver.Position).SqrMagnitude;
+                // Strict comparison preserves registration order when distances are equal.
+                if (!closestId.HasValue || distance < nearest)
+                {
+                    closestId = candidate.id;
+                    nearest = distance;
+                }
+            }
+            return closestId;
+        }
+
+        /// <summary>Collects a snapshot of living entity IDs matching the given filters.</summary>
+        private List<int> FindEntities(int receiverId, SimulationSideRelation? relation,
+            SimulationEntityType? type, Fixed? maximumDistance = null, bool excludeSelf = false)
+        {
+            if (!TryAlive(receiverId, out SBEntity receiver) ||
+                (relation.HasValue && receiver.side.id == 0))
+                return null;
+
+            List<int> result = new();
+            foreach (SBEntity candidate in simulation.Entities)
+            {
+                if (!candidate.alive || !MatchesType(candidate, type) ||
+                    (excludeSelf && candidate.id == receiverId))
+                    continue;
+                if (relation.HasValue && !MatchesRelation(receiver, candidate, relation.Value))
+                    continue;
+                if (maximumDistance.HasValue &&
+                    (candidate.Position - receiver.Position).SqrMagnitude > maximumDistance.Value * maximumDistance.Value)
+                    continue;
+                result.Add(candidate.id);
+            }
+            return result;
+        }
+
+        // Identity and relationships
+
+        /// <summary>Stable entity ID, even for a dead or removed entity.</summary>
+        [SimulationObservation("id", MemberKind = SimulationObservationMemberKind.Property, AllowsDeadReceiver = true)]
+        public int GetId(int receiverId) => receiverId;
+
+        /// <summary>Whether an entity is currently alive and registered.</summary>
+        [SimulationObservation("alive", MemberKind = SimulationObservationMemberKind.Property, AllowsDeadReceiver = true)]
+        public bool IsAlive(int receiverId) => TryAlive(receiverId, out _);
+
+        /// <summary>Returns whether the entity is a unit, nexus, or resource.</summary>
+        [SimulationObservation("type", MemberKind = SimulationObservationMemberKind.Property)]
+        public SimulationEntityType? GetEntityType(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? TypeOf(entity) : null;
+
+        /// <summary>Returns the relation between the receiver and another entity.</summary>
+        [SimulationObservation("relation")]
+        public SimulationSideRelation? GetRelation(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            if (!TryAlive(receiverId, out SBEntity receiver) || !TryAlive(otherId, out SBEntity other))
+                return null;
+            return Relate(receiver, other);
+        }
+
+        /// <summary>Checks whether another entity is an ally of the receiver.</summary>
+        [SimulationObservation("is_ally")]
+        public bool? IsAlly(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            SimulationSideRelation? relation = GetRelation(receiverId, otherId);
+            return relation.HasValue ? relation == SimulationSideRelation.Ally : null;
+        }
+
+        /// <summary>Checks whether another entity is an enemy of the receiver.</summary>
+        [SimulationObservation("is_enemy")]
+        public bool? IsEnemy(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            SimulationSideRelation? relation = GetRelation(receiverId, otherId);
+            return relation.HasValue ? relation == SimulationSideRelation.Enemy : null;
+        }
+
+        /// <summary>Checks whether the relation to another entity is neutral.</summary>
+        [SimulationObservation("is_neutral")]
+        public bool? IsNeutral(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            SimulationSideRelation? relation = GetRelation(receiverId, otherId);
+            return relation.HasValue ? relation == SimulationSideRelation.Neutral : null;
+        }
+
+        // Geometry and range
+
+        /// <summary>Returns the entity position in world coordinates.</summary>
+        [SimulationObservation("position")]
+        public FixedVector2? GetPosition(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Position : null;
+
+        /// <summary>Returns the center-to-center distance to another entity.</summary>
+        [SimulationObservation("distance_to")]
+        public Fixed? GetDistanceTo(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+                return null;
+            return (other.Position - entity.Position).Magnitude;
+        }
+
+        /// <summary>Returns the squared center-to-center distance to another entity.</summary>
+        [SimulationObservation("distance_squared_to")]
+        public Fixed? GetDistanceSquaredTo(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+                return null;
+            return (other.Position - entity.Position).SqrMagnitude;
+        }
+
+        /// <summary>Returns the entity collision radius.</summary>
+        [SimulationObservation("radius")]
+        public Fixed? GetRadius(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Radius : null;
+
+        /// <summary>Returns the entity rotation angle.</summary>
+        [SimulationObservation("rotation")]
+        public Fixed? GetRotation(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Rotation : null;
+
+        /// <summary>Returns the forward direction derived from the entity rotation.</summary>
+        [SimulationObservation("forward")]
+        public FixedVector2? GetForward(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Forward : null;
+
+        /// <summary>Returns the distance between entity surfaces, clamped to zero.</summary>
+        [SimulationObservation("surface_distance_to")]
+        public Fixed? GetSurfaceDistanceTo(int receiverId, [SimulationEntityArgument] int otherId)
+        {
+            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+                return null;
+            return Fixed.Max(0, (other.Position - entity.Position).Magnitude - entity.Radius - other.Radius);
+        }
+
+        /// <summary>Checks whether another entity is within a given center-to-center distance.</summary>
+        [SimulationObservation("within_distance")]
+        public bool? IsWithinDistance(int receiverId, [SimulationEntityArgument] int otherId, Fixed distance)
+        {
+            Fixed? squared = GetDistanceSquaredTo(receiverId, otherId);
+            return squared.HasValue ? distance >= 0 && squared.Value <= distance * distance : null;
+        }
+
+        /// <summary>Geometric attack reach only: no cooldown, orientation or allegiance checks.</summary>
+        [SimulationObservation("in_attack_range", AppliesTo = SimulationEntityKinds.Player)]
+        public bool? IsInAttackRange(int receiverId, [SimulationEntityArgument] int targetId)
+        {
+            if (!TryVMEntity(receiverId, out SBVMEntity attacker) ||
+                !TryAlive(targetId, out SBEntity target))
+                return null;
+            return (target.Position - attacker.Position).SqrMagnitude <= attacker.range * attacker.range;
+        }
+
+        /// <summary>Gather reach uses both collision radii and the unit's extra gathering margin.</summary>
+        [SimulationObservation("in_gather_range", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsInGatherRange(int receiverId, [SimulationEntityArgument(AppliesTo = SimulationEntityKinds.Resource)] int resourceId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit) || !TryResource(resourceId, out SBResource resource))
+                return null;
+            Fixed range = unit.Radius + resource.Radius + SBUnit.gatherDistance;
+            return (resource.Position - unit.Position).SqrMagnitude <= range * range;
+        }
+
+        // Discovery and entity lists. Every returned list is an independent snapshot.
+
+        /// <summary>Returns a snapshot of enemies, optionally filtered by entity type.</summary>
+        [SimulationObservation("enemies", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetEnemies(int receiverId, SimulationEntityType? entityType = null) =>
+            FindEntities(receiverId, SimulationSideRelation.Enemy, entityType);
+
+        /// <summary>Returns a snapshot of allies, excluding the receiver and optionally filtered by type.</summary>
+        [SimulationObservation("allies", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetAllies(int receiverId, SimulationEntityType? entityType = null) =>
+            FindEntities(receiverId, SimulationSideRelation.Ally, entityType, excludeSelf: true);
+
+        /// <summary>Returns a snapshot of units belonging to the receiver side.</summary>
+        [SimulationObservation("units", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetUnits(int receiverId) =>
+            FindEntities(receiverId, SimulationSideRelation.Ally, SimulationEntityType.Unit);
+
+        /// <summary>Returns the ID of the receiver side living nexus, if any.</summary>
+        [SimulationObservation("nexus", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetNexus(int receiverId)
+        {
+            if (!TryAlive(receiverId, out SBEntity receiver) || receiver.side.id == 0)
+                return null;
+            SBNexus nexus = receiver.side.Nexus;
+            return nexus != null && nexus.alive ? nexus.id : null;
+        }
+
+        /// <summary>Returns a snapshot of all living resource deposits.</summary>
+        [SimulationObservation("resource_nodes", ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetResourceNodes(int receiverId) =>
+            TryAlive(receiverId, out _) ? FindEntities(receiverId, null, SimulationEntityType.Resource) : null;
+
+        /// <summary>Finds the closest enemy, optionally filtered by entity type.</summary>
+        [SimulationObservation("closest_enemy", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetClosestEnemy(int receiverId, SimulationEntityType? entityType = null) =>
+            FindClosest(receiverId, SimulationSideRelation.Enemy, entityType);
+
+        /// <summary>Finds the closest living resource deposit.</summary>
+        [SimulationObservation("closest_resource", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetClosestResource(int receiverId) =>
+            FindClosest(receiverId, null, SimulationEntityType.Resource);
+
+        /// <summary>Finds the closest ally other than the receiver.</summary>
+        [SimulationObservation("closest_ally", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetClosestAlly(int receiverId) =>
+            FindClosest(receiverId, SimulationSideRelation.Ally, null);
+
+        /// <summary>Returns entities matching a relative side and optional type filter.</summary>
+        [SimulationObservation("entities", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetEntities(int receiverId, SimulationSideRelation side, SimulationEntityType? entityType = null) =>
+            FindEntities(receiverId, side, entityType);
+
+        /// <summary>Returns entities within a distance that match the side and type filters.</summary>
+        [SimulationObservation("entities_in_range", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetEntitiesInRange(int receiverId, Fixed distance, SimulationSideRelation side,
+            SimulationEntityType? entityType = null)
+        {
+            if (!TryAlive(receiverId, out SBEntity receiver) || receiver.side.id == 0)
+                return null;
+            if (distance < 0)
+                return new List<int>();
+            return FindEntities(receiverId, side, entityType, maximumDistance: distance);
+        }
+
+        /// <summary>Finds the closest entity matching a side and optional type filter.</summary>
+        [SimulationObservation("closest_entity", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetClosestEntity(int receiverId, SimulationSideRelation side,
+            SimulationEntityType? entityType = null) => FindClosest(receiverId, side, entityType);
+
+        /// <summary>Finds the nearest living enemy nexus.</summary>
+        [SimulationObservation("enemy_nexus", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetEnemyNexus(int receiverId) =>
+            FindClosest(receiverId, SimulationSideRelation.Enemy, SimulationEntityType.Nexus);
+
+        /// <summary>Counts the living enemies visible from the receiver perspective.</summary>
+        [SimulationObservation("count_enemies", AppliesTo = SimulationEntityKinds.Player)]
+        public int? CountEnemies(int receiverId) => GetEnemies(receiverId)?.Count;
+
+        /// <summary>Counts living allies other than the receiver.</summary>
+        [SimulationObservation("count_allies", AppliesTo = SimulationEntityKinds.Player)]
+        public int? CountAllies(int receiverId) => GetAllies(receiverId)?.Count;
+
+        // Health, shields and combat
+
+        /// <summary>Returns the entity current health.</summary>
+        [SimulationObservation("health")]
+        public Fixed? GetHealth(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Health : null;
+
+        /// <summary>Returns the entity maximum health.</summary>
+        [SimulationObservation("max_health")]
+        public Fixed? GetMaxHealth(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.MaxHealth : null;
+
+        /// <summary>Returns the entity current shields.</summary>
+        [SimulationObservation("shields")]
+        public Fixed? GetShields(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.Shields : null;
+
+        /// <summary>Returns the entity maximum shields.</summary>
+        [SimulationObservation("max_shields")]
+        public Fixed? GetMaxShields(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.MaxShields : null;
+
+        /// <summary>Returns the entity shield regeneration rate.</summary>
+        [SimulationObservation("shield_regen")]
+        public Fixed? GetShieldRegen(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.ShieldRegen : null;
+
+        /// <summary>Returns the simulation time of the entity latest recorded damage.</summary>
+        [SimulationObservation("last_damage_time")]
+        public Fixed? GetLastDamageTime(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.LastDamage : null;
+
+        /// <summary>Returns the time remaining before shield regeneration resumes.</summary>
+        [SimulationObservation("shield_regen_cooldown_remaining")]
+        public Fixed? GetShieldRegenCooldownRemaining(int receiverId)
+        {
+            if (!TryAlive(receiverId, out SBEntity entity))
+                return null;
+            return Fixed.Max(0, SConstants.ShieldRegenCooldown - (simulation.Time - entity.LastDamage));
+        }
+
+        /// <summary>Returns the attack range of a unit or nexus.</summary>
+        [SimulationObservation("attack_range", AppliesTo = SimulationEntityKinds.Player)]
+        public Fixed? GetAttackRange(int receiverId) =>
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.range : null;
+
+        /// <summary>Returns the damage dealt per attack by a unit or nexus.</summary>
+        [SimulationObservation("attack_damage", AppliesTo = SimulationEntityKinds.Player)]
+        public Fixed? GetAttackDamage(int receiverId) =>
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.damage : null;
+
+        /// <summary>Returns the minimum interval between attacks.</summary>
+        [SimulationObservation("attack_cooldown", AppliesTo = SimulationEntityKinds.Player)]
+        public Fixed? GetAttackCooldown(int receiverId) =>
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.attackSpeed : null;
+
+        /// <summary>Returns the remaining time until the next attack is available.</summary>
+        [SimulationObservation("attack_cooldown_remaining", AppliesTo = SimulationEntityKinds.Player)]
+        public Fixed? GetAttackCooldownRemaining(int receiverId) =>
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.AttackCooldownRemaining : null;
+
+        /// <summary>Checks whether the attack cooldown has elapsed.</summary>
+        [SimulationObservation("attack_ready", AppliesTo = SimulationEntityKinds.Player)]
+        public bool? IsAttackReady(int receiverId) =>
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.AttackCooldownRemaining <= 0 : null;
+
+        /// <summary>Returns the unit attack target or nexus locked target, if alive.</summary>
+        [SimulationObservation("attack_target", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetAttackTarget(int receiverId)
+        {
+            if (!TryAlive(receiverId, out SBEntity entity))
+                return null;
+            SBEntity target = null;
+            if (entity is SBUnit unit && unit.actionMode == SBUnit.ActionMode.Attack)
+                target = unit.actionTarget;
+            else if (entity is SBNexus nexus)
+                target = nexus.LockedTarget;
+            return target != null && target.alive ? target.id : null;
+        }
+
+        // Movement, action modes and unit status
+
+        /// <summary>Returns the unit current linear velocity.</summary>
+        [SimulationObservation("velocity", AppliesTo = SimulationEntityKinds.Unit)]
+        public FixedVector2? GetVelocity(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.linearVelocity : null;
+
+        /// <summary>Returns the unit current maximum speed, including cargo slowdown.</summary>
+        [SimulationObservation("max_speed", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetMaxSpeed(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.currentMaxSpeed : null;
+
+        /// <summary>Returns the unit current movement mode.</summary>
+        [SimulationObservation("move_mode", AppliesTo = SimulationEntityKinds.Unit)]
+        public SimulationMoveMode? GetMoveMode(int receiverId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit))
+                return null;
+            return (SimulationMoveMode)unit.moveMode;
+        }
+
+        /// <summary>Returns the position or entity targeted by the unit movement order.</summary>
+        [SimulationObservation("move_target", AppliesTo = SimulationEntityKinds.Unit, ResultKind = SimulationObservationResultKind.MoveTarget)]
+        public SimulationMoveTarget? GetMoveTarget(int receiverId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit))
+                return null;
+            if (unit.moveMode == SBUnit.MoveMode.Position)
+                return SimulationMoveTarget.ForPosition(unit.positionMoveTarget);
+            if (unit.moveMode == SBUnit.MoveMode.Follow &&
+                unit.entityMoveTarget != null && unit.entityMoveTarget.alive)
+                return SimulationMoveTarget.ForEntity(unit.entityMoveTarget.id);
+            return null;
+        }
+
+        /// <summary>Returns the unit current action mode.</summary>
+        [SimulationObservation("action_mode", AppliesTo = SimulationEntityKinds.Unit)]
+        public SimulationActionMode? GetActionMode(int receiverId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit))
+                return null;
+            return (SimulationActionMode)unit.actionMode;
+        }
+
+        /// <summary>Returns the living target of the unit attack or gather order.</summary>
+        [SimulationObservation("action_target", AppliesTo = SimulationEntityKinds.Unit, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetActionTarget(int receiverId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit) || unit.actionMode == SBUnit.ActionMode.Hold ||
+                unit.actionTarget == null || !unit.actionTarget.alive)
+                return null;
+            return unit.actionTarget.id;
+        }
+
+        /// <summary>Indicates whether the unit is actively gathering a resource.</summary>
+        [SimulationObservation("is_gathering", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsGathering(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.IsGathering : null;
+
+        /// <summary>Indicates whether the unit has nonzero velocity.</summary>
+        [SimulationObservation("is_moving", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsMoving(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.linearVelocity != FixedVector2.Zero : null;
+
+        /// <summary>Indicates whether the unit has a movement order other than Hold.</summary>
+        [SimulationObservation("has_move_order", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? HasMoveOrder(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.moveMode != SBUnit.MoveMode.Hold : null;
+
+        /// <summary>Indicates whether the unit currently has an attack order.</summary>
+        [SimulationObservation("is_attacking", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsAttacking(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.actionMode == SBUnit.ActionMode.Attack : null;
+
+        /// <summary>Indicates whether the unit currently has a gather order.</summary>
+        [SimulationObservation("is_gather_ordered", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsGatherOrdered(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.actionMode == SBUnit.ActionMode.Gather : null;
+
+        /// <summary>Indicates whether the unit has a pending cargo drop order.</summary>
+        [SimulationObservation("drop_pending", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsDropPending(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.DropResource : null;
+
+        /// <summary>Returns the unit linear acceleration.</summary>
+        [SimulationObservation("acceleration", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetAcceleration(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.acceleration : null;
+
+        /// <summary>Returns the unit maximum angular velocity.</summary>
+        [SimulationObservation("turn_speed", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetTurnSpeed(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.angularVelocity : null;
+
+        // Cargo and gathering
+
+        /// <summary>Returns the number of resources carried by the unit.</summary>
+        [SimulationObservation("cargo", AppliesTo = SimulationEntityKinds.Unit)]
+        public int? GetCargo(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.Cargo : null;
+
+        /// <summary>Returns the maximum number of resources the unit can carry.</summary>
+        [SimulationObservation("cargo_capacity", AppliesTo = SimulationEntityKinds.Unit)]
+        public int? GetCargoCapacity(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.maxCargo : null;
+
+        /// <summary>Checks whether the unit cargo is at capacity.</summary>
+        [SimulationObservation("is_cargo_full", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? IsCargoFull(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.Cargo >= SBUnit.maxCargo : null;
+
+        /// <summary>Returns elapsed time toward the unit next resource extraction.</summary>
+        [SimulationObservation("gather_progress", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetGatherProgress(int receiverId) =>
+            TryUnit(receiverId, out SBUnit unit) ? unit.timeGathering : null;
+
+        /// <summary>Returns the time required for one resource extraction.</summary>
+        [SimulationObservation("gather_interval", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetGatherInterval(int receiverId) =>
+            TryUnit(receiverId, out _) ? SConstants.resourceGatherSpeed : null;
+
+        /// <summary>Returns the gathering margin beyond the combined entity radii.</summary>
+        [SimulationObservation("gather_distance", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetGatherDistance(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.gatherDistance : null;
+
+        /// <summary>Returns the automatic unloading margin beyond the combined entity radii.</summary>
+        [SimulationObservation("unload_distance", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetUnloadDistance(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.unloadDistance : null;
+
+        /// <summary>Returns the multiplicative speed factor applied for each carried resource.</summary>
+        [SimulationObservation("cargo_slowdown_factor", AppliesTo = SimulationEntityKinds.Unit)]
+        public Fixed? GetCargoSlowdownFactor(int receiverId) =>
+            TryUnit(receiverId, out _) ? SBUnit.cargoSlowdown : null;
+
+        /// <summary>Checks whether a loaded unit is within unloading range of its living nexus.</summary>
+        [SimulationObservation("can_unload", AppliesTo = SimulationEntityKinds.Unit)]
+        public bool? CanUnload(int receiverId)
+        {
+            if (!TryUnit(receiverId, out SBUnit unit))
+                return null;
+            SBNexus nexus = unit.side.Nexus;
+            if (unit.Cargo == 0 || nexus == null || !nexus.alive)
+                return false;
+            Fixed distance = unit.Radius + nexus.Radius + SBUnit.unloadDistance;
+            return (nexus.Position - unit.Position).SqrMagnitude <= distance * distance;
+        }
+
+        // Resource deposits
+
+        /// <summary>Returns the resources remaining in a deposit.</summary>
+        [SimulationObservation("amount", AppliesTo = SimulationEntityKinds.Resource)]
+        public int? GetAmount(int receiverId) =>
+            TryResource(receiverId, out SBResource resource) ? resource.Amount : null;
+
+        /// <summary>Returns the amount yielded by one extraction from a deposit.</summary>
+        [SimulationObservation("richness", AppliesTo = SimulationEntityKinds.Resource)]
+        public int? GetRichness(int receiverId) =>
+            TryResource(receiverId, out SBResource resource) ? resource.GatherAmount : null;
+
+        /// <summary>Returns the ID of the unit currently attached to a deposit, if alive.</summary>
+        [SimulationObservation("gatherer", AppliesTo = SimulationEntityKinds.Resource, ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetGatherer(int receiverId)
+        {
+            if (!TryResource(receiverId, out SBResource resource))
+                return null;
+            SBUnit unit = resource.GatheringUnit;
+            return unit != null && unit.alive ? unit.id : null;
+        }
+
+        /// <summary>Checks whether a deposit is free of any living gatherer.</summary>
+        [SimulationObservation("is_available_to_gather", AppliesTo = SimulationEntityKinds.Resource)]
+        public bool? IsAvailableToGather(int receiverId)
+        {
+            if (!TryResource(receiverId, out SBResource resource))
+                return null;
+            return resource.GatheringUnit == null || !resource.GatheringUnit.alive;
+        }
+
+        // Economy and building
+
+        /// <summary>Returns the resources currently owned by the receiver side.</summary>
+        [SimulationObservation("resources")]
+        public int? GetResources(int receiverId) =>
+            TryAlive(receiverId, out SBEntity entity) ? entity.side.Resources : null;
+
+        /// <summary>Indicates whether the nexus has a unit under construction.</summary>
+        [SimulationObservation("is_building", AppliesTo = SimulationEntityKinds.Nexus)]
+        public bool? IsBuilding(int receiverId) =>
+            TryNexus(receiverId, out SBNexus nexus) ? nexus.IsBuilding : null;
+
+        /// <summary>Returns the resource cost of constructing a unit.</summary>
+        [SimulationObservation("unit_cost")]
+        public int? GetUnitCost(int receiverId) =>
+            TryAlive(receiverId, out _) ? SConstants.unitCost : null;
+
+        /// <summary>Returns the time needed to construct a unit.</summary>
+        [SimulationObservation("unit_build_time")]
+        public Fixed? GetUnitBuildTime(int receiverId) =>
+            TryAlive(receiverId, out _) ? SConstants.unitBuildTime : null;
+
+        /// <summary>Returns the time left in the nexus current construction.</summary>
+        [SimulationObservation("build_time_remaining", AppliesTo = SimulationEntityKinds.Nexus)]
+        public Fixed? GetBuildTimeRemaining(int receiverId) =>
+            TryNexus(receiverId, out SBNexus nexus) && nexus.IsBuilding
+                ? Fixed.Max(0, SConstants.unitBuildTime - nexus.BuildProgress) : null;
+
+        /// <summary>Returns the elapsed time of the nexus current construction.</summary>
+        [SimulationObservation("build_progress", AppliesTo = SimulationEntityKinds.Nexus)]
+        public Fixed? GetBuildProgress(int receiverId) =>
+            TryNexus(receiverId, out SBNexus nexus) && nexus.IsBuilding ? nexus.BuildProgress : null;
+
+        /// <summary>Returns the ID of the nexus active build request, if any.</summary>
+        [SimulationObservation("current_build_request_id", AppliesTo = SimulationEntityKinds.Nexus)]
+        public int? GetCurrentBuildRequestId(int receiverId) =>
+            TryNexus(receiverId, out SBNexus nexus) ? nexus.CurrentBuildRequestId : null;
+
+        /// <summary>Checks whether a nexus can accept a new unit build request.</summary>
+        [SimulationObservation("can_build", AppliesTo = SimulationEntityKinds.Nexus)]
+        public bool? CanBuild(int receiverId) =>
+            TryNexus(receiverId, out SBNexus nexus)
+                ? nexus.side.id != 0 && !nexus.IsBuilding && nexus.side.Resources >= SConstants.unitCost
+                : null;
+
+        // Simulation time and world rules; still require a living receiver.
+
+        /// <summary>Returns the current elapsed simulation time.</summary>
+        [SimulationObservation("time")]
+        public Fixed? GetTime(int receiverId) =>
+            TryAlive(receiverId, out _) ? simulation.Time : null;
+
+        /// <summary>Returns the current simulation tick.</summary>
+        [SimulationObservation("tick")]
+        public long? GetTick(int receiverId) =>
+            TryAlive(receiverId, out _) ? simulation.Tick : null;
+
+        /// <summary>Returns the fixed duration of one simulation tick.</summary>
+        [SimulationObservation("delta_time")]
+        public Fixed? GetDeltaTime(int receiverId) =>
+            TryAlive(receiverId, out _) ? SConstants.deltaTime : null;
+
+        /// <summary>Returns the world dimensions.</summary>
+        [SimulationObservation("world_size")]
+        public FixedVector2? GetWorldSize(int receiverId) =>
+            TryAlive(receiverId, out _) ? simulation.Dimensions : null;
+
+        /// <summary>Returns the geometric center of the world.</summary>
+        [SimulationObservation("world_center")]
+        public FixedVector2? GetWorldCenter(int receiverId) =>
+            TryAlive(receiverId, out _) ? simulation.Dimensions / 2 : null;
+
+        /// <summary>Checks whether a coordinate lies within the world boundaries.</summary>
+        [SimulationObservation("inside_world")]
+        public bool? IsInsideWorld(int receiverId, Fixed x, Fixed y)
+        {
+            if (!TryAlive(receiverId, out _))
+                return null;
+            return x >= 0 && y >= 0 && x <= simulation.Dimensions.X && y <= simulation.Dimensions.Y;
+        }
+    }
+
+    /// <summary>Stable public counterparts of SBUnit's internal movement modes.</summary>
+    public enum SimulationMoveMode { Hold, Follow, Position }
+
+    /// <summary>Stable public counterparts of SBUnit's internal action modes.</summary>
+    public enum SimulationActionMode { Hold, Attack, Gather }
+}

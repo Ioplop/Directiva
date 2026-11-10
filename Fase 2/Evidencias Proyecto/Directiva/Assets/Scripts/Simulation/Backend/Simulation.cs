@@ -29,6 +29,12 @@ namespace DSimulation
         private List<SBEntity> entityList = new();
         // Read-only access for targeting, preserving the deterministic registration order.
         internal IReadOnlyList<SBEntity> Entities => entityList;
+
+        // Read-only observation API for the future orchestrator.
+        public SimulationObserver Observer { get; }
+
+        internal bool TryGetEntity(int id, out SBEntity entity) => entityRegistry.TryGetValue(id, out entity);
+
         // Maintains entities on a dictionary for quick fixed access time by ID
         private Dictionary<int, SBEntity> entityRegistry = new();
         
@@ -52,6 +58,7 @@ namespace DSimulation
         private readonly List<SBEntity>[,] worldSpace;
         // The size of the world. The world is a rectangle starting at (0, 0) and ending at this value.
         private readonly FixedVector2 dimensions;
+        internal FixedVector2 Dimensions => dimensions;
 
         // This is how the frontend sees the simulation.
         private readonly Queue<Event> events = new();
@@ -63,6 +70,8 @@ namespace DSimulation
         /// <param name="seed">Starting seed for all random number generations in the simulation.</param>
         public Simulation(ulong seed, FixedVector2 dimensions)
         {
+            Observer = new SimulationObserver(this);
+
             // Random initialization
             this.seed = seed;
             random = new DeterministicRandom(seed);

@@ -12,6 +12,10 @@ namespace DSimulation
         private int? buildingRequestId;
         private Fixed buildTime;
 
+        internal SBEntity LockedTarget => lockedTarget;
+        internal Fixed BuildProgress => buildTime;
+        internal int? CurrentBuildRequestId => buildingRequestId;
+
         public SBNexus(SBSide side, FixedVector2 position) : base(
             side,
             SConstants.NexusDamage, SConstants.NexusRange, SConstants.NexusAttackSpeed,

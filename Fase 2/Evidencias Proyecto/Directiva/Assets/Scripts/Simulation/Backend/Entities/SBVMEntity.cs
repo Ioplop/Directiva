@@ -13,6 +13,8 @@ namespace DSimulation
         internal readonly Fixed attackSpeed;
         private Fixed lastAttack;
 
+        internal Fixed AttackCooldownRemaining => Fixed.Max(0, attackSpeed - (simulation.Time - lastAttack));
+
 
         protected void NotifyAttack(SBEntity target)
         {
