@@ -2,6 +2,7 @@ using System;
 using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Backend;
 using DSCompilation.DScript.Modules;
+using DOrchestration;
 using DSExecution.Errors;
 using DSExecution.VirtualMachine;
 
@@ -55,7 +56,8 @@ namespace Directiva.CodeUI
 
             // Compile() also parses all generated DIL into one CodeContext. The .dil
             // files on disk are purely inspectable artifacts, never inputs to execution.
-            DScriptCompilationResult compilation = DScriptCompiler.Compile(entryModule, provider);
+            DScriptCompilationResult compilation = DScriptCompiler.Compile(entryModule, provider,
+                SimulationDScriptProfile.Options);
             if (!compilation.Success)
                 return new DScriptEditorPreparedRun(compilation, null, null, null, null, null);
 

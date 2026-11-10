@@ -4,7 +4,7 @@ using DSCompilation.DScript.Ast;
 
 namespace DSCompilation.DScript.Semantics
 {
-    public enum SymbolKind { Parameter, Local, Global, Function, NativeFunction, NativeConstant, Module, Self }
+    public enum SymbolKind { Parameter, Local, Global, Function, NativeFunction, NativeConstant, Module, Self, ImplicitSelfMethod }
 
     /// <summary>Resolved, stable identity of a function, shared slot, import or native symbol.</summary>
     public sealed class DScriptSymbol

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DSCompilation.DScript
 {
@@ -56,9 +57,13 @@ namespace DSCompilation.DScript
         public int MaxSourceLength { get; }
         public int MaxDiagnostics { get; }
         public int MaxNestingDepth { get; }
+        private readonly HashSet<string> implicitSelfMethods;
 
+        // The host supplies the method names; the generic compiler does not depend on
+        // DSimulation or DOrchestration. Properties are deliberately not callable names.
         public DScriptFrontendOptions(int maxModules = 128, int maxSourceLength = 500000,
-            int maxDiagnostics = 100, int maxNestingDepth = 64)
+            int maxDiagnostics = 100, int maxNestingDepth = 64,
+            IEnumerable<string> implicitSelfMethods = null)
         {
             if (maxModules < 1 || maxSourceLength < 1 || maxDiagnostics < 1 || maxNestingDepth < 1)
                 throw new ArgumentOutOfRangeException(nameof(maxModules), "Frontend limits must be positive.");
@@ -66,6 +71,11 @@ namespace DSCompilation.DScript
             MaxSourceLength = maxSourceLength;
             MaxDiagnostics = maxDiagnostics;
             MaxNestingDepth = maxNestingDepth;
+            this.implicitSelfMethods = implicitSelfMethods == null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : new HashSet<string>(implicitSelfMethods, StringComparer.Ordinal);
         }
+
+        public bool IsImplicitSelfMethod(string name) => implicitSelfMethods.Contains(name);
     }
 }

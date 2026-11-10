@@ -465,7 +465,15 @@ namespace DSCompilation.DScript.Semantics
             }
             else if (expression is CallExpression call)
             {
-                VisitExpression(call.Callee);
+                // A bare call may target a simulation method on self, but ONLY after
+                // ordinary name resolution fails. User locals/parameters, shared slots,
+                // functions, imports and builtins always take precedence (shadowing).
+                // The shortcut is call-only: `move` by itself is not a bound method value.
+                if (call.Callee is NameExpression implicitName && currentFunction != null &&
+                    options.IsImplicitSelfMethod(implicitName.Name) && ResolveName(implicitName.Name) == null)
+                    bindings[implicitName] = new DScriptSymbol(implicitName.Name, "self." + implicitName.Name,
+                        SymbolKind.ImplicitSelfMethod);
+                else VisitExpression(call.Callee);
                 foreach (var arg in call.Arguments) VisitExpression(arg);
                 if (bindings.TryGetValue(call.Callee, out DScriptSymbol callee) &&
                     callee.Kind == SymbolKind.Function && callee.ParameterCount >= 0 &&
@@ -502,17 +510,24 @@ namespace DSCompilation.DScript.Semantics
 
         private DScriptSymbol FindName(string name, SourceSpan at, bool write)
         {
+            DScriptSymbol symbol = ResolveName(name);
+            if (symbol == null && !write)
+                Error("DS4016", "Undefined name '" + name + "'.", at, "undefined_name", name);
+            return symbol;
+        }
+
+        // Keep the resolution order identical for ordinary references and implicit-self
+        // calls. In particular, an explicit def move() must shadow the native method.
+        private DScriptSymbol ResolveName(string name)
+        {
             if (name == "self" && currentFunction != null)
                 return new DScriptSymbol("self", "self", SymbolKind.Self);
-            if (currentFunction != null)
-            {
-                if (currentFunction.LocalsInternal.TryGetValue(name, out DScriptSymbol local)) return local;
-            }
+            if (currentFunction != null &&
+                currentFunction.LocalsInternal.TryGetValue(name, out DScriptSymbol local)) return local;
             if (currentModule.GlobalsInternal.TryGetValue(name, out DScriptSymbol global)) return global;
             if (currentModule.FunctionsInternal.TryGetValue(name, out DScriptSymbol function)) return function;
             if (currentModule.ImportsInternal.TryGetValue(name, out DScriptSymbol imported)) return imported;
             if (builtins.TryGetValue(name, out DScriptSymbol builtin)) return builtin;
-            if (!write) Error("DS4016", "Undefined name '" + name + "'.", at, "undefined_name", name);
             return null;
         }
 

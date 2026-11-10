@@ -6,6 +6,7 @@ using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Lexing;
 using DSCompilation.DScript.Modules;
 using DSCompilation.DScript.Semantics;
+using DOrchestration;
 
 namespace Directiva.CodeUI
 {
@@ -182,7 +183,8 @@ namespace Directiva.CodeUI
             var newProvider = new InMemoryDScriptSourceProvider(updated);
             foreach (var root in snapshot.Sources.Keys.OrderBy(n => n, StringComparer.Ordinal))
             {
-                var analysis = DScriptFrontend.AnalyzeForRefactoring(root, newProvider);
+                var analysis = DScriptFrontend.AnalyzeForRefactoring(root, newProvider,
+                    SimulationDScriptProfile.Options);
                 if (!analysis.ModuleSymbols.ContainsKey(root) ||
                     DScriptRenameDiagnostics.IntroducesErrors(snapshot.Analyses[root], analysis,
                         (name, position) => edits.TryGetValue(name, out var modified)
@@ -230,7 +232,8 @@ namespace Directiva.CodeUI
             var memory = new InMemoryDScriptSourceProvider(snapshot.Sources);
             foreach (var name in snapshot.Sources.Keys.OrderBy(n => n, StringComparer.Ordinal))
             {
-                var analysis = DScriptFrontend.AnalyzeForRefactoring(name, memory);
+                var analysis = DScriptFrontend.AnalyzeForRefactoring(name, memory,
+                    SimulationDScriptProfile.Options);
                 // Syntax recovery cannot guarantee an AST for every possible input
                 // (e.g. an oversized source). Never invent missing symbol tables.
                 if (!analysis.ModuleSymbols.ContainsKey(name))

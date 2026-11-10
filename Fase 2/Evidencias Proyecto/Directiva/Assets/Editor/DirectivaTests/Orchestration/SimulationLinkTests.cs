@@ -55,7 +55,8 @@ namespace Directiva.EditorTests.OrchestrationTests
         {
             var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
                 { ["test"] = source });
-            DScriptCompilationResult result = DScriptCompiler.Compile("test", provider);
+            DScriptCompilationResult result = DScriptCompiler.Compile("test", provider,
+                SimulationDScriptProfile.Options);
             t.Attach("test.dscript", source);
             t.Attach("diagnostics", string.Join("\n", result.Diagnostics));
             t.Check(result.Success, "Compilation failed: " + string.Join("; ", result.Diagnostics));
@@ -174,6 +175,53 @@ namespace Directiva.EditorTests.OrchestrationTests
             }
         }
 
+        private static void CheckImplicitMethod(DirectivaTestContext t, SimulationApiOperation operation)
+        {
+            Fixture f = NewFixture();
+            bool nexus = operation.AppliesTo == SimulationEntityKinds.Nexus || NexusOnly(operation);
+            if (operation.Kind == SimulationApiKind.Order)
+            {
+                if (nexus) SetResources(f.World.GetSide(1), 40);
+                // Match the tested explicit order signature, but omit only the receiver.
+                string expression = operation.Method.Name switch
+                {
+                    "TryMoveToPosition" => "move(10, 11)",
+                    "TryMoveToEntity" => "move(self.closest_enemy())",
+                    "TryStopMove" => "stop_move()",
+                    "TryAttack" => "attack(self.closest_enemy())",
+                    "TryGather" => "gather(self.closest_resource())",
+                    "TryStopAction" => "stop_action()",
+                    "TryDropCargo" => "drop_cargo()",
+                    "TryBuildUnit" => "build(next)",
+                    _ => throw new InvalidOperationException("No implicit order test for " + operation.Method.Name)
+                };
+                var program = Compile(t, "def next():\n    pass\ndef main():\n    return " + expression + "\n");
+                t.Contains("CALL_METHOD " + operation.Name + " ", program.DILModules["test"],
+                    "bare order must emit method dispatch");
+                var vm = Run(t, new SideRuntime(f.World, 1, program, 3UL),
+                    nexus ? f.Nexus.id : f.Unit.id);
+                t.Equal(DataTypeId.Bool, vm.ReturnValue.dataType, "implicit order returns Bool");
+                t.Equal(1UL, vm.ReturnValue.value, "implicit order accepted");
+            }
+            else
+            {
+                string[] arguments = operation.Arguments.Where(a => !a.IsOptional)
+                    .Select(DScriptArgument).ToArray();
+                string expression = operation.Name + "(" + string.Join(", ", arguments) + ")";
+                var program = Compile(t, "def main():\n    return " + expression + "\n");
+                string dil = program.DILModules["test"];
+                t.Contains("PUSH_SELF", dil, "implicit observation loads self");
+                t.Contains("CALL_METHOD " + operation.Name + " " + arguments.Length,
+                    dil, "implicit observation uses CALL_METHOD");
+                // Resource-only methods cannot be invoked on a resource as self: resources
+                // are not script-capable. The host correctly returns a nonfatal warning.
+                var side = new SideRuntime(f.World, 1, program, 3UL);
+                var vm = Run(t, side, nexus ? f.Nexus.id : f.Unit.id);
+                t.Check(vm.ReturnValue.dataType != DataTypeId.Uninitialized,
+                    "implicit observation returns a defined value (possibly None)");
+            }
+        }
+
         internal static void Register(List<DirectivaTestCase> tests)
         {
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
@@ -181,6 +229,7 @@ namespace Directiva.EditorTests.OrchestrationTests
 
             // The catalog is authoritative: when the API grows, tests grow with it.
             // Each observation and order overload gets its own named regression test.
+            // Every callable member also gets a regression test without an explicit self.
             foreach (SimulationApiOperation entry in SimulationApiCatalog.Operations)
             {
                 SimulationApiOperation operation = entry;
@@ -193,7 +242,133 @@ namespace Directiva.EditorTests.OrchestrationTests
                 else
                     Add(name, "DScript/VM issues " + operation.Name + " via " + operation.Method.Name,
                         t => CheckOrder(t, operation));
+
+                if (operation.Kind == SimulationApiKind.Order ||
+                    operation.MemberKind == SimulationObservationMemberKind.Method)
+                {
+                    string implicitName = "Implicit_" + operation.Kind + "_" +
+                        operation.Method.Name;
+                    Add(implicitName, "Bare " + operation.Name + "() dispatches through self",
+                        t => CheckImplicitMethod(t, operation));
+                }
             }
+
+            Add("ShadowedByFunction", "A user def move() takes precedence over the implicit method", t =>
+            {
+                Fixture f = NewFixture();
+                var program = Compile(t,
+                    "def move():\n    return self.move(10, 20)\n" +
+                    "def main():\n    return move()\n");
+                string dil = program.DILModules["test"];
+                t.Contains("PUSH_FUNCTION test.move", dil, "bare move resolves to user function");
+                t.Contains("CALL_METHOD move 2", dil, "explicit self.move still resolves to order");
+                t.Equal(1UL, Run(t, new SideRuntime(f.World, 1, program, 8UL), f.Unit.id).ReturnValue.value,
+                    "user function calls simulation move successfully");
+            });
+
+            Add("ShadowedByLocal", "A local function value hides a simulation API method", t =>
+            {
+                Fixture f = NewFixture();
+                var program = Compile(t,
+                    "def helper():\n    return 27\n" +
+                    "def main():\n    move = helper\n    return move()\n");
+                t.Check(!program.DILModules["test"].Contains("CALL_METHOD move 0"),
+                    "local calls must remain indirect");
+                t.Equal(27L, unchecked((long)Run(t, new SideRuntime(f.World, 1, program, 8UL),
+                    f.Unit.id).ReturnValue.value), "local wins");
+            });
+
+            Add("ShadowedByShared", "A shared name hides the implicit simulation method", t =>
+            {
+                var program = Compile(t,
+                    "shared move = None\ndef main():\n    return move()\n");
+                t.Check(!program.DILModules["test"].Contains("CALL_METHOD move 0"),
+                    "shared names must not fall back to self");
+                t.Contains("LOAD_GLOBAL", program.DILModules["test"],
+                    "shared binding is loaded normally");
+            });
+
+            Add("ShadowedByImport", "An imported function hides the implicit simulation method", t =>
+            {
+                Fixture f = NewFixture();
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                {
+                    ["test"] = "from util import move\ndef main():\n    return move()\n",
+                    ["util"] = "def move():\n    return 33\n"
+                });
+                var result = DScriptCompiler.Compile("test", provider, SimulationDScriptProfile.Options);
+                t.Check(result.Success, "imported move compiles: " + string.Join("; ", result.Diagnostics));
+                t.Equal(33L, unchecked((long)Run(t, new SideRuntime(f.World, 1, result.Program, 8UL),
+                    f.Unit.id).ReturnValue.value), "imported function wins");
+            });
+
+            Add("ImplicitMoveBounds", "Bare move() retains the bridge's world-bounds protection", t =>
+            {
+                Fixture f = NewFixture();
+                var program = Compile(t,
+                    "def main():\n    return move(9223372036854775807, 2)\n");
+                var side = new SideRuntime(f.World, 1, program, 8UL);
+                t.Check(program.TryGetFunctionId("test.main", out int entry), "main exists");
+                var vm = side.BindEntity(f.Unit.id, entry).VM;
+                vm.Run(10000);
+                t.Equal(VMExecutionStatus.Faulted, vm.Status, "unsafe position must fault VM");
+                t.Contains("world bounds", vm.Error.Message, "same bounds error as self.move");
+                t.Equal(SimulationMoveMode.Hold, f.World.Observer.GetMoveMode(f.Unit.id).Value,
+                    "rejected implicit move has no effects");
+            });
+
+            Add("ShadowArityStillChecked", "An explicit user function never falls back on wrong arity", t =>
+            {
+                var result = DScriptCompiler.Compile("test", new InMemoryDScriptSourceProvider(
+                    new Dictionary<string, string> { ["test"] =
+                        "def move():\n    pass\ndef main():\n    return move(10, 20)\n" }),
+                    SimulationDScriptProfile.Options);
+                t.Check(!result.Success && result.Diagnostics.Any(d => d.Code == "DS4014"),
+                    "user function retains compile-time arity checking");
+            });
+
+            Add("ContextlessImplicitCall", "Standalone VMs compile implicit self but cannot execute it", t =>
+            {
+                var program = Compile(t, "def main():\n    return move(10, 20)\n");
+                t.Check(program.TryGetFunctionId("test.main", out int entry), "entry found");
+                var vm = new DirectivaVM(program.Code,
+                    new VMMemoryContext(program.Code.GlobalCount), null, entry);
+                vm.Run(10000);
+                t.Equal(VMExecutionStatus.Faulted, vm.Status, "self requires a bound entity");
+                t.Contains("entity-bound VM", vm.Error.Message, "clear standalone diagnostic");
+            });
+
+            Add("NativePrecedence", "A real builtin wins over any proposed implicit name", t =>
+            {
+                var options = new DSCompilation.DScript.DScriptFrontendOptions(
+                    implicitSelfMethods: new[] { "print", "move" });
+                var source = "def main():\n    print('hello')\n    move(2, 3)\n";
+                var analysis = DSCompilation.DScript.DScriptFrontend.Analyze("test",
+                    new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                        { ["test"] = source }), options);
+                t.Check(analysis.Success, "source binds under overlapping host names");
+                var function = analysis.FunctionSymbols.Keys.Single();
+                var printCall = ((DSCompilation.DScript.Ast.ExpressionStatement)function.Body[0]).Value
+                    as DSCompilation.DScript.Ast.CallExpression;
+                var moveCall = ((DSCompilation.DScript.Ast.ExpressionStatement)function.Body[1]).Value
+                    as DSCompilation.DScript.Ast.CallExpression;
+                t.Equal(DSCompilation.DScript.Semantics.SymbolKind.NativeFunction,
+                    analysis.ExpressionSymbols[printCall.Callee].Kind, "builtin wins");
+                t.Equal(DSCompilation.DScript.Semantics.SymbolKind.ImplicitSelfMethod,
+                    analysis.ExpressionSymbols[moveCall.Callee].Kind, "unbound move uses self");
+            });
+
+            Add("UndefinedStillUndefined", "Only known callable members are eligible for implicit self", t =>
+            {
+                foreach (string expression in new[] { "unknown_operation()", "health()", "move" })
+                {
+                    var result = DScriptCompiler.Compile("test", new InMemoryDScriptSourceProvider(
+                        new Dictionary<string, string> { ["test"] = "def main():\n    return " + expression + "\n" }),
+                        SimulationDScriptProfile.Options);
+                    t.Check(!result.Success && result.Diagnostics.Any(d => d.Code == "DS4016"),
+                        expression + " must remain an undefined name");
+                }
+            });
 
             Add("WorldBounds", "Move destinations are rejected before Fixed math or side effects", t =>
             {

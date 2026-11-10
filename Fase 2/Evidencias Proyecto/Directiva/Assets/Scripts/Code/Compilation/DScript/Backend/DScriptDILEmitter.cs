@@ -410,7 +410,17 @@ namespace DSCompilation.DScript.Backend
             }
             if (expression is CallExpression call)
             {
-                if (call.Callee is AttributeExpression method &&
+                if (call.Callee is NameExpression implicitSelf &&
+                    analysis.ExpressionSymbols.TryGetValue(implicitSelf, out DScriptSymbol resolved) &&
+                    resolved.Kind == SymbolKind.ImplicitSelfMethod)
+                {
+                    // Exactly the same runtime dispatch, validation and authorization as
+                    // an explicit self.method(...). There is no separate native call path.
+                    Op("PUSH_SELF", implicitSelf.Span);
+                    foreach (Expression argument in call.Arguments) EmitExpression(argument);
+                    Op("CALL_METHOD " + implicitSelf.Name + " " + call.Arguments.Count, call.Span);
+                }
+                else if (call.Callee is AttributeExpression method &&
                     !analysis.ExpressionSymbols.ContainsKey(method))
                 {
                     EmitExpression(method.Receiver);

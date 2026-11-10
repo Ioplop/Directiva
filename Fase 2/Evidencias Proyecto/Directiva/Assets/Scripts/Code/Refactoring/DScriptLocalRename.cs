@@ -6,6 +6,7 @@ using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Lexing;
 using DSCompilation.DScript.Modules;
 using DSCompilation.DScript.Semantics;
+using DOrchestration;
 using DSExecution.Native;
 
 namespace Directiva.CodeUI
@@ -130,7 +131,7 @@ namespace Directiva.CodeUI
             // a refactor. Rebind the recovered AST, but ensure no new diagnostic or
             // extra reference to the renamed local appears after the change.
             var reanalysis = DScriptFrontend.AnalyzeForRefactoring(module,
-                new OverriddenSource(provider, module, updated));
+                new OverriddenSource(provider, module, updated), SimulationDScriptProfile.Options);
             if (!reanalysis.ModuleSymbols.ContainsKey(module) ||
                 DScriptRenameDiagnostics.IntroducesErrors(snapshot.Analysis, reanalysis,
                     (diagnosticModule, position) => diagnosticModule == module
@@ -164,7 +165,8 @@ namespace Directiva.CodeUI
             }
             text = NormalizeNewlines(text);
             var effective = new OverriddenSource(provider, module, text);
-            var analysis = DScriptFrontend.AnalyzeForRefactoring(module, effective);
+            var analysis = DScriptFrontend.AnalyzeForRefactoring(module, effective,
+                SimulationDScriptProfile.Options);
             if (!analysis.ModuleSymbols.ContainsKey(module))
             {
                 error = "rename_incomplete_analysis";
