@@ -93,7 +93,11 @@ namespace DOrchestration
                 return SimulationCallResult.Error("A script cannot issue orders to an entity other than itself.");
             if (!SimulationApiCatalog.TryGetOrder(name, out var operations))
                 return SimulationCallResult.Error("Unknown order: " + name);
-            return Invoke(operations, controller, receiverId, arguments ?? Array.Empty<object>());
+            arguments ??= Array.Empty<object>();
+            // Also accept move((x,y)) as a position tuple without adding a CLR overload.
+            if (name == "move" && arguments.Length == 1 && arguments[0] is FixedVector2 point)
+                arguments = new object[] { point.X, point.Y };
+            return Invoke(operations, controller, receiverId, arguments);
         }
 
         /// <summary>
@@ -165,9 +169,15 @@ namespace DOrchestration
             // Fail clearly if the arguments do not match any declared public form,
             // or if two forms are equally plausible.
             if (chosen == null)
+            {
+                if (overloads[0].Kind == SimulationApiKind.Order && overloads[0].Name == "move" &&
+                    arguments.Length == 2 && AreNumeric(arguments))
+                    return SimulationCallResult.Error("move(x, y) only accepts positions inside world bounds; " +
+                        "one or both coordinates exceed the safe Fixed numeric range.");
                 return SimulationCallResult.Error(manual
                     ? overloads[0].Name + "() requires manual orchestration."
                     : "No matching arguments for " + overloads[0].Name + "().");
+            }
             if (ambiguous)
                 return SimulationCallResult.Error("Ambiguous overload of " + chosen.Name + "().");
 
@@ -179,6 +189,13 @@ namespace DOrchestration
             // it should warn and return None instead of terminating the script.
             if (observer.IsAlive(receiverId) && !AcceptsReceiver(chosen.AppliesTo, receiverId))
                 return SimulationCallResult.Warning(chosen.Name + "() is not supported by this entity type.");
+
+            // A player can supply any Int64/Decimal, but the simulation's Fixed math is
+            // only safe for world-scale values. Reject dangerous ranges before reflection.
+            // In particular move(x,y) must never receive an out-of-bounds destination.
+            SimulationCallResult? invalid = ValidateSpatialArguments(chosen, receiverId, parameters);
+            if (invalid.HasValue)
+                return invalid.Value;
 
             // Now that the call is known and authorized, execute the simulation's own
             // implementation. The catalog already validated which method is safe to call.
@@ -193,6 +210,56 @@ namespace DOrchestration
                     error.InnerException ?? error);
             }
             return SimulationCallResult.Success(ConvertResult(chosen, result));
+        }
+
+        private static bool AreNumeric(object[] values)
+        {
+            foreach (object item in values)
+                if (item is not Fixed && item is not long && item is not int)
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Rejects coordinates outside [0,width] x [0,height] and unreasonable distance
+        /// filters. This check runs after overload resolution but before the simulation
+        /// can multiply or square untrusted Fixed values.
+        /// </summary>
+        private SimulationCallResult? ValidateSpatialArguments(SimulationApiOperation operation,
+            int receiverId, object[] parameters)
+        {
+            bool moveToPoint = operation.Kind == SimulationApiKind.Order &&
+                operation.Name == "move" && parameters.Length == 3 &&
+                parameters[1] is Fixed && parameters[2] is Fixed;
+            bool distanceFilter = operation.Kind == SimulationApiKind.Observation &&
+                (operation.Name == "within_distance" || operation.Name == "entities_in_range");
+            if (!moveToPoint && !distanceFilter)
+                return null;
+
+            FixedVector2? size = observer.GetWorldSize(receiverId);
+            if (!size.HasValue) return null; // Dead receivers are handled by Invoke().
+
+            if (moveToPoint)
+            {
+                var x = (Fixed)parameters[1];
+                var y = (Fixed)parameters[2];
+                if (x < 0 || y < 0 || x > size.Value.X || y > size.Value.Y)
+                    return SimulationCallResult.Error(
+                        "move(x, y) only accepts positions inside world bounds: " +
+                        "0 <= x <= " + size.Value.X + " and 0 <= y <= " + size.Value.Y + ".");
+            }
+            else
+            {
+                // The world diagonal is at most width + height. Its upper bound also
+                // avoids the unsafe Fixed multiplication of enormous user distances.
+                var distance = (Fixed)parameters[operation.Name == "within_distance" ? 2 : 1];
+                // Compare raw values in 64 bits; adding dimensions as Fixed could overflow.
+                long maximumRaw = checked(size.Value.X.RawValue + size.Value.Y.RawValue);
+                if (distance.RawValue > maximumRaw)
+                    return SimulationCallResult.Error(operation.Name +
+                        "() requires a distance no greater than the world width plus height.");
+            }
+            return null;
         }
 
         /// <summary>

@@ -91,6 +91,12 @@ namespace DSCompilation.DScript.Semantics
             {
                 if (statement is FunctionStatement function)
                 {
+                    if (function.Name == "self")
+                    {
+                        Error(module.Name, "DS4031", "'self' is reserved for the current entity.",
+                            function.Span, "self_reserved");
+                        continue;
+                    }
                     if (module.ExportsInternal.ContainsKey(function.Name))
                         Error(module.Name, "DS4002", "Duplicate module symbol '" + function.Name + "'.", statement.Span, "duplicate_module_symbol", function.Name);
                     else
@@ -109,6 +115,12 @@ namespace DSCompilation.DScript.Semantics
         private void DeclareShared(DScriptModuleSymbols module, SharedStatement declaration)
         {
             string name = declaration.Name;
+            if (name == "self")
+            {
+                Error(module.Name, "DS4031", "'self' is reserved for the current entity.",
+                    declaration.NameSpan, "self_reserved");
+                return;
+            }
             if (module.FunctionsInternal.ContainsKey(name))
             {
                 Error(module.Name, "DS4002", "Function and shared variable share the name '" + name + "'.", declaration.NameSpan, "function_shared_collision", name);
@@ -161,6 +173,16 @@ namespace DSCompilation.DScript.Semantics
 
         private void RegisterImports(DScriptModuleSymbols module)
         {
+            // Typed simulation constants are language-level namespaces. Explicit imports
+            // remain valid; ordinary modules and local declarations can shadow them.
+            foreach (string name in NativeLibrary.SimulationEnumModules)
+            {
+                if (!module.ExportsInternal.ContainsKey(name))
+                {
+                    module.ImportedPaths.Add(name);
+                    module.ImportsInternal[name] = new DScriptSymbol(name, name, SymbolKind.Module);
+                }
+            }
             foreach (var stmt in module.Ast.Statements)
             {
                 if (stmt is ImportStatement import)
@@ -258,6 +280,11 @@ namespace DSCompilation.DScript.Semantics
             walkDepth = 0;
             foreach (string name in function.Parameters)
             {
+                if (name == "self")
+                {
+                    Error("DS4031", "'self' is a read-only contextual value.", function.Span, "self_reserved");
+                    continue;
+                }
                 if (table.LocalsInternal.ContainsKey(name))
                     Error("DS4005", "Duplicate parameter '" + name + "'.", function.Span, "duplicate_parameter", name);
                 else if (module.GlobalsInternal.ContainsKey(name))
@@ -275,11 +302,12 @@ namespace DSCompilation.DScript.Semantics
             {
                 if (statement is AssignmentStatement assignment && assignment.Target is NameExpression name)
                 {
-                    if (!currentModule.GlobalsInternal.ContainsKey(name.Name)) AddLocal(name.Name, SymbolKind.Local);
+                    if (name.Name != "self" && !currentModule.GlobalsInternal.ContainsKey(name.Name)) AddLocal(name.Name, SymbolKind.Local);
                 }
                 else if (statement is ForStatement iterator)
                 {
-                    if (!currentModule.GlobalsInternal.ContainsKey(iterator.Variable)) AddLocal(iterator.Variable, SymbolKind.Local);
+                    if (iterator.Variable != "self" && !currentModule.GlobalsInternal.ContainsKey(iterator.Variable))
+                        AddLocal(iterator.Variable, SymbolKind.Local);
                     CollectLocalAssignments(iterator.Body);
                 }
                 else if (statement is IfStatement conditional)
@@ -342,6 +370,9 @@ namespace DSCompilation.DScript.Semantics
             else if (statement is ForStatement iterator)
             {
                 VisitExpression(iterator.Iterable);
+                if (iterator.Variable == "self")
+                    Error("DS4031", "'self' is a read-only contextual value.",
+                        iterator.VariableSpan, "self_reserved");
                 DScriptSymbol target = FindName(iterator.Variable, iterator.VariableSpan, true);
                 if (target != null) forTargets[iterator] = target;
                 loopDepth++;
@@ -365,6 +396,12 @@ namespace DSCompilation.DScript.Semantics
         {
             if (target is NameExpression variable)
             {
+                if (variable.Name == "self")
+                {
+                    Error("DS4031", "'self' is a read-only contextual value.",
+                        variable.Span, "self_reserved");
+                    return;
+                }
                 var symbol = FindName(variable.Name, variable.Span, true);
                 if (symbol == null || symbol.Kind != SymbolKind.Local && symbol.Kind != SymbolKind.Parameter && symbol.Kind != SymbolKind.Global)
                     Error("DS4011", "Cannot assign to '" + variable.Name + "'.", variable.Span, "cannot_assign", variable.Name);
@@ -467,6 +504,8 @@ namespace DSCompilation.DScript.Semantics
 
         private DScriptSymbol FindName(string name, SourceSpan at, bool write)
         {
+            if (name == "self" && currentFunction != null)
+                return new DScriptSymbol("self", "self", SymbolKind.Self);
             if (currentFunction != null)
             {
                 if (currentFunction.LocalsInternal.TryGetValue(name, out DScriptSymbol local)) return local;

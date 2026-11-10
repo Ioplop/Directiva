@@ -7,6 +7,7 @@ using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Modules;
 using DSCompilation.DScript.Semantics;
 using DSExecution.VirtualMachine;
+using DSExecution.Native;
 
 namespace DSCompilation.DScript.Backend
 {
@@ -98,6 +99,10 @@ namespace DSCompilation.DScript.Backend
                 foreach (string module in analysis.Modules.Keys.OrderBy(m => m, StringComparer.Ordinal))
                 {
                     var source = new StringBuilder();
+                    // Enum namespaces are language-level constants, available without
+                    // explicit imports; their DIL native bindings still need visibility.
+                    foreach (string enumModule in NativeLibrary.SimulationEnumModules)
+                        source.Append("# IMPORT : ").Append(enumModule).Append('\n');
                     // Native imports must remain visible to DIL's native symbol linker.
                     foreach (string imported in ImportNames(analysis.Modules[module]))
                         source.Append("# IMPORT : ").Append(imported).Append('\n');

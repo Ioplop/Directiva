@@ -119,6 +119,47 @@ namespace DSExecution.Values
             return new DataValue(DataTypeId.Tuple, memoryReference);
         }
 
+        /// <summary>An identity-only reference. Entity IDs are never heap pointers.</summary>
+        public static DataValue FromSimulationObject(int entityId)
+        {
+            if (entityId <= 0)
+                throw new System.ArgumentOutOfRangeException(nameof(entityId));
+            return new DataValue(DataTypeId.SimulationObject, (ulong)entityId);
+        }
+
+        public bool TryGetSimulationObjectId(out int entityId)
+        {
+            if (dataType == DataTypeId.SimulationObject && value > 0 && value <= int.MaxValue)
+            {
+                entityId = (int)value;
+                return true;
+            }
+            entityId = 0;
+            return false;
+        }
+
+        /// <summary>Stores both the enum family and its value without losing type identity.</summary>
+        public static DataValue FromSimulationEnum(SimulationEnumKind kind, int enumValue)
+        {
+            if (kind == SimulationEnumKind.None || enumValue < 0)
+                throw new System.ArgumentOutOfRangeException(nameof(enumValue));
+            return new DataValue(DataTypeId.SimulationEnum,
+                ((ulong)(uint)kind << 32) | (uint)enumValue);
+        }
+
+        public bool TryGetSimulationEnum(out SimulationEnumKind kind, out int enumValue)
+        {
+            kind = (SimulationEnumKind)(uint)(value >> 32);
+            enumValue = (int)(uint)value;
+            if (dataType == DataTypeId.SimulationEnum &&
+                System.Enum.IsDefined(typeof(SimulationEnumKind), kind) &&
+                kind != SimulationEnumKind.None && (uint)value <= int.MaxValue)
+                return true;
+            kind = SimulationEnumKind.None;
+            enumValue = 0;
+            return false;
+        }
+
         /// <summary>
         /// Returns the heap reference carried by this value when its type is heap-backed.
         /// </summary>

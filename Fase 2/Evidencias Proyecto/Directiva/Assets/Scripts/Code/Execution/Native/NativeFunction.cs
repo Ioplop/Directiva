@@ -56,15 +56,18 @@ namespace DSExecution.Native
     {
         private readonly Action<string> output;
         public VMMemoryContext Memory { get; }
+        public IVMHostContext? HostContext { get; }
         public IReadOnlyList<DataValue> Arguments { get; }
         public int Count => Arguments.Count;
         public DataValue this[int index] => Arguments[index];
 
-        internal NativeCallContext(VMMemoryContext memory, DataValue[] arguments, Action<string> output)
+        internal NativeCallContext(VMMemoryContext memory, DataValue[] arguments, Action<string> output,
+            IVMHostContext? hostContext = null)
         {
             Memory = memory;
             Arguments = arguments;
             this.output = output;
+            HostContext = hostContext;
         }
 
         public NativeResult Cast(DataValue value, DataTypeId target)
@@ -168,13 +171,27 @@ namespace DSExecution.Native
     /// </summary>
     public static class NativeLibrary
     {
-        private static readonly string[] Modules = { "math", "random" };
+        private static readonly string[] Modules = { "math", "random", "Side", "Type", "MoveMode", "ActionMode" };
+        /// <summary>Enum namespaces are automatically visible in DScript, unlike math/random.</summary>
+        public static readonly string[] SimulationEnumModules = { "Side", "Type", "MoveMode", "ActionMode" };
         private static readonly NativeFunctionDescription[] Descriptions = BuildDescriptions();
         private static readonly Dictionary<string, DataValue> Constants = new(StringComparer.Ordinal)
         {
             ["math.pi"] = DataValue.FromDecimalRaw(31416),
             ["math.tau"] = DataValue.FromDecimalRaw(62832),
-            ["math.e"] = DataValue.FromDecimalRaw(27183)
+            ["math.e"] = DataValue.FromDecimalRaw(27183),
+            ["Side.Ally"] = DataValue.FromSimulationEnum(SimulationEnumKind.Side, 0),
+            ["Side.Enemy"] = DataValue.FromSimulationEnum(SimulationEnumKind.Side, 1),
+            ["Side.Neutral"] = DataValue.FromSimulationEnum(SimulationEnumKind.Side, 2),
+            ["Type.Unit"] = DataValue.FromSimulationEnum(SimulationEnumKind.Type, 0),
+            ["Type.Nexus"] = DataValue.FromSimulationEnum(SimulationEnumKind.Type, 1),
+            ["Type.Resource"] = DataValue.FromSimulationEnum(SimulationEnumKind.Type, 2),
+            ["MoveMode.Hold"] = DataValue.FromSimulationEnum(SimulationEnumKind.MoveMode, 0),
+            ["MoveMode.Follow"] = DataValue.FromSimulationEnum(SimulationEnumKind.MoveMode, 1),
+            ["MoveMode.Position"] = DataValue.FromSimulationEnum(SimulationEnumKind.MoveMode, 2),
+            ["ActionMode.Hold"] = DataValue.FromSimulationEnum(SimulationEnumKind.ActionMode, 0),
+            ["ActionMode.Attack"] = DataValue.FromSimulationEnum(SimulationEnumKind.ActionMode, 1),
+            ["ActionMode.Gather"] = DataValue.FromSimulationEnum(SimulationEnumKind.ActionMode, 2)
         };
 
         public static bool IsNativeModule(string module) => Array.IndexOf(Modules, module) >= 0;

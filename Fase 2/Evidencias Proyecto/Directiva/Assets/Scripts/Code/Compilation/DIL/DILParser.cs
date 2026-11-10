@@ -166,7 +166,9 @@ namespace DSCompilation.DIL
                 ["DICT"] = DataTypeId.Dict,
                 ["FUNCTION"] = DataTypeId.Function,
                 ["RANGE"] = DataTypeId.Range,
-                ["ITERATOR"] = DataTypeId.Iterator
+                ["ITERATOR"] = DataTypeId.Iterator,
+                ["SIMULATION_OBJECT"] = DataTypeId.SimulationObject,
+                ["SIMULATION_ENUM"] = DataTypeId.SimulationEnum
             };
 
         private readonly IDILSourceProvider sourceProvider;
@@ -911,6 +913,11 @@ namespace DSCompilation.DIL
                     instructions.Add(Instruction.StoreGlobal(globalIndex));
                     return;
                 }
+
+                case "PUSH_SELF":
+                    RequireTokenCount(moduleName, lineNumber, mnemonic, tokens, 1);
+                    instructions.Add(Instruction.PushSelf());
+                    return;
 
                 case "PUSH_FUNCTION":
                 {

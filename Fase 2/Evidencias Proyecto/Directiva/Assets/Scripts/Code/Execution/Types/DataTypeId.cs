@@ -29,6 +29,10 @@ namespace DSExecution.DataTypes
         Range = 14,
         Iterator = 15,
 
+        // Non-heap references and typed constants for the simulation bridge.
+        SimulationObject = 16,
+        SimulationEnum = 17,
+
         // Simulation types
         Unit = 9,
         Base = 10,

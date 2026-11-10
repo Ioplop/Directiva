@@ -112,7 +112,7 @@ namespace DSExecution.DataTypes
         }
 
         /// <summary>Dispatches an annotated member without runtime reflection.</summary>
-        public OperationResult InvokeMember(DScriptMemberKind kind, string name, OperationCall call)
+        public virtual OperationResult InvokeMember(DScriptMemberKind kind, string name, OperationCall call)
         {
             if (string.IsNullOrEmpty(name) || !members.TryGetValue(name, out MemberGroup? group))
                 return OperationResult.OpError(RuntimeError.MemberNotFound(GetType().Name, name));

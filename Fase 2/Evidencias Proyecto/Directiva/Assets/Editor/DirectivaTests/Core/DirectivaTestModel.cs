@@ -148,6 +148,7 @@ namespace Directiva.EditorTests
             SimulationTests.SimulationObserverTests.Register(tests);
             SimulationTests.SimulationControllerTests.Register(tests);
             OrchestrationTests.SimulationBridgeTests.Register(tests);
+            OrchestrationTests.SimulationLinkTests.Register(tests);
             MathTests.MathFoundationTests.Register(tests);
             LocalizationTests.LocalizationTests.Register(tests);
             CodeUITests.OutputNavigationTests.Register(tests);

@@ -54,10 +54,9 @@ namespace DSExecution.DataTypes
             result[(int)DataTypeId.Function] = DTFunction.Instance;
             result[(int)DataTypeId.Range] = DTRange.Instance;
             result[(int)DataTypeId.Iterator] = DTIterator.Instance;
-            // Remaining to add...
-            // Unit
-            // Base
-            // Resource
+            result[(int)DataTypeId.SimulationObject] = DTSimulationObject.Instance;
+            result[(int)DataTypeId.SimulationEnum] = DTSimulationEnum.Instance;
+            // Unit/Base/Resource have no registered type; all simulation entities use SimulationObject.
 
             return result;
         }

@@ -102,6 +102,9 @@ namespace DSExecution.VirtualMachine
         public static Instruction CallMethod(string name, int argumentCount)
             => new(InstructionId.CallMethod, operandA: argumentCount, textOperand: name);
 
+        public static Instruction PushSelf()
+            => new(InstructionId.PushSelf);
+
         public static Instruction LoadLocal(int localIndex)
             => new(InstructionId.LoadLocal, operandA: localIndex);
 

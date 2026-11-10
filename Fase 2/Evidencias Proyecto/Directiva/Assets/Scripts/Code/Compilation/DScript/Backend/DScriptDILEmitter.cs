@@ -104,6 +104,8 @@ namespace DSCompilation.DScript.Backend
                 Op("LOAD_GLOBAL " + symbol.Slot, span);
             else if (symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter)
                 Op("LOAD_LOCAL " + symbol.Slot, span);
+            else if (symbol.Kind == SymbolKind.Self)
+                Op("PUSH_SELF", span);
             else if (symbol.Kind == SymbolKind.Function)
                 Op("PUSH_FUNCTION " + symbol.QualifiedName, span);
             else if (symbol.Kind == SymbolKind.NativeFunction || symbol.Kind == SymbolKind.NativeConstant)

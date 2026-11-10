@@ -91,3 +91,4 @@
 [expected_collection_right_brace]: Expected '}' after collection literal.
 [static_module_missing_symbol]: Module '{{1}}' has no symbol '{{2}}'.
 [static_namespace_not_imported]: Namespace '{{1}}' is not imported.
+[self_reserved]: 'self' is a read-only contextual reference and cannot be declared or modified.

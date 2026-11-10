@@ -46,6 +46,9 @@ namespace DSExecution.VirtualMachine
         // Iterator operations. Numeric ids are append-only for future DIB compatibility.
         Range = 30,
         IterInit = 31,
-        IterNext = 32
+        IterNext = 32,
+
+        // Push the receiver identity from the VM host (not from shared memory).
+        PushSelf = 33
     }
 }

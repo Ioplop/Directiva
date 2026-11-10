@@ -62,6 +62,7 @@ namespace DSExecution.VirtualMachine
 
         public CodeContext Code { get; }
         public VMMemoryContext Memory { get; }
+        public IVMHostContext? HostContext { get; }
         public VMDebugState Debug { get; } = new();
 
         public VMExecutionStatus Status { get; private set; }
@@ -105,7 +106,7 @@ namespace DSExecution.VirtualMachine
             => callStack.Count > 0 ? callStack[^1].Locals : null;
 
         public DirectivaVM(CodeContext code)
-            : this(code, null, null, 0, true, Array.Empty<DataValue>())
+            : this(code, null, null, 0, true, Array.Empty<DataValue>(), null)
         {
         }
 
@@ -116,7 +117,7 @@ namespace DSExecution.VirtualMachine
             CodeContext code,
             int entryFunctionId,
             params DataValue[] entryArguments)
-            : this(code, null, null, entryFunctionId, false, entryArguments)
+            : this(code, null, null, entryFunctionId, false, entryArguments, null)
         {
         }
 
@@ -125,7 +126,7 @@ namespace DSExecution.VirtualMachine
             VMMemoryContext? memory,
             VMOptions? options,
             params DataValue[] entryArguments)
-            : this(code, memory, options, 0, true, entryArguments)
+            : this(code, memory, options, 0, true, entryArguments, null)
         {
         }
 
@@ -138,7 +139,15 @@ namespace DSExecution.VirtualMachine
             VMOptions? options,
             int entryFunctionId,
             params DataValue[] entryArguments)
-            : this(code, memory, options, entryFunctionId, false, entryArguments)
+            : this(code, memory, options, entryFunctionId, false, entryArguments, null)
+        {
+        }
+
+        /// <summary>Creates an entity-bound VM with per-execution host services.</summary>
+        public DirectivaVM(CodeContext code, VMMemoryContext? memory, VMOptions? options,
+            int entryFunctionId, IVMHostContext hostContext, params DataValue[] entryArguments)
+            : this(code, memory, options, entryFunctionId, false, entryArguments,
+                hostContext ?? throw new ArgumentNullException(nameof(hostContext)))
         {
         }
 
@@ -148,9 +157,11 @@ namespace DSExecution.VirtualMachine
             VMOptions? options,
             int entryFunctionId,
             bool useDefaultEntry,
-            DataValue[] entryArguments)
+            DataValue[] entryArguments,
+            IVMHostContext? hostContext)
         {
             Code = code ?? throw new ArgumentNullException(nameof(code));
+            HostContext = hostContext;
             this.options = options ?? new VMOptions();
             Memory = memory ?? new VMMemoryContext(code.GlobalCount);
 
@@ -343,6 +354,9 @@ namespace DSExecution.VirtualMachine
                 InstructionId.JumpIfFalse => ExecuteConditionalJump(frame, instruction.OperandA, false),
                 InstructionId.Call => ExecuteCall(frame, instruction.OperandA),
                 InstructionId.PushFunction => ExecutePushFunction(frame, instruction.OperandA),
+                InstructionId.PushSelf => HostContext == null
+                    ? Fault(RuntimeError.InvalidOperation("self requires an entity-bound VM."))
+                    : ExecutePush(frame, HostContext.Self),
                 InstructionId.CallIndirect => ExecuteCallIndirect(frame, instruction.OperandA),
                 InstructionId.Return => ExecuteReturn(frame),
                 InstructionId.ContextStart => ExecuteContextStart(frame, instruction.OperandA, instruction.OperandB),
@@ -868,7 +882,7 @@ namespace DSExecution.VirtualMachine
                 _ => DScriptMemberKind.Method
             };
             return type.InvokeMember(memberKind, name,
-                new OperationCall(arguments, 0, Memory, state, auxiliaryReference));
+                new OperationCall(arguments, 0, Memory, state, auxiliaryReference, HostContext));
         }
 
         private VMAdvanceResult ContinueMember(CallFrame frame)
@@ -1179,7 +1193,7 @@ namespace DSExecution.VirtualMachine
             try
             {
                 result = native.Invoke(new NativeCallContext(
-                    Memory, arguments, text => Printed?.Invoke(text)));
+                    Memory, arguments, text => Printed?.Invoke(text), HostContext));
             }
             catch (Exception ex)
             {

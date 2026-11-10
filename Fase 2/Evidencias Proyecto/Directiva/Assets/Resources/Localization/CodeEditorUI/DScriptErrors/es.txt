@@ -91,3 +91,4 @@
 [expected_collection_right_brace]: Se esperaba '}' después del literal de colección.
 [static_module_missing_symbol]: El módulo '{{1}}' no contiene el símbolo '{{2}}'.
 [static_namespace_not_imported]: El espacio de nombres '{{1}}' no está importado.
+[self_reserved]: 'self' es una referencia contextual de solo lectura y no puede declararse ni modificarse.
