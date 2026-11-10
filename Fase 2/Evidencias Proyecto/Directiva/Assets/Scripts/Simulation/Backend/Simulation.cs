@@ -33,6 +33,9 @@ namespace DSimulation
         // Read-only observation API for the future orchestrator.
         public SimulationObserver Observer { get; }
 
+        // Public order API; the future orchestrator is responsible for authorization.
+        public SimulationController Controller { get; }
+
         internal bool TryGetEntity(int id, out SBEntity entity) => entityRegistry.TryGetValue(id, out entity);
 
         // Maintains entities on a dictionary for quick fixed access time by ID
@@ -71,6 +74,7 @@ namespace DSimulation
         public Simulation(ulong seed, FixedVector2 dimensions)
         {
             Observer = new SimulationObserver(this);
+            Controller = new SimulationController(this);
 
             // Random initialization
             this.seed = seed;
