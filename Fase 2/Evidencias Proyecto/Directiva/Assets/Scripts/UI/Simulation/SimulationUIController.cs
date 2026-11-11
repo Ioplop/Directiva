@@ -20,7 +20,7 @@ namespace Directiva.SimulationUI
         Fullscreen
     }
 
-    /// <summary>Optional inspector hooks for the future simulation controls. No simulation is run yet.</summary>
+    /// <summary>Input events raised by the simulation HUD; hosts subscribe without replacing the UI.</summary>
     [Serializable]
     public sealed class SimulationControlEvents
     {
@@ -28,6 +28,7 @@ namespace Directiva.SimulationUI
         public UnityEvent stop = new UnityEvent();
         public UnityEvent pause = new UnityEvent();
         public UnityEvent slowMotion = new UnityEvent();
+        public UnityEvent normalSpeed = new UnityEvent();
         public UnityEvent doubleSpeed = new UnityEvent();
         public UnityEvent quintupleSpeed = new UnityEvent();
     }
@@ -55,11 +56,12 @@ namespace Directiva.SimulationUI
         [SerializeField] private string defaultLevelTitle = "Simulación 1";
         [SerializeField] private UnityEvent onBeforeReturnToMenu = new UnityEvent();
 
-        [Header("Visual-only simulation controls")]
+        [Header("Simulation control events")]
         [SerializeField] private SimulationControlEvents controlEvents = new SimulationControlEvents();
 
         public EditorDisplayMode CurrentEditorMode { get; private set; }
         public DirectivaCodeUIController CodeEditor => codeEditor;
+        public SimulationControlEvents Controls => controlEvents;
 
         private DirectivaUITheme _theme;
         private UIDocument _document;
@@ -209,6 +211,7 @@ namespace Directiva.SimulationUI
             controls.Add(separator);
 
             controls.Add(CreateControlButton(_theme?.icons?.slowMotion, "slow_motion", () => SelectSpeed("0.25×"), controlEvents.slowMotion, false));
+            controls.Add(CreateControlButton(null, "normal_speed", () => SelectSpeed("1×"), controlEvents.normalSpeed, false, "1×"));
             controls.Add(CreateControlButton(_theme?.icons?.doubleSpeed, "double_speed", () => SelectSpeed("2×"), controlEvents.doubleSpeed, false));
             controls.Add(CreateControlButton(_theme?.icons?.quintupleSpeed, "quintuple_speed", () => SelectSpeed("5×"), controlEvents.quintupleSpeed, false));
 
@@ -298,7 +301,7 @@ namespace Directiva.SimulationUI
         }
 
         private Button CreateControlButton(Sprite sprite, string tooltip, Action setVisualState,
-            UnityEvent callback, bool playback)
+            UnityEvent callback, bool playback, string fallbackLabel = null)
         {
             Button button = null;
             button = new Button(() =>
@@ -317,7 +320,7 @@ namespace Directiva.SimulationUI
                     _activeSpeedButton = null;
                 }
                 setVisualState?.Invoke();
-                // Only updates the mock UI; no Game/VM state is changed here.
+                // Control events are consumed by the scene synchronizer.
                 button.AddToClassList("sim-selected");
                 if (playback) _activePlaybackButton = button;
                 else _activeSpeedButton = button;
@@ -325,6 +328,7 @@ namespace Directiva.SimulationUI
             _controlButtons[tooltip] = button;
             button.AddToClassList("sim-control-button");
             UIIconView.SetButton(button, sprite, 17f);
+            if (sprite == null && !string.IsNullOrEmpty(fallbackLabel)) button.text = fallbackLabel;
             return button;
         }
 

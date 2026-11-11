@@ -71,7 +71,9 @@ public sealed class SimulationTransformInterpolator : MonoBehaviour
         if (!initialized)
             return;
 
-        elapsedTime += Time.deltaTime * playbackSpeed;
+        // The synchronizer already applies speed via Time.timeScale for particles.
+        // Drive interpolation from unscaled time to avoid applying the rate twice.
+        elapsedTime += Time.unscaledDeltaTime * playbackSpeed;
         float alpha = Mathf.Clamp01(elapsedTime * Mathf.Max(1f, simulationTicksPerSecond));
         Apply(alpha);
     }

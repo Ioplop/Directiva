@@ -151,6 +151,7 @@ namespace Directiva.EditorTests
             OrchestrationTests.SimulationLinkTests.Register(tests);
             OrchestrationTests.OrchestratorTests.Register(tests);
             OrchestrationTests.FullMatchDeterminismTests.Register(tests);
+            SimulationFrontendTests.SimulationFrontendTests.Register(tests);
             MathTests.MathFoundationTests.Register(tests);
             LocalizationTests.LocalizationTests.Register(tests);
             CodeUITests.OutputNavigationTests.Register(tests);
