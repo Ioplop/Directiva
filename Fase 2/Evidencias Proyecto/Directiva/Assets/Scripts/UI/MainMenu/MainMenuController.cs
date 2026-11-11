@@ -803,7 +803,11 @@ namespace Directiva.MainMenu
                 Debug.LogError(T("level_missing_scene", level.LevelName), this);
                 return;
             }
-            if (!Application.CanStreamedLevelBeLoaded(level.SceneLoadPath))
+            // Resolve the exact asset path (including .unity). The string overload of
+            // CanStreamedLevelBeLoaded can reject a path that SceneManager accepts.
+            // Loading by the resolved index also avoids ambiguities between same-name scenes.
+            int sceneIndex = SceneUtility.GetBuildIndexByScenePath(level.ScenePath);
+            if (sceneIndex < 0)
             {
                 Debug.LogError(T("level_scene_unavailable", level.ScenePath), this);
                 return;
@@ -812,7 +816,7 @@ namespace Directiva.MainMenu
             try
             {
                 LevelLaunchContext.SetPendingLevel(level);
-                SceneManager.LoadScene(level.SceneLoadPath);
+                SceneManager.LoadScene(sceneIndex);
             }
             catch (Exception exception)
             {

@@ -18,3 +18,13 @@
 [show_solution]: Show solution
 [hide_solution]: Hide solution
 [menu_scene_unavailable]: [Directiva] Menu scene '{{1}}' must be included in Build Profiles.
+[nexus_program_title]: Nexus program
+[nexus_program_help]: Uses saved DScript files in DirectivaScripts. Save your changes before applying.
+[nexus_script]: Script
+[nexus_function]: Entry function
+[nexus_apply]: Apply and restart match
+[nexus_refresh]: Refresh scripts
+[nexus_close]: Close
+[nexus_no_scripts]: No saved .dscript files. Create one in the Editor.
+[nexus_no_functions]: No parameterless functions in this script.
+[nexus_program_applied]: Program assigned to the Nexus.

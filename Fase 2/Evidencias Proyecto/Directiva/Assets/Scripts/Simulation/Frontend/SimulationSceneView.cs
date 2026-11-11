@@ -79,15 +79,15 @@ namespace Directiva.SimulationFrontend
                 if (faction.Nexus != null && faction.Nexus.alive)
                 {
                     SBNexus nexus = faction.Nexus;
-                    Spawn(nexus.id, side, nexusPrefab, nexus.Position, nexus.Rotation);
+                    Spawn(nexus.id, side, SimulationVisualKind.Nexus, nexusPrefab, nexus.Position, nexus.Rotation);
                 }
                 foreach (SBUnit unit in faction.Units)
                     if (unit.alive)
-                        Spawn(unit.id, side, unitPrefab, unit.Position, unit.Rotation);
+                        Spawn(unit.id, side, SimulationVisualKind.Unit, unitPrefab, unit.Position, unit.Rotation);
             }
             foreach (SBResource resource in simulation.GetSide(0).ResourceEntities)
                 if (resource.alive)
-                    Spawn(resource.id, 0, resourcePrefab, resource.Position, resource.Rotation);
+                    Spawn(resource.id, 0, SimulationVisualKind.Resource, resourcePrefab, resource.Position, resource.Rotation);
 
             // Previously generated events describe past changes already reflected
             // by the snapshot. In particular, do not replay obsolete attack effects.
@@ -117,13 +117,13 @@ namespace Directiva.SimulationFrontend
                 switch (message)
                 {
                     case EventCreateNexus createdNexus:
-                        Spawn(createdNexus.id, createdNexus.side, nexusPrefab, createdNexus.position, 0);
+                        Spawn(createdNexus.id, createdNexus.side, SimulationVisualKind.Nexus, nexusPrefab, createdNexus.position, 0);
                         break;
                     case EventCreateUnit createdUnit:
-                        Spawn(createdUnit.id, createdUnit.side, unitPrefab, createdUnit.position, createdUnit.rotation);
+                        Spawn(createdUnit.id, createdUnit.side, SimulationVisualKind.Unit, unitPrefab, createdUnit.position, createdUnit.rotation);
                         break;
                     case EventCreateResource createdResource:
-                        Spawn(createdResource.id, 0, resourcePrefab, createdResource.position, 0);
+                        Spawn(createdResource.id, 0, SimulationVisualKind.Resource, resourcePrefab, createdResource.position, 0);
                         break;
                     case EventPosition movedEvent:
                         if (entities.TryGetValue(movedEvent.id, out EntityVisual moved))
@@ -168,7 +168,7 @@ namespace Directiva.SimulationFrontend
             return false;
         }
 
-        private void Spawn(int id, int side, VisualEntity prefab, FixedVector2 position, Fixed rotation)
+        private void Spawn(int id, int side, SimulationVisualKind kind, VisualEntity prefab, FixedVector2 position, Fixed rotation)
         {
             if (prefab == null)
                 throw new InvalidOperationException("A required simulation entity prefab is not assigned.");
@@ -180,6 +180,11 @@ namespace Directiva.SimulationFrontend
             VisualEntity visual = Instantiate(prefab, worldPosition, worldRotation,
                 entityContainer != null ? entityContainer : transform);
             visual.gameObject.name = prefab.gameObject.name + " #" + id;
+            // Metadata is attached only to the runtime instance. Colliders on any
+            // mesh child can now be resolved by the generic world pointer controller.
+            var identity = visual.GetComponent<SimulationEntityIdentity>();
+            if (identity == null) identity = visual.gameObject.AddComponent<SimulationEntityIdentity>();
+            identity.Initialize(id, side, kind);
             if (side != 0 && visual.Side != null)
                 visual.Side.SetSide(side);
 

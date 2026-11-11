@@ -18,3 +18,13 @@
 [show_solution]: Mostrar solución
 [hide_solution]: Ocultar solución
 [menu_scene_unavailable]: [Directiva] La escena de menú '{{1}}' debe incluirse en los perfiles de compilación.
+[nexus_program_title]: Programa del nexo
+[nexus_program_help]: Se usa el DScript guardado en DirectivaScripts. Guarda tus cambios antes de aplicar.
+[nexus_script]: Script
+[nexus_function]: Función de entrada
+[nexus_apply]: Aplicar y reiniciar partida
+[nexus_refresh]: Actualizar scripts
+[nexus_close]: Cerrar
+[nexus_no_scripts]: No hay archivos .dscript guardados. Crea uno desde el Editor.
+[nexus_no_functions]: No hay funciones sin parámetros en el script seleccionado.
+[nexus_program_applied]: Programa asignado al nexo.

@@ -62,6 +62,7 @@ namespace Directiva.SimulationUI
         public EditorDisplayMode CurrentEditorMode { get; private set; }
         public DirectivaCodeUIController CodeEditor => codeEditor;
         public SimulationControlEvents Controls => controlEvents;
+        public SimulationNexusProgramPicker NexusPicker => _nexusPicker;
 
         private DirectivaUITheme _theme;
         private UIDocument _document;
@@ -84,6 +85,7 @@ namespace Directiva.SimulationUI
         private bool _initialWidthMeasured;
         private bool _editorMounted;
         private bool _pointerPressStartedOnUI;
+        private SimulationNexusProgramPicker _nexusPicker;
 
         private static string T(string key, params object[] arguments) =>
             DirectivaLocalization.Get("Simulation", key, arguments);
@@ -107,6 +109,7 @@ namespace Directiva.SimulationUI
             foreach (var entry in _controlButtons)
                 entry.Value.tooltip = T(entry.Key);
             SelectPlayback(_playbackState);
+            _nexusPicker?.Relocalize();
             if (_editorPane != null) SetEditorMode(CurrentEditorMode);
         }
 
@@ -259,6 +262,8 @@ namespace Directiva.SimulationUI
             _mainMenuButton = new Button(ReturnToMainMenu) { text = T("main_menu") };
             _mainMenuButton.AddToClassList("sim-menu-button");
             overlay.Add(_mainMenuButton);
+            // Inside the same UIDocument: no second full-screen hit-test layer.
+            _nexusPicker = new SimulationNexusProgramPicker(overlay);
 
             // Observe UI-initiated drags so future 3D code can ignore their continuation.
             _root.RegisterCallback<PointerDownEvent>(evt =>
@@ -351,6 +356,7 @@ namespace Directiva.SimulationUI
             CurrentEditorMode = mode;
             bool hidden = mode == EditorDisplayMode.Hidden;
             bool fullscreen = mode == EditorDisplayMode.Fullscreen;
+            if (fullscreen) _nexusPicker?.Hide();
             _editorPane.style.display = hidden ? DisplayStyle.None : DisplayStyle.Flex;
             // Keep this button (and therefore the simulation controls beside it)
             // in the same position when the editor opens, hides or maximizes.
@@ -433,6 +439,20 @@ namespace Directiva.SimulationUI
         {
             var focused = _root?.panel?.focusController?.focusedElement as VisualElement;
             return focused is TextField || focused?.GetFirstAncestorOfType<TextField>() != null;
+        }
+
+        /// <summary>Place the world-anchored Nexus program panel above its visual.</summary>
+        public void PositionNexusPicker(Vector3 worldPosition, Camera worldCamera)
+        {
+            if (_nexusPicker == null || !_nexusPicker.Visible || worldCamera == null ||
+                _root?.panel == null) return;
+            Vector3 point = worldCamera.WorldToScreenPoint(worldPosition);
+            if (point.z <= 0f)
+            {
+                _nexusPicker.Hide();
+                return;
+            }
+            _nexusPicker.PositionAt(new Vector2(point.x, point.y), _root.panel);
         }
 
         private void ReturnToMainMenu()

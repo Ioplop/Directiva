@@ -33,6 +33,18 @@ namespace Directiva.EditorTests.LevelTests
                     "Unity receives a scene path without the .unity extension");
             });
 
+            Add("SampleSceneBuildIndex", "The level's full asset path resolves to an enabled scene", t =>
+            {
+                DirectivaLevel sample = AssetDatabase.LoadAssetAtPath<DirectivaLevel>(SamplePath);
+                t.Check(sample != null, "sample DirectivaLevel asset exists");
+                int sceneIndex = UnityEngine.SceneManagement.SceneUtility.GetBuildIndexByScenePath(
+                    sample.ScenePath);
+                t.Check(sceneIndex >= 0, "sample scene is enabled in the active Build Profile");
+                t.Equal(sample.ScenePath,
+                    UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(sceneIndex),
+                    "build index refers to the selected SceneAsset, not another scene");
+            });
+
             Add("ImportedDscriptIsTextAsset", "A .dscript under Resources is importable as a TextAsset", t =>
             {
                 TextAsset text = Resources.Load<TextAsset>("Levels/Level01/enemy");

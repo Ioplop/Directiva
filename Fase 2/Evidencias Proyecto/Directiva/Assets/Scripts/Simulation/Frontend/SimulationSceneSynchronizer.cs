@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using DMath;
 using DOrchestration;
 using DSimulation;
@@ -112,6 +113,10 @@ namespace Directiva.SimulationFrontend
         [SerializeField, Min(1)] private int maxTicksPerFrame = 250;
         [SerializeField] private bool mirrorVmMessagesToUnityConsole = true;
 
+        // In-memory selection, retained for this scene's lifetime across Stop/Play.
+        // This is deliberately NOT the code editor's working buffer.
+        private string selectedPlayerScript;
+        private string selectedPlayerFunction;
         private Orchestrator orchestrator;
         private bool running;
         private float speed = 1f;
@@ -122,6 +127,56 @@ namespace Directiva.SimulationFrontend
         public Orchestrator CurrentMatch => orchestrator;
         public bool IsRunning => running;
         public float PlaybackSpeed => speed;
+        public string PlayerScriptsRoot => Path.Combine(Application.persistentDataPath, "DirectivaScripts");
+        public string SelectedPlayerScript => selectedPlayerScript;
+        public string SelectedPlayerFunction => selectedPlayerFunction;
+
+        private void Awake()
+        {
+            // Add the selection system at runtime; existing scenes and prefabs do
+            // not need new serialized component references or GUID changes.
+            var selection = GetComponent<SimulationNexusProgramController>();
+            if (selection == null) selection = gameObject.AddComponent<SimulationNexusProgramController>();
+            selection.Initialize(this, view, ui);
+        }
+
+        /// <summary>
+        /// Selects a saved player program. A successful choice rebuilds the match
+        /// so the current Nexus runs the selected entry immediately. Stop/Play
+        /// keeps this choice until this scene is unloaded.
+        /// </summary>
+        public bool TryAssignPlayerNexusProgram(string relativeScript, string entryFunction, out string error)
+        {
+            try
+            {
+                // Validate before changing the saved choice or current match.
+                PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot, relativeScript, entryFunction);
+                bool resume = running;
+                string previousScript = selectedPlayerScript;
+                string previousFunction = selectedPlayerFunction;
+                selectedPlayerScript = relativeScript;
+                selectedPlayerFunction = entryFunction;
+                ResetDemo();
+                if (orchestrator == null)
+                {
+                    // An unrelated bootstrap problem must not permanently replace
+                    // a previously working Nexus selection.
+                    selectedPlayerScript = previousScript;
+                    selectedPlayerFunction = previousFunction;
+                    ResetDemo();
+                    if (resume && orchestrator != null) Play();
+                    throw new InvalidOperationException("Could not create the match with the selected program.");
+                }
+                if (resume) Play();
+                error = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+                return false;
+            }
+        }
 
         private void OnEnable()
         {
@@ -214,7 +269,10 @@ namespace Directiva.SimulationFrontend
         {
             try
             {
-                DScriptCompiledProgram first = CompileSide(playerModule, PlayerSource);
+                DScriptCompiledProgram first = string.IsNullOrEmpty(selectedPlayerScript)
+                    ? CompileSide(playerModule, PlayerSource)
+                    : PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot,
+                        selectedPlayerScript, selectedPlayerFunction);
                 DirectivaLevel selectedLevel = LevelLaunchContext.CurrentLevel;
                 DScriptCompiledProgram second = selectedLevel != null
                     ? CompileLevelEnemy(selectedLevel)
@@ -226,7 +284,10 @@ namespace Directiva.SimulationFrontend
                 var next = new Orchestrator(world, first, second,
                     stepsPerTick: vmStepsPerTick, maxDurationSeconds: matchDurationSeconds);
                 next.BindInitialEntity(world.GetSide(1).Nexus.id,
-                    playerModule + "." + playerNexusFunction);
+                    string.IsNullOrEmpty(selectedPlayerScript)
+                        ? playerModule + "." + playerNexusFunction
+                        : PlayerNexusScriptCatalog.ModuleFromPath(selectedPlayerScript) + "." +
+                          selectedPlayerFunction);
                 next.BindInitialEntity(world.GetSide(2).Nexus.id, enemyEntry);
                 AttachOrchestrator(next);
             }
