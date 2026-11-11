@@ -233,6 +233,37 @@ namespace Directiva.EditorTests.DScript
                 CheckInt(t, "def main():\n    return abs(-14)\n", 14));
             Add("NativeMath", "Native module symbol is linked after imports", t =>
                 CheckInt(t, "import math\ndef main():\n    return math.floor(5)\n", 5));
+            Add("EmptyCollectionConstructors", "list(), set() and dict() compile and mutate correctly", t =>
+                CheckBool(t,
+                    "def main():\n" +
+                    "    items = list()\n" +
+                    "    items.append(2)\n" +
+                    "    values = set()\n" +
+                    "    values.add(3)\n" +
+                    "    lookup = dict()\n" +
+                    "    lookup[4] = 9\n" +
+                    "    return items[0] == 2 and 3 in values and lookup[4] == 9\n", true));
+            Add("EmptyCollectionText", "Constructors print as [], set(), {}", t => {
+                var p = Compile(t, "def main():\n    print(list(), set(), dict())\n");
+                ExecuteCaptured(t, p, out List<string> output);
+                t.Equal("[] set() {}", output.Single(), "collection text");
+            });
+            Add("EmptyCollectionIndependence", "Separate calls allocate independent mutable collections", t =>
+                CheckBool(t,
+                    "def main():\n" +
+                    "    a = list()\n    b = list()\n    a.append(5)\n" +
+                    "    x = set()\n    y = set()\n    x.add(5)\n" +
+                    "    d = dict()\n    e = dict()\n    d[1] = 5\n" +
+                    "    return len(b) == 0 and len(y) == 0 and len(e) == 0\n", true));
+            Add("EmptyCollectionShared", "Empty Set can be initialized in shared memory and mutated", t => {
+                var p = Compile(t, "shared seen = set()\ndef main():\n    seen.add(17)\n    return len(seen)\n");
+                var mem = Memory(t, p, out var report);
+                t.Check(!report.HasErrors, "shared empty Set initialization");
+                var vm = Execute(t, p, "test.main", mem);
+                t.Equal(1L, unchecked((long)vm.ReturnValue.value), "shared set updated");
+            });
+            Add("EmptyCollectionShadowing", "A user function can shadow a native constructor", t =>
+                CheckInt(t, "def set():\n    return 71\ndef main():\n    return set()\n", 71));
             Add("NativeAsValue", "Native functions can be stored in a local slot", t =>
                 CheckInt(t, "def main():\n    f = abs\n    return f(-8)\n", 8));
             Add("ListGetSet", "Subscript updates use GET/SET with stack cleanup", t =>

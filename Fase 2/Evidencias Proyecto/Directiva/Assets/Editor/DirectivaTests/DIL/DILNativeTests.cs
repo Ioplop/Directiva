@@ -273,6 +273,51 @@ namespace Directiva.EditorTests.DIL
                 t.Equal(10L, unchecked((long)r.Value.value), "range survived collection");
             });
 
+            // Zero-argument heap constructors: DScript uses these to create mutable
+            // collections without requiring a literal with at least one element.
+            Add("NativeBuiltins", "EmptyCollectionSymbols", "Empty collection constructors are global native functions", t => {
+                var names = NativeLibrary.GetFunctionNames(string.Empty);
+                foreach (string name in new[] { "list", "set", "dict" })
+                    t.Check(names.Contains(name), name + " builtin is registered");
+            });
+            Add("NativeBuiltins", "EmptyList", "list() returns a fresh empty List", t => {
+                var r = Run(t, Call("list", 0));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.List, r.Value.dataType, "list type");
+                t.Check(r.Value.TryGetHeapReference(out uint id), "list heap reference");
+                t.Equal(0, ((ListHeapObject)r.VM.Memory.GetHeap(id)).Count, "empty list");
+                t.Equal(1u, r.VM.Memory.GetHeap(id).Size, "logical heap charge");
+            });
+            Add("NativeBuiltins", "EmptySet", "set() returns a fresh empty Set", t => {
+                var r = Run(t, Call("set", 0));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.Set, r.Value.dataType, "set type");
+                t.Check(r.Value.TryGetHeapReference(out uint id), "set heap reference");
+                t.Equal(0, ((SetHeapObject)r.VM.Memory.GetHeap(id)).Count, "empty set");
+                t.Equal(1u, r.VM.Memory.GetHeap(id).Size, "logical heap charge");
+            });
+            Add("NativeBuiltins", "EmptyDict", "dict() returns a fresh empty Dict", t => {
+                var r = Run(t, Call("dict", 0));
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.Dict, r.Value.dataType, "dict type");
+                t.Check(r.Value.TryGetHeapReference(out uint id), "dict heap reference");
+                t.Equal(0, ((DictHeapObject)r.VM.Memory.GetHeap(id)).Count, "empty dictionary");
+                t.Equal(1u, r.VM.Memory.GetHeap(id).Size, "logical heap charge");
+            });
+            Add("NativeBuiltins", "EmptyConstructorsDirectCall", "Fixed zero-arity native constructor supports direct CALL", t => {
+                var r = Run(t, "CALL $set\nRETURN");
+                t.Equal(VMExecutionStatus.Completed, r.Status, "status");
+                t.Equal(DataTypeId.Set, r.Value.dataType, "direct call type");
+            });
+            Add("NativeBuiltins", "EmptyConstructorsBadArity", "Constructors reject unexpected arguments", t => {
+                foreach (string name in new[] { "list", "set", "dict" })
+                    Error(t, Call(name, 1, "PUSH INT 3"), RuntimeErrorId.InvalidOperation);
+            });
+            Add("NativeBuiltins", "EmptyConstructorsOOM", "Each constructor respects logical heap bounds", t => {
+                foreach (string name in new[] { "list", "set", "dict" })
+                    Error(t, Call(name, 0), RuntimeErrorId.OutOfMemory, heap: 0);
+            });
+
             // Import namespace resolution, call id stability, script/native interactions.
             Add("NativeLinking", "BuiltinsWithoutImports", "globals are available without # IMPORT", t => {
                 var code = Compile(t, Call("abs", 1, "PUSH INT -1"));

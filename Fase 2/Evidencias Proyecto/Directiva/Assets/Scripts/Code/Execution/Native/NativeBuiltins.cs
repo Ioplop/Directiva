@@ -37,6 +37,33 @@ namespace DSExecution.Native
             return NativeResult.Success(DataValue.FromRangeReference(id));
         }
 
+        // Empty mutable collections are builtins, like range(). Each call creates its
+        // own heap object, including when the result is stored in a shared variable.
+        // Only zero-argument construction is supported; iterable conversions are not.
+        [DScriptNativeFunction("", "list", 0, 0)]
+        public static NativeResult EmptyList(NativeCallContext c)
+        {
+            if (!c.Memory.TryAllocHeap(new ListHeapObject(Array.Empty<DataValue>()), out uint id))
+                return NativeResult.Failure(RuntimeError.OutOfMemory());
+            return NativeResult.Success(DataValue.FromListReference(id));
+        }
+
+        [DScriptNativeFunction("", "set", 0, 0)]
+        public static NativeResult EmptySet(NativeCallContext c)
+        {
+            if (!c.Memory.TryAllocHeap(new SetHeapObject(), out uint id))
+                return NativeResult.Failure(RuntimeError.OutOfMemory());
+            return NativeResult.Success(DataValue.FromSetReference(id));
+        }
+
+        [DScriptNativeFunction("", "dict", 0, 0)]
+        public static NativeResult EmptyDict(NativeCallContext c)
+        {
+            if (!c.Memory.TryAllocHeap(new DictHeapObject(), out uint id))
+                return NativeResult.Failure(RuntimeError.OutOfMemory());
+            return NativeResult.Success(DataValue.FromDictReference(id));
+        }
+
         [DScriptNativeFunction("", "len", 1, 1)]
         public static NativeResult Length(NativeCallContext c) => c.Operate(OperationId.Length, c[0]);
 
