@@ -1,0 +1,26 @@
+shared built = 0
+shared charge = False
+
+def nexus_main():
+    if built < 5:
+        if self.can_build:
+            if build(worker):
+                built += 1
+    if built >= 5 and len(self.units()) >= 5 and self.resources >= 5 and not charge:
+        charge = True
+        print("Bando 2: ataque")
+
+def worker():
+    if charge:
+        base = enemy_nexus()
+        if base != None:
+            attack(base)
+            move(base)
+    elif self.is_cargo_full:
+        stop_action()
+        move(self.nexus)
+    else:
+        vein = closest_resource()
+        if vein != None:
+            gather(vein)
+            move(vein)

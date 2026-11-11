@@ -7,6 +7,7 @@ using UnityEngine.UIElements;
 using Directiva.Settings;
 using Directiva.Localization;
 using Directiva.UI;
+using Directiva.Levels;
 
 namespace Directiva.MainMenu
 {
@@ -128,8 +129,13 @@ namespace Directiva.MainMenu
         [SerializeField] private string audioSectionTitle;
         [SerializeField] private string graphicsSectionTitle;
 
-        [Header("Levels (editable from the Inspector)")]
-        [SerializeField] private List<LevelMenuEntry> levels = new List<LevelMenuEntry>();
+        [Header("Levels (ScriptableObjects)")]
+        [SerializeField] private List<DirectivaLevel> levelDefinitions = new List<DirectivaLevel>();
+        [Tooltip("Temporary star total for testing level locks. Not saved or awarded yet.")]
+        [SerializeField, Min(0)] private int availableStars;
+
+        // Preserve old scene data for migration, but never use legacy entries as levels.
+        [HideInInspector, SerializeField] private List<LevelMenuEntry> levels = new List<LevelMenuEntry>();
 
         private DirectivaUITheme _theme;
         private UIDocument document;
@@ -137,6 +143,7 @@ namespace Directiva.MainMenu
         private VisualElement home;
         private VisualElement options;
         private VisualElement levelSelection;
+        private VisualElement levelGrid;
         private VisualElement optionsContent;
         private ScrollView optionsScroll;
         private Label starTotal;
@@ -270,6 +277,8 @@ namespace Directiva.MainMenu
             if (buttons.simulateWhenInactive == null) buttons.simulateWhenInactive = new MainMenuButtonAction("Simular en ventana inactiva");
             if (buttons.confirmResolution == null) buttons.confirmResolution = new MainMenuButtonAction("Conservar resolución");
             if (buttons.revertResolution == null) buttons.revertResolution = new MainMenuButtonAction("Revertir");
+            // A newly opened main menu must not inherit a previously played level.
+            LevelLaunchContext.Clear();
             SettingsManager.Initialize();
             builtLocale = DirectivaLocalization.CurrentLocale;
             pendingResolution = null;
@@ -395,8 +404,20 @@ namespace Directiva.MainMenu
         /// <summary>Switches to level selection. Can be called after a camera transition.</summary>
         public void ShowLevelsScreen()
         {
+            RefreshLevelButtons();
             UpdateStars();
             ShowScreen(levelSelection);
+        }
+
+        /// <summary>
+        /// Temporary runtime hook for a future score/progression service. This value
+        /// is NOT persisted: opening the menu again starts from its Inspector value.
+        /// </summary>
+        public void SetAvailableStars(int value)
+        {
+            availableStars = Mathf.Max(0, value);
+            RefreshLevelButtons();
+            UpdateStars();
         }
 
         private void ShowScreen(VisualElement screen)
@@ -718,38 +739,41 @@ namespace Directiva.MainMenu
             levelSelection.Add(header);
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.AddToClassList("dm-level-scroll");
-            var grid = Container("dm-level-grid");
-            scroll.Add(grid);
+            levelGrid = Container("dm-level-grid");
+            scroll.Add(levelGrid);
             levelSelection.Add(scroll);
-            for (int i = 0; i < levels.Count; i++)
+            RefreshLevelButtons();
+            UpdateStars();
+        }
+
+        /// <summary>Rebuild level cards from their asset definitions, not legacy scene entries.</summary>
+        private void RefreshLevelButtons()
+        {
+            if (levelGrid == null) return;
+            levelGrid.Clear();
+            foreach (DirectivaLevel level in DirectivaLevelOrder.Sort(levelDefinitions))
             {
-                var entry = levels[i];
-                if (entry == null) continue;
-                var button = CreateButton("", () => Load(entry), "dm-level-button");
-                button.SetEnabled(!entry.locked);
-                button.Add(Label(entry.name, "dm-level-name"));
+                bool locked = availableStars < level.RequiredStars;
+                var button = CreateButton("", () => Load(level), "dm-level-button");
+                button.SetEnabled(!locked);
+                button.Add(Label(level.LevelName, "dm-level-name"));
                 var score = Container("dm-score");
-                if (entry.locked)
+                if (locked)
                 {
-                    // Zero means "automatic" for compatibility with existing scenes: levels
-                    // 4, 5, 6 display 9, 12, 15 for the usual three-star progression.
-                    int required = entry.requiredStars > 0
-                        ? entry.requiredStars
-                        : i * Mathf.Max(0, maxStars);
-                    score.Add(Label(required.ToString(), "dm-required-stars-count"));
+                    score.Add(Label(level.RequiredStars.ToString(), "dm-required-stars-count"));
                     score.Add(UIIconView.Create(
                         GetIcon(_theme?.icons?.requiredStar, requiredStarsSprite), "dm-score-sprite"));
+                    button.AddToClassList("dm-locked");
                 }
                 else
                 {
-                    AddScoreStars(score, entry.stars);
+                    // Earned stars for individual levels are not implemented yet.
+                    AddScoreStars(score, 0);
                 }
                 button.Add(score);
-                if (entry.locked) button.AddToClassList("dm-locked");
                 SetButtonColor(button, ButtonVisualState.Normal);
-                grid.Add(button);
+                levelGrid.Add(button);
             }
-            UpdateStars();
         }
 
         /// <summary>Displays icon slots using assigned sprites only, never Unicode glyphs.</summary>
@@ -768,32 +792,27 @@ namespace Directiva.MainMenu
 
         private void UpdateStars()
         {
-            if (starTotal == null) return;
-            int total = 0;
-            foreach (var entry in levels)
-                if (entry != null && !entry.locked) total += Mathf.Max(0, entry.stars);
-            starTotal.text = total.ToString();
+            if (starTotal != null) starTotal.text = Mathf.Max(0, availableStars).ToString();
         }
 
-        private void Load(LevelMenuEntry entry)
+        private void Load(DirectivaLevel level)
         {
-            if (entry == null || entry.locked) return;
-            if (string.IsNullOrWhiteSpace(entry.sceneName))
+            if (level == null || availableStars < level.RequiredStars) return;
+            if (string.IsNullOrWhiteSpace(level.ScenePath))
             {
-                Debug.LogError(T("level_missing_scene", entry.name), this);
+                Debug.LogError(T("level_missing_scene", level.LevelName), this);
                 return;
             }
-            if (!Application.CanStreamedLevelBeLoaded(entry.sceneName))
+            if (!Application.CanStreamedLevelBeLoaded(level.SceneLoadPath))
             {
-                Debug.LogError(T("level_scene_unavailable", entry.sceneName), this);
+                Debug.LogError(T("level_scene_unavailable", level.ScenePath), this);
                 return;
             }
             LevelLaunchContext.Clear();
             try
             {
-                entry.onBeforeLoad?.Invoke();
-                LevelLaunchContext.SetPending(entry.launchId, entry.name);
-                SceneManager.LoadScene(entry.sceneName);
+                LevelLaunchContext.SetPendingLevel(level);
+                SceneManager.LoadScene(level.SceneLoadPath);
             }
             catch (Exception exception)
             {

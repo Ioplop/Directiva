@@ -2399,6 +2399,9 @@ MonoBehaviour:
   controlsSectionTitle: 
   audioSectionTitle: 
   graphicsSectionTitle: 
+  levelDefinitions:
+  - {fileID: 11400000, guid: 3bae66c9bfd940f6b0a8772dbd576c27, type: 2}
+  availableStars: 0
   levels:
   - name: Funciones
     stars: 3

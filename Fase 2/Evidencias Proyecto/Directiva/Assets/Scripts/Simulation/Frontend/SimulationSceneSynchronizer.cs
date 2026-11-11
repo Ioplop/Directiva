@@ -6,6 +6,8 @@ using DSimulation;
 using DSCompilation.DScript.Backend;
 using DSCompilation.DScript.Modules;
 using Directiva.SimulationUI;
+using Directiva.MainMenu;
+using Directiva.Levels;
 using UnityEngine;
 
 namespace Directiva.SimulationFrontend
@@ -180,20 +182,52 @@ namespace Directiva.SimulationFrontend
         private string PlayerSource => playerScriptAsset != null ? playerScriptAsset.text : playerSource;
         private string EnemySource => enemyScriptAsset != null ? enemyScriptAsset.text : enemySource;
 
+        /// <summary>
+        /// Compile the selected level's entry module and every reachable import using
+        /// a provider rooted exclusively inside that level's Resources directory.
+        /// This never reads modules from the player's workspace or other levels.
+        /// </summary>
+        public static DScriptCompiledProgram CompileLevelEnemy(DirectivaLevel level)
+        {
+            if (level == null) throw new ArgumentNullException(nameof(level));
+            if (string.IsNullOrWhiteSpace(level.EntryModule) ||
+                string.IsNullOrWhiteSpace(level.EntryFunction))
+                throw new InvalidOperationException(
+                    "Level '" + level.LevelName + "' needs an entry script and function.");
+
+            var provider = new ResourcesLevelDScriptSourceProvider(level.CodeFolder);
+            DScriptCompilationResult result = DScriptCompiler.Compile(
+                level.EntryModule, provider, SimulationDScriptProfile.Options);
+            if (!result.Success)
+                throw new InvalidOperationException("Enemy program for level '" +
+                    level.LevelName + "' failed to compile:\n" +
+                    string.Join("\n", result.Diagnostics));
+            if (!result.Program.TryGetFunctionId(level.QualifiedEnemyEntry, out _))
+                throw new InvalidOperationException("Enemy entry function '" +
+                    level.QualifiedEnemyEntry + "' was not found in level '" +
+                    level.LevelName + "'.");
+            return result.Program;
+        }
+
         /// <summary>Creates and attaches a symmetric demo match from Inspector settings.</summary>
         public void ResetDemo()
         {
             try
             {
                 DScriptCompiledProgram first = CompileSide(playerModule, PlayerSource);
-                DScriptCompiledProgram second = CompileSide(enemyModule, EnemySource);
+                DirectivaLevel selectedLevel = LevelLaunchContext.CurrentLevel;
+                DScriptCompiledProgram second = selectedLevel != null
+                    ? CompileLevelEnemy(selectedLevel)
+                    : CompileSide(enemyModule, EnemySource);
+                string enemyEntry = selectedLevel != null
+                    ? selectedLevel.QualifiedEnemyEntry
+                    : enemyModule + "." + enemyNexusFunction;
                 DSimulation.Simulation world = BuildDemoWorld();
                 var next = new Orchestrator(world, first, second,
                     stepsPerTick: vmStepsPerTick, maxDurationSeconds: matchDurationSeconds);
                 next.BindInitialEntity(world.GetSide(1).Nexus.id,
                     playerModule + "." + playerNexusFunction);
-                next.BindInitialEntity(world.GetSide(2).Nexus.id,
-                    enemyModule + "." + enemyNexusFunction);
+                next.BindInitialEntity(world.GetSide(2).Nexus.id, enemyEntry);
                 AttachOrchestrator(next);
             }
             catch (Exception exception)
