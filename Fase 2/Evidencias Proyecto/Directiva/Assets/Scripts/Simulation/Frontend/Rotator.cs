@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public sealed class CameraRotator : MonoBehaviour
+public sealed class Rotator : MonoBehaviour
 {
     /// <summary>
     /// Rota el objeto constantemente
