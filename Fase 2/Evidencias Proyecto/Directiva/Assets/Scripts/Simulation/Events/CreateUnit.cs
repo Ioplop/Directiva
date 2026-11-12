@@ -13,8 +13,10 @@ namespace DSEvents
         public readonly Fixed maxShields;
         public readonly FixedVector2 position;
         public readonly Fixed rotation;
+        public readonly int maxCargo;
 
-        public EventCreateUnit(int id, int side, Fixed maxHealth, Fixed maxShields, FixedVector2 position, Fixed rotation)
+        public EventCreateUnit(int id, int side, Fixed maxHealth, Fixed maxShields,
+            FixedVector2 position, Fixed rotation, int maxCargo)
         {
             this.id = id;
             this.side = side;
@@ -22,6 +24,7 @@ namespace DSEvents
             this.maxShields = maxShields;
             this.position = position;
             this.rotation = rotation;
+            this.maxCargo = maxCargo;
         }
     }
 }

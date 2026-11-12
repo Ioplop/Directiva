@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using DMath;
 using DSimulation;
@@ -69,9 +70,17 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Equal((bool?)true, o.IsAlly(ally.id, fellow.id), "ally helper");
                 t.Equal((bool?)true, o.IsEnemy(ally.id, enemy.id), "enemy helper");
                 t.Equal((bool?)true, o.IsNeutral(deposit.id, ally.id), "neutral helper");
-                t.Check(o.GetEnemies(deposit.id) == null, "neutral resources cannot call enemies()");
-                t.Check(!o.GetClosestResource(deposit.id).HasValue, "resource cannot invoke player discovery");
-                t.Equal(2, o.GetResourceNodes(deposit.id).Count, "resource nodes are a world observation");
+                t.Check(o.GetEnemies(deposit.id) == null,
+                    "neutral resources cannot use side-relative enemies()");
+                // Geometric lookups without a side filter now accept neutral receivers.
+                // The closest-resource observation excludes the caller itself.
+                t.Equal((int?)otherDeposit.id, o.GetClosestResource(deposit.id),
+                    "neutral resource can find its closest other resource");
+                t.Equal((int?)otherDeposit.id,
+                    o.GetClosestEntityByType(deposit.id, SimulationEntityType.Resource),
+                    "generic type-only lookup works from a neutral resource");
+                t.Equal(2, o.GetResourceNodes(deposit.id).Count,
+                    "resource nodes are a world observation");
             });
 
             Add("ListsAreSnapshots", "Lists have stable registration order and never expose simulation collections", t =>
@@ -123,6 +132,69 @@ namespace Directiva.EditorTests.SimulationTests
 
                 t.Equal((int?)a.id, world.Observer.GetClosestEnemy(self.id), "stable enemy tie");
                 t.Equal((int?)resource.id, world.Observer.GetClosestResource(self.id), "closest resource");
+            });
+
+            Add("FlexibleEntityFilters", "Side and type filters are independently optional, including from neutral resources", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 80, height: 80);
+                var self = SimulationTestHarness.AddUnit(world, 1, 10, 10, 0);
+                var ally = SimulationTestHarness.AddUnit(world, 1, 12, 10, 0);
+                var enemy = SimulationTestHarness.AddUnit(world, 2, 16, 10, 0);
+                var friendlyNexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(6, 20));
+                var enemyNexus = new SBNexus(world.GetSide(2), SimulationTestHarness.P(20, 20));
+                var resource = new SBResource(world.GetSide(0), SimulationTestHarness.P(24, 20), 0, 10);
+                world.EnqueueCreation(friendlyNexus);
+                world.EnqueueCreation(enemyNexus);
+                world.EnqueueCreation(resource);
+                world.Start();
+                SimulationObserver o = world.Observer;
+
+                // No filter, type-only, side-only and combined filters.
+                t.Equal((int?)ally.id, o.GetClosestEntityByType(self.id), "nearest any type");
+                t.Equal((int?)friendlyNexus.id,
+                    o.GetClosestEntityByType(self.id, SimulationEntityType.Nexus), "nearest nexus");
+                t.Equal((int?)enemy.id,
+                    o.GetClosestEntity(self.id, SimulationSideRelation.Enemy), "nearest enemy");
+                t.Equal((int?)enemyNexus.id,
+                    o.GetClosestEntity(self.id, SimulationSideRelation.Enemy, SimulationEntityType.Nexus),
+                    "nearest enemy nexus");
+
+                // A neutral resource can compare distances without a side affiliation.
+                t.Equal((int?)enemyNexus.id,
+                    o.GetClosestEntityByType(resource.id, SimulationEntityType.Nexus),
+                    "closest nexus from a neutral resource");
+                t.Equal((int?)enemyNexus.id, o.GetClosestEntityByType(resource.id),
+                    "closest entity from a neutral resource");
+                t.Check(!o.GetClosestEntity(resource.id, SimulationSideRelation.Enemy).HasValue,
+                    "neutral resources have no relative enemy side");
+
+                t.Equal(6, o.GetEntitiesByType(self.id).Count, "no filter includes every living entity");
+                t.Equal(2, o.GetEntitiesByType(self.id, SimulationEntityType.Nexus).Count,
+                    "type-only list across both sides");
+                t.Equal(2, o.GetEntities(self.id, SimulationSideRelation.Enemy).Count,
+                    "side-only list");
+                t.Equal(1, o.GetEntities(self.id, SimulationSideRelation.Enemy, SimulationEntityType.Unit).Count,
+                    "combined list filters");
+                t.Equal(2, o.GetEntitiesByType(resource.id, SimulationEntityType.Nexus).Count,
+                    "type-only list from resource");
+
+                t.Equal(2, o.GetEntitiesInRangeByType(self.id, 5).Count,
+                    "range without filters includes receiver and nearby ally");
+                t.Equal(0, o.GetEntitiesInRangeByType(self.id, 5, SimulationEntityType.Nexus).Count,
+                    "type-only range excludes distant nexuses");
+                t.Equal(1, o.GetEntitiesInRange(self.id, 12, SimulationSideRelation.Enemy,
+                    SimulationEntityType.Unit).Count, "combined range filters");
+                t.Equal(1, o.GetEntitiesInRangeByType(resource.id, 5,
+                    SimulationEntityType.Nexus).Count, "nexus in range of neutral resource");
+                t.Equal(2, o.GetEntitiesInRangeByType(resource.id, 5).Count,
+                    "unfiltered neutral range includes resource itself");
+                t.Equal(0, o.GetEntitiesInRangeByType(resource.id, -1).Count,
+                    "negative radius yields empty results");
+                t.Equal((int?)null, o.GetClosestEntityByType(-9999),
+                    "unknown receiver cannot search");
+                t.Check(o.GetEntitiesByType(-9999) == null,
+                    "unknown receiver has no list observations");
+                t.Equal(0L, world.Tick, "queries do not advance the simulation");
             });
 
             Add("GeometryAndReach", "Geometry uses fixed-point distances and separate attack/gather ranges", t =>
@@ -271,16 +343,19 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Equal((Fixed)0, world.Time, "observations do not advance simulation");
             });
 
-            Add("DiscoverableAnnotations", "Every observation has a unique reflection signature and typed receiver", t =>
+            Add("DiscoverableAnnotations", "Each observation has a unique public signature and typed receiver", t =>
             {
-                var names = new HashSet<string>();
+                var signatures = new HashSet<string>();
                 int found = 0;
                 foreach (MethodInfo method in typeof(SimulationObserver).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
                 {
                     var annotation = method.GetCustomAttribute<SimulationObservationAttribute>();
                     t.Check(annotation != null, method.Name + " has observation metadata");
-                    t.Check(names.Add(annotation.Name), "unique public DScript observation name: " + annotation.Name);
                     ParameterInfo[] parameters = method.GetParameters();
+                    string signature = annotation.Name + "(" + string.Join(",",
+                        parameters.Skip(1).Select(a => a.ParameterType.FullName +
+                            (a.IsOptional ? "?" : string.Empty))) + ")";
+                    t.Check(signatures.Add(signature), "unique public DScript signature: " + signature);
                     t.Check(parameters.Length > 0 && parameters[0].ParameterType == typeof(int),
                         method.Name + " has an entity ID receiver");
                     if (annotation.AllowsDeadReceiver)

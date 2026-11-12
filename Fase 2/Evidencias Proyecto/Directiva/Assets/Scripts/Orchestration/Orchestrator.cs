@@ -40,11 +40,28 @@ namespace DOrchestration
         private readonly SideRuntime firstSide;
         private readonly SideRuntime secondSide;
         private readonly Queue<VMOutputMessage>[] outputBySide;
+        private readonly long[] errorCounts = new long[3];
         private readonly int outputCapacityPerSide;
         private int stepsPerTick;
         private long outputSequence;
         private bool hasAdvanced;
         private readonly long startTick;
+        private readonly long faultRestartDelayTicks;
+        private List<EntityVMBinding> scheduledTick;
+        private int nextRound;
+        private int nextBinding;
+        private int roundsInScheduledTick;
+
+        /// <summary>Debugging stops all VMs before the matching source instruction and
+        /// leaves the simulation tick unfinished until Continue is requested.</summary>
+        public bool IsPausedAtBreakpoint { get; private set; }
+        public bool HasPendingTick => scheduledTick != null;
+        public int BreakpointEntityId { get; private set; }
+        public Func<int, int, string, int, bool> BreakpointPredicate { get; set; }
+        public event Action<int, VMDebugState> BreakpointHit;
+        public event Action<int> EntityFaulted;
+        public event Action<int> EntityRecovered;
+        public long FaultRestartDelayTicks => faultRestartDelayTicks;
 
         /// <summary>Maximum number of simulated ticks, counted from this match's start.</summary>
         public long MaxSimulationTicks { get; }
@@ -58,6 +75,12 @@ namespace DOrchestration
         public long? FinishedAtTick { get; private set; }
         public long TotalVmSteps { get; private set; }
         public int OutputCapacityPerSide => outputCapacityPerSide;
+
+        /// <summary>Charged heap usage in logical Directiva units for one player side.</summary>
+        public ulong GetHeapUsage(int sideId) => GetSide(sideId).Memory.Heap.AllocatedSize;
+
+        /// <summary>Total execution errors since this match began, even after log eviction.</summary>
+        public long GetErrorCount(int sideId) => errorCounts[GetSide(sideId).SideId];
 
         /// <summary>Effective VM instructions per entity per simulation tick (default 10).</summary>
         public int StepsPerTick
@@ -83,7 +106,7 @@ namespace DOrchestration
             DScriptCompiledProgram side1Program, DScriptCompiledProgram side2Program,
             int stepsPerTick = 10, int outputCapacityPerSide = 4096,
             VMOptions vmOptions = null, int initializerBudget = 100000,
-            int maxDurationSeconds = 300)
+            int maxDurationSeconds = 300, int faultRestartDelaySeconds = 2)
         {
             this.simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
             if (side1Program == null) throw new ArgumentNullException(nameof(side1Program));
@@ -94,9 +117,13 @@ namespace DOrchestration
                 throw new ArgumentOutOfRangeException(nameof(initializerBudget));
             if (maxDurationSeconds <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds));
+            if (faultRestartDelaySeconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(faultRestartDelaySeconds));
             if (SConstants.deltaTime.RawValue <= 0)
                 throw new InvalidOperationException("Simulation tick duration must be positive.");
             MaxDurationSeconds = maxDurationSeconds;
+            faultRestartDelayTicks = checked((long)faultRestartDelaySeconds * Constants.FixedScale +
+                SConstants.deltaTime.RawValue - 1) / SConstants.deltaTime.RawValue;
             // Round up instead of ending before the requested simulated duration.
             long durationRaw = checked((long)maxDurationSeconds * Constants.FixedScale);
             MaxSimulationTicks = checked(durationRaw + SConstants.deltaTime.RawValue - 1) /
@@ -184,51 +211,160 @@ namespace DOrchestration
             return result;
         }
 
-        /// <summary>Advance exactly one 50 Hz world step, including all VM rounds.</summary>
+        /// <summary>
+        /// Advance one 50 Hz tick. A breakpoint can suspend the scheduler midway
+        /// through the tick without running physics or replaying earlier VM turns.
+        /// Without breakpoints this retains exactly the original round-robin order.
+        /// </summary>
         public void Update()
         {
-            if (IsFinished) return; // No scripts or physics after a victory/draw.
+            if (IsFinished || IsPausedAtBreakpoint) return;
             hasAdvanced = true;
-            // Handle a nexus killed outside Update as well, before running any scripts.
-            EvaluateOutcome();
-            if (IsFinished) return;
+            if (scheduledTick == null)
+            {
+                EvaluateOutcome();
+                if (IsFinished) return;
+                RecoverFaultedBindings(firstSide);
+                RecoverFaultedBindings(secondSide);
+                scheduledTick = new List<EntityVMBinding>();
+                scheduledTick.AddRange(firstSide.Bindings);
+                scheduledTick.AddRange(secondSide.Bindings);
+                scheduledTick.Sort((a, b) => a.EntityId.CompareTo(b.EntityId));
+                nextRound = 0;
+                nextBinding = 0;
+                roundsInScheduledTick = StepsPerTick;
+            }
 
-            // Snapshot once per tick so every round sees precisely the same participants.
-            // IDs are globally monotonic across both sides, so this order is stable.
-            var scheduled = new List<EntityVMBinding>();
-            scheduled.AddRange(firstSide.Bindings);
-            scheduled.AddRange(secondSide.Bindings);
-            scheduled.Sort((a, b) => a.EntityId.CompareTo(b.EntityId));
-
-            // Freeze the setting for this tick, even if a host changes it during an output callback.
-            int roundsThisTick = StepsPerTick;
-            for (int round = 0; round < roundsThisTick; round++)
-                foreach (EntityVMBinding binding in scheduled)
+            for (; nextRound < roundsInScheduledTick; nextRound++)
+            {
+                while (nextBinding < scheduledTick.Count)
                 {
-                    if (!IsLivingBinding(binding) ||
-                        binding.VM.Status == VMExecutionStatus.Faulted)
-                        continue;
-                    if (binding.VM.Status == VMExecutionStatus.Completed)
-                        binding.VM.RestartCompleted();
-                    AdvanceOneLogicalStep(binding);
+                    EntityVMBinding binding = scheduledTick[nextBinding];
+                    if (IsLivingBinding(binding) && binding.VM.Status != VMExecutionStatus.Faulted)
+                    {
+                        if (binding.VM.Status == VMExecutionStatus.Completed)
+                        {
+                            binding.VM.RestartCompleted();
+                            binding.ResetSourceLine();
+                        }
+                        if (AdvanceOneLogicalStep(binding, checkBreakpoints: true))
+                            return; // Resume this exact VM turn after Continue/Step.
+                    }
+                    nextBinding++;
                 }
+                nextBinding = 0;
+            }
 
-            // Physics, attacks, build progression, collisions and removals happen once.
+            scheduledTick = null;
             simulation.Update();
-            EvaluateOutcome(); // Nexus deaths win priority over reaching the time limit.
+            EvaluateOutcome();
             if (!IsFinished && simulation.Tick - startTick >= MaxSimulationTicks)
                 Finish(MatchOutcome.Draw, MatchEndReason.TimeLimit);
             CompleteBuilds();
             RemoveDeadBindings();
         }
 
+        /// <summary>Continue a paused source breakpoint without discarding its tick.</summary>
+        public void ResumeFromBreakpoint()
+        {
+            IsPausedAtBreakpoint = false;
+            BreakpointEntityId = 0;
+        }
+
+        /// <summary>
+        /// Execute exactly one charged instruction of the selected living VM.
+        /// Other VMs and physics do not advance. Zero-cost source metadata on
+        /// either side is consumed so the highlight follows a DScript statement.
+        /// This is an explicit debugging intervention into scheduling order.
+        /// </summary>
+        public bool StepEntity(int entityId)
+        {
+            if (IsFinished || entityId <= 0) return false;
+            if (!TryGetBinding(entityId, out EntityVMBinding binding) ||
+                !IsLivingBinding(binding) || binding.VM.Status == VMExecutionStatus.Faulted)
+                return false;
+            if (binding.VM.Status == VMExecutionStatus.Completed)
+            {
+                binding.VM.RestartCompleted();
+                binding.ResetSourceLine();
+            }
+            // Stepping past the current paused instruction consumes that round's
+            // turn, so continuing cannot execute it a second time.
+            bool pendingTurn = scheduledTick != null && nextRound < roundsInScheduledTick &&
+                nextBinding < scheduledTick.Count &&
+                ReferenceEquals(scheduledTick[nextBinding], binding);
+            AdvanceOneLogicalStep(binding, checkBreakpoints: false, consumeTrailingMetadata: true);
+            if (pendingTurn) nextBinding++;
+            IsPausedAtBreakpoint = true;
+            BreakpointEntityId = entityId;
+            return true;
+        }
+
+        public bool TryGetDebugState(int entityId, out VMDebugState debug)
+        {
+            if (TryGetBinding(entityId, out EntityVMBinding binding))
+            {
+                debug = binding.VM.Debug.Snapshot();
+                return true;
+            }
+            debug = null;
+            return false;
+        }
+
+        private bool TryGetBinding(int entityId, out EntityVMBinding binding) =>
+            firstSide.TryGetBinding(entityId, out binding) ||
+            secondSide.TryGetBinding(entityId, out binding);
+
+        private void RecoverFaultedBindings(SideRuntime side)
+        {
+            foreach (EntityVMBinding binding in side.Bindings)
+            {
+                if (binding.RecoverAtTick < 0 || simulation.Tick < binding.RecoverAtTick ||
+                    !IsLivingBinding(binding)) continue;
+                binding.VM.RestartFaulted();
+                binding.RecoverAtTick = -1;
+                binding.ResetSourceLine();
+                EntityRecovered?.Invoke(binding.EntityId);
+            }
+        }
+
         private bool IsLivingBinding(EntityVMBinding binding) =>
             simulation.TryGetEntity(binding.EntityId, out SBEntity entity) &&
             entity.alive && entity.side.id == binding.SideId;
 
-        private void AdvanceOneLogicalStep(EntityVMBinding binding)
+        /// <returns>True when the VM stopped at a breakpoint before execution.</returns>
+        private bool AdvanceOneLogicalStep(EntityVMBinding binding, bool checkBreakpoints,
+            bool consumeTrailingMetadata = false)
         {
             DirectivaVM vm = binding.VM;
+            ConsumeDebugMetadata(vm);
+            if (vm.Status == VMExecutionStatus.Running)
+            {
+                bool enteredLine = binding.EnteredNewSourceLine();
+                if (checkBreakpoints && enteredLine && BreakpointPredicate != null &&
+                    BreakpointPredicate(binding.SideId, binding.EntityId, vm.Debug.File,
+                        vm.Debug.Line + 1))
+                {
+                    IsPausedAtBreakpoint = true;
+                    BreakpointEntityId = binding.EntityId;
+                    BreakpointHit?.Invoke(binding.EntityId, vm.Debug.Snapshot());
+                    return true;
+                }
+                vm.Advance();
+                TotalVmSteps++;
+                if (consumeTrailingMetadata) ConsumeDebugMetadata(vm);
+            }
+            if (vm.Status == VMExecutionStatus.Faulted && binding.RecoverAtTick < 0)
+            {
+                binding.RecoverAtTick = checked(simulation.Tick + faultRestartDelayTicks);
+                GetSide(binding.SideId).ReportError(binding);
+                EntityFaulted?.Invoke(binding.EntityId);
+            }
+            return false;
+        }
+
+        private static void ConsumeDebugMetadata(DirectivaVM vm)
+        {
             int zeroCost = 0;
             while (vm.Status == VMExecutionStatus.Running && vm.NextInstructionCost == 0)
             {
@@ -240,13 +376,6 @@ namespace DOrchestration
                 }
                 vm.Advance();
             }
-            if (vm.Status == VMExecutionStatus.Running)
-            {
-                vm.Advance();
-                TotalVmSteps++;
-            }
-            if (vm.Status == VMExecutionStatus.Faulted)
-                GetSide(binding.SideId).ReportError(binding);
         }
 
         private void CompleteBuilds()
@@ -310,6 +439,8 @@ namespace DOrchestration
         {
             var message = new VMOutputMessage(++outputSequence, simulation.Tick,
                 sideId, entityId, kind, text, debug);
+            if (kind == VMOutputKind.Error)
+                errorCounts[sideId]++;
             Queue<VMOutputMessage> queue = outputBySide[sideId];
             if (queue.Count == outputCapacityPerSide) queue.Dequeue();
             queue.Enqueue(message);

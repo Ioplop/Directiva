@@ -19,12 +19,20 @@
 [hide_solution]: Hide solution
 [menu_scene_unavailable]: [Directiva] Menu scene '{{1}}' must be included in Build Profiles.
 [nexus_program_title]: Nexus program
-[nexus_program_help]: Uses saved DScript files in DirectivaScripts. Save your changes before applying.
+[nexus_unsaved_warning]: Remember to save your script before selecting it.
+[nexus_locked_warning]: You cannot change these settings while a match is in progress. Press Stop first.
 [nexus_script]: Script
 [nexus_function]: Entry function
-[nexus_apply]: Apply and restart match
-[nexus_refresh]: Refresh scripts
 [nexus_close]: Close
 [nexus_no_scripts]: No saved .dscript files. Create one in the Editor.
 [nexus_no_functions]: No parameterless functions in this script.
 [nexus_program_applied]: Program assigned to the Nexus.
+[hud_resources]: Resources
+[hud_units]: Units
+[hud_errors]: Errors
+[hud_time_remaining]: Time left
+[nexus_select_before_play]: Choose a saved script and Nexus entry function before starting the match.
+[nexus_level_required]: Start the match from the level selection menu. No level is loaded.
+
+[debug_output_prefix]: [Side {{1}} / Entity {{2}} / Tick {{3}}]
+[debug_breakpoint_hit]: Breakpoint: entity {{1}} at {{2}}:{{3}}.

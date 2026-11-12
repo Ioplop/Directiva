@@ -4,6 +4,7 @@ using DMath;
 using DSEvents;
 using DSimulation;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Directiva.SimulationFrontend
 {
@@ -29,9 +30,18 @@ namespace Directiva.SimulationFrontend
         [SerializeField] private Transform entityContainer;
         [SerializeField] private Transform effectContainer;
 
+        [Header("Entity status indicators")]
+        [Tooltip("Optional camera override. Uses Camera.main when unset.")]
+        [SerializeField] private Camera statusCamera;
+        [SerializeField, Min(80f)] private float statusBarWidth = 124f;
+        [Tooltip("World-space height above VisualEntity.Center.")]
+        [SerializeField] private float statusBarVerticalOffset = 1f;
+
+        private SimulationStatusOverlay statusOverlay;
         private readonly Dictionary<int, EntityVisual> entities = new Dictionary<int, EntityVisual>();
         private readonly Dictionary<int, ActiveGather> activeGather = new Dictionary<int, ActiveGather>();
         private Simulation simulation;
+        private SimulationWorldPointerController pointerController;
         private int worldWidth;
         private int worldHeight;
         private float playbackSpeed;
@@ -50,15 +60,17 @@ namespace Directiva.SimulationFrontend
             internal GatherAligner Effect;
         }
 
+        public Simulation CurrentWorld => simulation;
         public int VisualEntityCount => entities.Count;
         public int ActiveGatherCount => activeGather.Count;
+        public int StatusIndicatorCount => statusOverlay != null ? statusOverlay.Count : 0;
 
         /// <summary>
         /// Attach an already started world and rebuild a visual snapshot. Past events
         /// are not replayed: the view can attach after simulation has already begun.
         /// The caller must then call ConsumeEvents after every Orchestrator.Update().
         /// </summary>
-        public void Attach(Simulation world, int width, int height)
+        public void Attach(Simulation world, int width, int height, UIDocument uiDocument = null)
         {
             if (world == null) throw new ArgumentNullException(nameof(world));
             if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
@@ -66,6 +78,11 @@ namespace Directiva.SimulationFrontend
             simulation = world;
             worldWidth = width;
             worldHeight = height;
+            // Use the SAME UIDocument as the main HUD: it renders above these bars
+            // and its existing transparent panel remains click-through.
+            if (uiDocument != null)
+                statusOverlay = new SimulationStatusOverlay(uiDocument.rootVisualElement,
+                    statusBarWidth, statusBarVerticalOffset);
             RebuildSnapshot();
         }
 
@@ -79,15 +96,20 @@ namespace Directiva.SimulationFrontend
                 if (faction.Nexus != null && faction.Nexus.alive)
                 {
                     SBNexus nexus = faction.Nexus;
-                    Spawn(nexus.id, side, SimulationVisualKind.Nexus, nexusPrefab, nexus.Position, nexus.Rotation);
+                    Spawn(nexus.id, side, SimulationVisualKind.Nexus, nexusPrefab, nexus.Position, nexus.Rotation,
+                        new SimulationStatusValues(nexus.Health, nexus.MaxHealth, nexus.Shields, nexus.MaxShields));
                 }
                 foreach (SBUnit unit in faction.Units)
                     if (unit.alive)
-                        Spawn(unit.id, side, SimulationVisualKind.Unit, unitPrefab, unit.Position, unit.Rotation);
+                        Spawn(unit.id, side, SimulationVisualKind.Unit, unitPrefab, unit.Position, unit.Rotation,
+                            new SimulationStatusValues(unit.Health, unit.MaxHealth, unit.Shields, unit.MaxShields),
+                            unit.Cargo, unit.MaxCargo);
             }
             foreach (SBResource resource in simulation.GetSide(0).ResourceEntities)
                 if (resource.alive)
-                    Spawn(resource.id, 0, SimulationVisualKind.Resource, resourcePrefab, resource.Position, resource.Rotation);
+                    Spawn(resource.id, 0, SimulationVisualKind.Resource, resourcePrefab, resource.Position, resource.Rotation,
+                        new SimulationStatusValues(resource.Health, resource.MaxHealth, resource.Shields, resource.MaxShields),
+                        resource.Amount, resource.InitialAmount);
 
             // Previously generated events describe past changes already reflected
             // by the snapshot. In particular, do not replay obsolete attack effects.
@@ -117,13 +139,27 @@ namespace Directiva.SimulationFrontend
                 switch (message)
                 {
                     case EventCreateNexus createdNexus:
-                        Spawn(createdNexus.id, createdNexus.side, SimulationVisualKind.Nexus, nexusPrefab, createdNexus.position, 0);
+                        Spawn(createdNexus.id, createdNexus.side, SimulationVisualKind.Nexus, nexusPrefab, createdNexus.position, 0,
+                            new SimulationStatusValues(createdNexus.maxHealth, createdNexus.maxHealth,
+                                createdNexus.maxShields, createdNexus.maxShields));
                         break;
                     case EventCreateUnit createdUnit:
-                        Spawn(createdUnit.id, createdUnit.side, SimulationVisualKind.Unit, unitPrefab, createdUnit.position, createdUnit.rotation);
+                        Spawn(createdUnit.id, createdUnit.side, SimulationVisualKind.Unit, unitPrefab, createdUnit.position, createdUnit.rotation,
+                            new SimulationStatusValues(createdUnit.maxHealth, createdUnit.maxHealth,
+                                createdUnit.maxShields, createdUnit.maxShields),
+                            0, createdUnit.maxCargo);
                         break;
                     case EventCreateResource createdResource:
-                        Spawn(createdResource.id, 0, SimulationVisualKind.Resource, resourcePrefab, createdResource.position, 0);
+                        Spawn(createdResource.id, 0, SimulationVisualKind.Resource, resourcePrefab, createdResource.position, 0,
+                            new SimulationStatusValues(createdResource.maxHealth, createdResource.maxHealth,
+                                SConstants.ResourceShields, SConstants.ResourceShields),
+                            createdResource.amount, createdResource.amount);
+                        break;
+                    case EventResources resourceChange:
+                        statusOverlay?.SetResources(resourceChange.id, resourceChange.amount);
+                        break;
+                    case EventCargo cargoChange:
+                        statusOverlay?.SetCargo(cargoChange.entityId, cargoChange.cargo);
                         break;
                     case EventPosition movedEvent:
                         if (entities.TryGetValue(movedEvent.id, out EntityVisual moved))
@@ -132,6 +168,12 @@ namespace Directiva.SimulationFrontend
                     case EventRotation rotatedEvent:
                         if (entities.TryGetValue(rotatedEvent.id, out EntityVisual rotated))
                             rotated.Rotation = rotatedEvent.rotation;
+                        break;
+                    case EventHealth healthEvent:
+                        statusOverlay?.SetHealth(healthEvent.id, healthEvent.health);
+                        break;
+                    case EventShields shieldsEvent:
+                        statusOverlay?.SetShields(shieldsEvent.id, shieldsEvent.shields);
                         break;
                     case EventAttack attackEvent:
                         SpawnAttack(attackEvent.attackerId, attackEvent.targetId);
@@ -145,8 +187,7 @@ namespace Directiva.SimulationFrontend
                     case EventDeath deathEvent:
                         RemoveEntity(deathEvent.id);
                         break;
-                    // Health, shields, cargo, resource amounts and time have no
-                    // visual consumers in this first frontend. They remain backend events.
+                    // Time is used by the backend but needs no visual bar.
                 }
             }
 
@@ -156,6 +197,10 @@ namespace Directiva.SimulationFrontend
                 entity.Interpolator.ReceiveState(ToUnity(entity.Position, entity.View.transform.position.y),
                     ToUnityRotation(entity.Rotation));
         }
+
+        /// <summary>Show an error mark while this entity's VM is recovering.</summary>
+        public void SetEntityFaulted(int entityId, bool faulted) =>
+            statusOverlay?.SetFaulted(entityId, faulted);
 
         public bool TryGetVisual(int entityId, out VisualEntity visual)
         {
@@ -168,7 +213,9 @@ namespace Directiva.SimulationFrontend
             return false;
         }
 
-        private void Spawn(int id, int side, SimulationVisualKind kind, VisualEntity prefab, FixedVector2 position, Fixed rotation)
+        private void Spawn(int id, int side, SimulationVisualKind kind, VisualEntity prefab,
+            FixedVector2 position, Fixed rotation, SimulationStatusValues status,
+            int amount = 0, int capacity = 0)
         {
             if (prefab == null)
                 throw new InvalidOperationException("A required simulation entity prefab is not assigned.");
@@ -200,6 +247,41 @@ namespace Directiva.SimulationFrontend
                 Position = position,
                 Rotation = rotation
             });
+            if (kind == SimulationVisualKind.Resource)
+                statusOverlay?.TrackResource(id, visual.Center, status, amount, capacity);
+            else if (kind == SimulationVisualKind.Unit)
+                statusOverlay?.TrackUnit(id, visual.Center, status, amount, capacity);
+            else
+                statusOverlay?.TrackNexus(id, visual.Center, status);
+        }
+
+        private void LateUpdate()
+        {
+            if (statusOverlay == null) return;
+            if (pointerController == null)
+                pointerController = GetComponent<SimulationWorldPointerController>() ??
+                    GetComponentInParent<SimulationWorldPointerController>() ??
+                    UnityEngine.Object.FindFirstObjectByType<SimulationWorldPointerController>();
+            statusOverlay.SetHoveredEntity(pointerController != null && pointerController.Hovered != null
+                ? pointerController.Hovered.EntityId : 0);
+            statusOverlay.SetSelectedEntity(pointerController != null && pointerController.Selected != null
+                ? pointerController.Selected.EntityId : 0);
+
+            // Construction has no per-tick event. Read the same public observer
+            // that DScript uses, so the HUD follows the actual per-Nexus progress
+            // and duration rather than reconstructing timing in Unity.
+            if (simulation != null)
+            {
+                for (int side = 1; side <= 2; side++)
+                {
+                    SBNexus nexus = simulation.GetSide(side).Nexus;
+                    if (nexus == null || !nexus.alive) continue;
+                    Fixed? progress = simulation.Observer.GetBuildProgress(nexus.id);
+                    Fixed duration = simulation.Observer.GetUnitBuildTime(nexus.id) ?? (Fixed)0;
+                    statusOverlay.SetConstruction(nexus.id, progress, duration);
+                }
+            }
+            statusOverlay.UpdatePositions(statusCamera != null ? statusCamera : Camera.main);
         }
 
         private void SpawnAttack(int attackerId, int targetId)
@@ -250,6 +332,7 @@ namespace Directiva.SimulationFrontend
 
             if (!entities.TryGetValue(entityId, out EntityVisual entity)) return;
             entities.Remove(entityId);
+            statusOverlay?.Remove(entityId);
             if (entity.View != null)
                 entity.View.Die();
         }
@@ -264,6 +347,8 @@ namespace Directiva.SimulationFrontend
             foreach (EntityVisual entity in entities.Values)
                 if (entity.View != null) Destroy(entity.View.gameObject);
             entities.Clear();
+            statusOverlay?.Dispose();
+            statusOverlay = null;
 
             // Remove transient attack effects as well when a match is stopped/restarted.
             Transform parent = effectContainer != null ? effectContainer : transform;

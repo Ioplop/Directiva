@@ -1,0 +1,75 @@
+shared target_enemy = None
+
+def nexo():
+    while True:
+        # Construir una unidad siempre que no estemos construyendo y tengamos suficientes recursos
+        build(unidad)
+        # Aplicar orden de ataque solo cuando tenemos más de 4 unidades
+        # go = count_allies() > 4 or (go and count_allies() + 1 > count_enemies())
+        enemy = find_attacking_enemy()
+        if enemy:
+            target_enemy = enemy
+        else:
+            target_enemy = None
+        
+        if count_allies() - count_enemies() > 10:
+            target_enemy = enemy_nexus()
+
+def find_attacking_enemy():
+    # Buscar si hay un enemigo atacandonos
+    for enemy in enemies():
+        if enemy.attack_target:
+            return enemy
+    return None
+
+def unidad():
+    # Logica principal de la unidad. Si hay go, atacar. Si no, recolectar.
+    te = target_enemy
+    if te and not self.attack_target:
+        move(te)
+        attack(te)
+    else:
+        collect_resources()
+
+def find_gather_target():
+    # Usamos referencias a los nexos para determinar cuales recuros conviene más recoger.
+    us = self.nexus
+    en = self.enemy_nexus()
+
+    # Primero buscamos todos los recursos que no están tomados
+    res = resource_nodes()
+    not_taken = []
+    for r in res:
+        if r.is_available_to_gather:
+            not_taken.append(r)
+    
+    # De los recursos libres, buscamos los que están más cerca de nuestro nexo que del nexo enemigo.
+    safe = []
+    for r in not_taken:
+        if r.distance_squared_to(us) <= r.distance_squared_to(en):
+            safe.append(r)
+    
+    # Ahora, de esa lista de recursos, escogemos el primero
+    if safe.length:
+        return safe[0]
+    # No encontramos ningun recurso libre y seguro, así que vamos simplemente por el más cercano.
+    return closest_resource()
+
+def collect_resources():
+    # Si estamos recolectando recursos, recogemos hasta 10 recursos solamente. Luego vamos al nexo.
+    if self.is_gathering:
+        if self.cargo >= 10:
+            self.stop_action()
+            self.move(self.nexus)
+    elif self.cargo > 0:
+        # Si no estamos recolectando pero tenemos cargamento de recursos, nos movemos al nexo para descargar
+        self.move(self.nexus)
+    else:
+        # Si no estamos recolectando y no tenemos cargamento, buscamos un recurso para recolectar
+        resource = find_gather_target() # Buscar recurso
+        # Si se encontró un recurso, lo recolectamos
+        if resource:
+            self.move(resource)
+            self.gather(resource)
+        else:
+            move(self.nexus)

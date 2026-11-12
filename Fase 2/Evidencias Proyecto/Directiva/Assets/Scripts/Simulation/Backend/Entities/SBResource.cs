@@ -9,6 +9,7 @@ namespace DSimulation
     public class SBResource : SBEntity
     {
         public int Amount { get; protected set; }
+        public int InitialAmount { get; }
         public int GatherAmount { get; protected set; }
         public SBUnit GatheringUnit { get; internal set; }
 
@@ -18,6 +19,7 @@ namespace DSimulation
             SConstants.ResourceHealth, SConstants.ResourceShields, SConstants.ResourceShieldRegen)
         { 
             Amount = resources;
+            InitialAmount = resources;
             GatherAmount = richness;
         }
 

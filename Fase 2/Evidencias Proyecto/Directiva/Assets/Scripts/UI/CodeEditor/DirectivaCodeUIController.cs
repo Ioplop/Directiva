@@ -9,6 +9,7 @@ using DSCompilation.DScript.Modules;
 using DSExecution.DataTypes;
 using DSExecution.Values;
 using DSExecution.VirtualMachine;
+using DOrchestration;
 using UnityEngine;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
@@ -79,6 +80,16 @@ namespace Directiva.CodeUI
         public OutputService Output { get; private set; }
         public DirectivaCode Codebase { get; private set; }
 
+        /// <summary>
+        /// True when any player script has unsaved working changes (including a
+        /// closed script with a .dscript.back backup). The simulation picker uses
+        /// this only for its warning; it always compiles saved files on disk.
+        /// </summary>
+        public bool HasUnsavedScripts => _workspace != null &&
+            ((_workspace.Active?.IsDirty ?? false) ||
+             (Codebase != null && Codebase.Scripts.Any(script =>
+                 _workspace.IsDirty(script.RelativePath))));
+
         public ICodeAnalyzer Analyzer { get; set; }
         public IRefactorer Refactorer { get; set; }
         public IScriptExecutionStateProvider ExecutionState { get; set; }
@@ -93,6 +104,12 @@ namespace Directiva.CodeUI
         private ScriptWorkspace _workspace;
         private EditorDocumentMetadataStore _editorMetadataStore;
         private VMExecutionController _executionController;
+        private ISimulationDebugSession _simulationDebugSession;
+        private bool _refreshingSimulationDebug;
+        private string _lastSimulationSourceFile;
+        private int _lastSimulationSourceLine = -1;
+        private ScriptExecutionState? _lastSimulationDebugState;
+        private bool _lastSimulationHasVM;
         private string _runningFunctionName;
         private VMMemoryContext _runningMemory;
         private readonly DScriptLineBreakpointGate _breakpointGate = new DScriptLineBreakpointGate();
@@ -210,7 +227,10 @@ namespace Directiva.CodeUI
             if (_editorMetadataDirty && Time.unscaledTime >= _editorMetadataFlushAt)
                 FlushActiveEditorMetadata();
 
-            _executionController?.Tick(executionStepsPerFrame);
+            if (_simulationDebugSession == null)
+                _executionController?.Tick(executionStepsPerFrame);
+            else
+                RefreshSimulationDebugger();
             // Running code must not repaint its current source instruction each frame.
             // Pauses and manual steps refresh the marker through their own handlers.
 
@@ -331,6 +351,122 @@ namespace Directiva.CodeUI
         public void SetHosted(bool hosted)
         {
             _topBar?.SetHosted(hosted);
+        }
+
+        /// <summary>Connect this editor to the live match rather than its standalone VM.</summary>
+        public void AttachSimulationDebugger(ISimulationDebugSession session)
+        {
+            _simulationDebugSession = session;
+            _lastSimulationSourceFile = null;
+            _lastSimulationSourceLine = -1;
+            _lastSimulationDebugState = null;
+            _lastSimulationHasVM = false;
+            RefreshSimulationDebugger(followExecution: true);
+        }
+
+        /// <summary>Breakpoints in source files are shared by all friendly entity VMs.</summary>
+        public bool HasSimulationBreakpoint(string sourceFile, int oneBasedLine)
+        {
+            if (oneBasedLine <= 0 || string.IsNullOrWhiteSpace(sourceFile)) return false;
+            string path = sourceFile.Replace('\\', '/');
+            return _breakpoints.TryGetValue(path, out HashSet<int> lines) &&
+                lines.Contains(oneBasedLine);
+        }
+
+        /// <summary>
+        /// Route attributed match messages through the existing console, preserving
+        /// source navigation and copy-to-clipboard for all three severities.
+        /// </summary>
+        public void PublishSimulationOutput(VMOutputMessage message)
+        {
+            string prefix = DirectivaLocalization.Get("Simulation", "debug_output_prefix",
+                message.SideId,
+                message.EntityId.HasValue ? message.EntityId.Value.ToString(CultureInfo.InvariantCulture) : "shared",
+                message.Tick);
+            string text = prefix + " " + message.Text;
+            OutputSourceLocation? source = null;
+            if (message.SideId == 1 && message.SourceLine >= 0 &&
+                !string.IsNullOrWhiteSpace(message.SourceFile) &&
+                _storage.ScriptExists(message.SourceFile))
+                source = new OutputSourceLocation(message.SourceFile, message.SourceLine + 1,
+                    startOffset: message.SpanStart,
+                    length: message.SpanStart >= 0 && message.SpanEnd >= message.SpanStart
+                        ? message.SpanEnd - message.SpanStart : 0);
+            switch (message.Kind)
+            {
+                case VMOutputKind.Error: Output.WriteError(text, source); break;
+                case VMOutputKind.Warning: Output.WriteWarning(text, source); break;
+                default: Output.Write(text, source); break;
+            }
+        }
+
+        /// <summary>
+        /// Receives compilation failures from the Nexus program picker, which
+        /// compiles saved files independently of the editor's Compile action.
+        /// Each original diagnostic becomes its own clickable console entry.
+        /// </summary>
+        public void PublishPlayerCompilationFailure(string message,
+            IReadOnlyList<DScriptDiagnostic> diagnostics)
+        {
+            if (Output == null) return;
+            if (diagnostics == null || diagnostics.Count == 0)
+            {
+                Output.WriteError(message ?? string.Empty);
+                return;
+            }
+
+            foreach (DScriptDiagnostic diagnostic in diagnostics)
+            {
+                if (diagnostic == null) continue;
+                OutputSourceLocation? source = OutputSourceLocation.FromDiagnostic(diagnostic);
+                if (source.HasValue && (_storage == null ||
+                    !_storage.ScriptExists(source.Value.FilePath)))
+                    source = null;
+                string text = diagnostic.Module + ":" + diagnostic.Span + " " +
+                    diagnostic.Code + ": " + DirectivaLocalization.Format(diagnostic);
+                Output.WriteError(text, source);
+            }
+        }
+
+        public void RefreshSimulationDebugger(bool followExecution = false)
+        {
+            if (_refreshingSimulationDebug || _simulationDebugSession == null || !_mounted)
+                return;
+            _refreshingSimulationDebug = true;
+            try
+            {
+                var state = _simulationDebugSession.State;
+                bool hasVM = _simulationDebugSession.HasSelectedVM;
+                if (_lastSimulationDebugState != state || _lastSimulationHasVM != hasVM)
+                {
+                    _topBar?.SetSimulationDebugState(state, hasVM);
+                    _lastSimulationDebugState = state;
+                    _lastSimulationHasVM = hasVM;
+                }
+                _topBar?.SetSimulationExecutionMetrics(_simulationDebugSession.TotalLogicalSteps);
+                if (!hasVM || !_simulationDebugSession.TryGetSelectedSource(
+                    out string path, out int line) || !_storage.ScriptExists(path))
+                {
+                    _editor?.ClearExecutionLine();
+                    _lastSimulationSourceFile = null;
+                    _lastSimulationSourceLine = -1;
+                    return;
+                }
+                bool differentFile = !string.Equals(_workspace?.Active?.RelativePath, path,
+                    StringComparison.OrdinalIgnoreCase);
+                if (differentFile)
+                    _workspace.Open(path);
+                if (differentFile || line != _lastSimulationSourceLine ||
+                    !string.Equals(path, _lastSimulationSourceFile, StringComparison.OrdinalIgnoreCase) ||
+                    followExecution)
+                {
+                    _editor?.SetExecutionLine(line, ensureVisible: followExecution || differentFile ||
+                        state == ScriptExecutionState.Paused);
+                    _lastSimulationSourceFile = path;
+                    _lastSimulationSourceLine = line;
+                }
+            }
+            finally { _refreshingSimulationDebug = false; }
         }
 
         private void BuildUI(VisualElement root)
@@ -973,6 +1109,12 @@ namespace Directiva.CodeUI
 
         private void HandleContinueRequested()
         {
+            if (_simulationDebugSession != null)
+            {
+                _simulationDebugSession.Continue();
+                RefreshSimulationDebugger();
+                return;
+            }
             if (_executionController == null)
                 return;
 
@@ -988,6 +1130,12 @@ namespace Directiva.CodeUI
 
         private void HandleStepRequested()
         {
+            if (_simulationDebugSession != null)
+            {
+                _simulationDebugSession.Step();
+                RefreshSimulationDebugger(followExecution: true);
+                return;
+            }
             if (_executionController == null ||
                 _executionController.State == ScriptExecutionState.Running)
             {
@@ -1011,11 +1159,20 @@ namespace Directiva.CodeUI
 
         private void HandlePauseRequested()
         {
-            _executionController?.Pause();
+            if (_simulationDebugSession != null)
+                _simulationDebugSession.Pause();
+            else
+                _executionController?.Pause();
         }
 
         private void HandleStopRequested()
         {
+            if (_simulationDebugSession != null)
+            {
+                _simulationDebugSession.Stop();
+                RefreshSimulationDebugger();
+                return;
+            }
             if (_executionController == null ||
                 _executionController.State == ScriptExecutionState.Stopped)
             {
@@ -1286,6 +1443,11 @@ namespace Directiva.CodeUI
 
         private void RefreshDScriptDebugHighlight(bool followExecution = false)
         {
+            if (_simulationDebugSession != null)
+            {
+                RefreshSimulationDebugger(followExecution);
+                return;
+            }
             if (_executionController == null ||
                 _executionController.State != ScriptExecutionState.Paused ||
                 _executionController.CurrentVM == null)

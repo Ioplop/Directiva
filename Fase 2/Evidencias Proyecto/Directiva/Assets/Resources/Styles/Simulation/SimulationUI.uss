@@ -173,13 +173,14 @@
 }
 .sim-hud { right: 150px; }
 
-/* An actual hit-testable panel floating above the selected player Nexus.
-   The full-screen overlay remains PickingMode.Ignore in C#. */
+/* Compact Nexus assignment panel: the main HUD/editor paints above it. */
 .sim-nexus-program-panel {
     position: absolute;
-    width: 315px;
-    min-height: 210px;
-    padding: 12px;
+    width: 430px;
+    padding-top: 11px;
+    padding-bottom: 12px;
+    padding-left: 13px;
+    padding-right: 13px;
     background-color: rgba(23, 30, 43, 0.97);
     border-width: 1px;
     border-color: rgb(96, 137, 180);
@@ -190,28 +191,101 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
 }
-.sim-nexus-panel-title { -unity-font-style: bold; font-size: 14px; }
-.sim-nexus-panel-help {
-    white-space: normal;
-    font-size: 11px;
-    margin-bottom: 9px;
-    color: rgb(189, 202, 220);
+.sim-nexus-panel-title {
+    -unity-font-style: bold;
+    font-size: 14px;
+    color: rgb(245, 249, 255);
 }
-.sim-nexus-panel-dropdown { margin-bottom: 7px; }
-.sim-nexus-panel-apply, .sim-nexus-panel-refresh, .sim-nexus-panel-close {
+.sim-nexus-panel-close {
+    width: 25px;
+    height: 24px;
+    flex-shrink: 0;
     background-color: rgb(46, 71, 105);
     color: rgb(245, 248, 251);
     border-width: 1px;
     border-color: rgb(96, 137, 180);
     border-radius: 4px;
 }
-.sim-nexus-panel-apply { height: 29px; margin-top: 4px; }
-.sim-nexus-panel-refresh { height: 25px; margin-top: 5px; }
-.sim-nexus-panel-close { width: 25px; height: 24px; }
-.sim-nexus-panel-apply:hover, .sim-nexus-panel-refresh:hover,
 .sim-nexus-panel-close:hover { background-color: rgb(67, 100, 142); }
+.sim-nexus-panel-warning {
+    white-space: normal;
+    font-size: 11px;
+    margin-bottom: 8px;
+    color: rgb(255, 216, 104);
+}
+.sim-nexus-panel-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 36px;
+    margin-top: 3px;
+}
+.sim-nexus-panel-field-label {
+    width: 146px;
+    min-width: 146px;
+    flex-shrink: 0;
+    margin-right: 9px;
+    white-space: nowrap;
+    font-size: 12px;
+    color: rgb(232, 239, 248);
+}
+.sim-nexus-panel-dropdown {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    height: 34px;
+    min-height: 34px;
+    color: rgb(244, 249, 255);
+    font-size: 12px;
+}
+/* No internal BaseField label: the left column owns the only visible label. */
+.sim-nexus-panel-dropdown .unity-base-field__label { display: none; }
+.sim-nexus-panel-dropdown .unity-base-field__input {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    height: 34px;
+    min-height: 34px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+/* Popup input has its own default light theme; style it explicitly. */
+.sim-nexus-panel-dropdown .unity-base-popup-field__input {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 34px;
+    height: 34px;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 9px;
+    padding-right: 5px;
+    background-color: rgb(39, 53, 74);
+    color: rgb(244, 249, 255);
+    border-width: 1px;
+    border-color: rgb(99, 133, 169);
+    border-radius: 4px;
+}
+.sim-nexus-panel-dropdown .unity-base-popup-field__input:hover {
+    background-color: rgb(51, 72, 101);
+    border-color: rgb(131, 174, 220);
+}
+.sim-nexus-panel-dropdown .unity-base-popup-field__text {
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    -unity-text-align: middle-left;
+    color: rgb(244, 249, 255);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .sim-nexus-panel-status {
     white-space: normal;
     font-size: 11px;
@@ -219,3 +293,83 @@
     color: rgb(186, 215, 192);
 }
 .sim-nexus-panel-status.sim-nexus-panel-error { color: rgb(255, 155, 155); }
+
+.sim-nexus-panel-dropdown .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: rgb(211, 227, 245);
+    align-self: center;
+    flex-shrink: 0;
+}
+
+/* Read-only replay-style scoreboard. Lower paint priority than the editor. */
+.sim-match-stats-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 7px;
+    height: 31px;
+    flex-direction: row;
+    justify-content: center;
+}
+.sim-match-stats {
+    width: 100%;
+    max-width: 790px;
+    height: 31px;
+    margin-left: 10px;
+    margin-right: 10px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-width: 1px;
+    border-color: rgba(87, 112, 140, 0.75);
+    border-radius: 6px;
+    background-color: rgba(17, 25, 36, 0.88);
+}
+.sim-match-stat {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+.sim-match-stat-caption {
+    flex-shrink: 0;
+    margin-right: 5px;
+    font-size: 11px;
+    color: rgb(205, 215, 229);
+}
+.sim-match-stat-blue {
+    flex-shrink: 0;
+    font-size: 12px;
+    -unity-font-style: bold;
+    color: rgb(83, 170, 255);
+}
+.sim-match-stat-red {
+    flex-shrink: 0;
+    font-size: 12px;
+    -unity-font-style: bold;
+    color: rgb(255, 107, 111);
+}
+.sim-match-stat-separator {
+    flex-shrink: 0;
+    margin-left: 5px;
+    margin-right: 5px;
+    font-size: 11px;
+    color: rgb(184, 198, 218);
+}
+
+/* The fourth HUD metric shows simulated time remaining in the level. */
+.sim-match-stat-time {
+    flex-grow: 0;
+    flex-shrink: 0;
+    padding-left: 10px;
+}
+.sim-match-stat-time-value {
+    flex-shrink: 0;
+    font-size: 12px;
+    -unity-font-style: bold;
+    color: rgb(231, 235, 242);
+}

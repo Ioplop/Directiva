@@ -18,6 +18,10 @@ namespace Directiva.CodeUI
         private readonly Button _revert;
 
         private readonly TextField _entryFunction;
+        private readonly Label _entryFunctionLabel;
+        private ScriptExecutionState? _externalDebugState;
+        private bool _externalDebugHasSelectedVM;
+        private bool _compactLayout;
 
         private readonly Button _stop;
         private readonly Button _pause;
@@ -29,6 +33,7 @@ namespace Directiva.CodeUI
         private long _lastLogicalSteps;
         private double _lastElapsedMilliseconds;
         private bool _hasExecutionMetrics;
+        private bool _simulationExecutionMetrics;
 
         private readonly Button _back;
         private readonly Button _options;
@@ -81,6 +86,7 @@ namespace Directiva.CodeUI
             _executionGroup = execution;
 
             var entryLabel = new Label("fn:");
+            _entryFunctionLabel = entryLabel;
             entryLabel.style.unityTextAlign = UnityEngine.TextAnchor.MiddleCenter;
             entryLabel.style.marginLeft = 4f;
             entryLabel.style.marginRight = 2f;
@@ -182,8 +188,29 @@ namespace Directiva.CodeUI
         /// <summary>Only changes toolbar presentation; VM state remains untouched.</summary>
         public void SetCompactLayout(bool compact)
         {
-            _executionGroup.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+            _compactLayout = compact;
+            UpdateExecutionGroupVisibility();
         }
+
+        /// <summary>
+        /// Hosted editor toolbar controls a selected entity VM, not the isolated
+        /// standalone runner. Hide the irrelevant function selector in this mode.
+        /// </summary>
+        public void SetSimulationDebugState(ScriptExecutionState? state, bool hasSelectedVM)
+        {
+            if (_externalDebugState == state && _externalDebugHasSelectedVM == hasSelectedVM)
+                return;
+            _externalDebugState = state;
+            _externalDebugHasSelectedVM = hasSelectedVM;
+            _entryFunction.style.display = state.HasValue ? DisplayStyle.None : DisplayStyle.Flex;
+            _entryFunctionLabel.style.display = state.HasValue ? DisplayStyle.None : DisplayStyle.Flex;
+            UpdateExecutionGroupVisibility();
+            RefreshExecutionButtons();
+        }
+
+        private void UpdateExecutionGroupVisibility() =>
+            _executionGroup.style.display = _compactLayout && !_externalDebugState.HasValue
+                ? DisplayStyle.None : DisplayStyle.Flex;
 
         /// <summary>Hide duplicate navigation when the outer host owns scene navigation.</summary>
         public void SetHosted(bool hosted)
@@ -270,14 +297,25 @@ namespace Directiva.CodeUI
         public void ClearExecutionMetrics()
         {
             _hasExecutionMetrics = false;
+            _simulationExecutionMetrics = false;
             _executionMetrics.text = string.Empty;
             _executionMetrics.style.display = DisplayStyle.None;
         }
 
         public void SetExecutionMetrics(long logicalSteps, double elapsedMilliseconds)
         {
+            _simulationExecutionMetrics = false;
             _lastLogicalSteps = logicalSteps;
             _lastElapsedMilliseconds = elapsedMilliseconds;
+            _hasExecutionMetrics = true;
+            UpdateExecutionMetricsLabel();
+            _executionMetrics.style.display = DisplayStyle.Flex;
+        }
+
+        public void SetSimulationExecutionMetrics(long logicalSteps)
+        {
+            _simulationExecutionMetrics = true;
+            _lastLogicalSteps = logicalSteps;
             _hasExecutionMetrics = true;
             UpdateExecutionMetricsLabel();
             _executionMetrics.style.display = DisplayStyle.Flex;
@@ -286,8 +324,9 @@ namespace Directiva.CodeUI
         private void UpdateExecutionMetricsLabel()
         {
             string steps = _locale.Get("Common", "execution_steps");
-            _executionMetrics.text =
-                $"{_lastLogicalSteps:N0} {steps} · {_lastElapsedMilliseconds:0.##} ms";
+            _executionMetrics.text = _simulationExecutionMetrics
+                ? $"{_lastLogicalSteps:N0} {steps}"
+                : $"{_lastLogicalSteps:N0} {steps} · {_lastElapsedMilliseconds:0.##} ms";
         }
 
         public void SetDocument(string path, bool isDirty, bool isLocked = false)
@@ -305,7 +344,7 @@ namespace Directiva.CodeUI
 
         private void RefreshExecutionButtons()
         {
-            var state = _executionState?.State ?? ScriptExecutionState.Stopped;
+            var state = _externalDebugState ?? _executionState?.State ?? ScriptExecutionState.Stopped;
 
             switch (state)
             {
@@ -322,15 +361,16 @@ namespace Directiva.CodeUI
                     _stop.SetEnabled(true);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(true);
-                    _step.SetEnabled(true);
+                    _step.SetEnabled(!_externalDebugState.HasValue || _externalDebugHasSelectedVM);
                     break;
 
                 default:
-                    _entryFunction.SetEnabled(_hasDocument);
+                    _entryFunction.SetEnabled(_hasDocument && !_externalDebugState.HasValue);
                     _stop.SetEnabled(false);
                     _pause.SetEnabled(false);
                     _continue.SetEnabled(_hasDocument);
-                    _step.SetEnabled(_hasDocument);
+                    _step.SetEnabled(_hasDocument &&
+                        (!_externalDebugState.HasValue || _externalDebugHasSelectedVM));
                     break;
             }
 

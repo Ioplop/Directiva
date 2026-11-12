@@ -1,0 +1,34 @@
+
+shared built = 0
+
+def nexus_main():
+    if built < 2 and self.can_build:
+        if build(worker):
+            built += 1
+
+def worker():
+    while True:
+        enemy = closest_enemy(Type.Unit)
+
+        distance = None
+        if enemy != None:
+            distance = self.distance_squared_to(enemy)
+
+        if distance != None and distance <= 36:
+            move(enemy)
+            attack(enemy)
+
+        elif self.cargo >= 5:
+            stop_action()
+            move(self.nexus)
+
+        elif self.cargo > 0 and not self.is_gathering:
+            move(self.nexus)
+
+        else:
+            resource = closest_resource()
+            if resource != None:
+                move(resource)
+                gather(resource)
+            else:
+                move(self.nexus)

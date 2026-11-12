@@ -79,6 +79,7 @@ namespace Directiva.CodeUI
         private ScrollView _internalScroll;
         private bool _textInputGeometryHooked;
         private bool _textInputKeyHooked;
+        private bool _returnKeyHandled;
         private bool _suppressChange;
         private bool _historyApplying;
         private bool _forceHistoryBoundaryNextChange;
@@ -196,6 +197,13 @@ namespace Directiva.CodeUI
                 verticalScrollerVisibility = ScrollerVisibility.AlwaysVisible
             };
             _textField.AddToClassList("code-text-field");
+
+            // Capture line shortcuts above the native TextField so Shift+Enter
+            // cannot trigger a focus/navigation action before our own handler.
+            _editorStack.RegisterCallback<KeyDownEvent>(OnEditorLineShortcut,
+                TrickleDown.TrickleDown);
+            _editorStack.RegisterCallback<KeyUpEvent>(OnEditorLineShortcutReleased,
+                TrickleDown.TrickleDown);
 
             if (_normalFont != null)
                 _textField.style.unityFontDefinition = new StyleFontDefinition(_normalFont);
@@ -326,6 +334,7 @@ namespace Directiva.CodeUI
             _zoomAnchorPending = false;
             _zoomLayoutSyncPassesRemaining = 0;
             _zoomLayoutSyncTask?.Pause();
+            _returnKeyHandled = false;
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -1585,6 +1594,75 @@ namespace Directiva.CodeUI
             BreakpointChanged?.Invoke(line, added);
         }
 
+        private void OnEditorLineShortcut(KeyDownEvent evt)
+        {
+            bool returnKey = evt.keyCode == KeyCode.Return ||
+                             evt.keyCode == KeyCode.KeypadEnter;
+            bool returnCharacter = evt.character == '\n' || evt.character == '\r';
+            bool commandModifier = evt.ctrlKey || evt.commandKey || evt.altKey;
+
+            // Some UI Toolkit versions deliver Return as a key-code event and
+            // a separate character event. Consume both; insert only once.
+            if ((returnKey || returnCharacter) && !commandModifier)
+            {
+                evt.StopImmediatePropagation();
+
+                if (returnKey)
+                {
+                    _returnKeyHandled = true;
+                    if (!_isReadOnly)
+                        InsertEditorLineBreak();
+                }
+                else if (!_returnKeyHandled)
+                {
+                    _returnKeyHandled = true;
+                    if (!_isReadOnly)
+                        InsertEditorLineBreak();
+                }
+                return;
+            }
+
+            if (evt.keyCode != KeyCode.None && !returnKey)
+                _returnKeyHandled = false;
+
+            // Shift+Delete means delete complete lines, not the native Cut
+            // command. Backspace and plain Delete retain their native behavior.
+            if (evt.keyCode != KeyCode.Delete || !evt.shiftKey || commandModifier)
+                return;
+
+            evt.StopImmediatePropagation();
+            if (_isReadOnly)
+                return;
+
+            var text = NormalizeLineEndings(_textField.value);
+            var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, text.Length);
+            var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
+            var edit = CodeEditorTextCommands.DeleteSelectedLines(text, cursor, select);
+            ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+        }
+
+        private void OnEditorLineShortcutReleased(KeyUpEvent evt)
+        {
+            if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
+                evt.character != '\n' && evt.character != '\r')
+                return;
+
+            _returnKeyHandled = false;
+            if (!evt.ctrlKey && !evt.commandKey && !evt.altKey)
+            {
+                evt.StopImmediatePropagation();
+            }
+        }
+
+        private void InsertEditorLineBreak()
+        {
+            var text = NormalizeLineEndings(_textField.value);
+            var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, text.Length);
+            var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
+            var edit = CodeEditorTextCommands.InsertLineBreak(text, cursor, select, TabSize);
+            ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+        }
+
         private void OnKeyDown(KeyDownEvent evt)
         {
             if (evt.keyCode == KeyCode.F2 && !evt.ctrlKey && !evt.commandKey &&
@@ -1623,11 +1701,9 @@ namespace Directiva.CodeUI
                 return;
             }
 
-            // Paste/cut and line breaks should form their own undo action rather than
-            // merging into the surrounding run of normal typing.
+            // Paste/cut should form their own undo action. Enter and Shift+Delete
+            // are handled by the ancestor shortcut callback through ApplyEdit.
             if (actionKey && (evt.keyCode == KeyCode.V || evt.keyCode == KeyCode.X))
-                _forceHistoryBoundaryNextChange = true;
-            else if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
                 _forceHistoryBoundaryNextChange = true;
 
             if (evt.keyCode != KeyCode.Tab)
@@ -1741,6 +1817,7 @@ namespace Directiva.CodeUI
                     Mathf.Clamp(cursor, 0, len),
                     Mathf.Clamp(select, 0, len));
                 _textField.Focus();
+                CaptureActiveHistorySelection();
             }).ExecuteLater(1);
         }
 

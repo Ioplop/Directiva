@@ -350,6 +350,7 @@ namespace Directiva.CodeUI
             var label = new Label(entry.Text);
             label.AddToClassList("output-entry");
             label.style.fontSize = _fontSize;
+            label.focusable = true;
 
             label.AddToClassList(entry.Severity switch
             {
@@ -362,25 +363,35 @@ namespace Directiva.CodeUI
             {
                 OutputSourceLocation source = entry.Source.Value;
                 label.AddToClassList("output-entry-link");
-                label.focusable = true;
                 label.tooltip = source.FilePath + ":" + source.Line + ":" + source.Column;
-                label.RegisterCallback<ClickEvent>(evt =>
-                {
-                    SourceRequested?.Invoke(source);
-                    evt.StopPropagation();
-                });
-                label.RegisterCallback<KeyDownEvent>(evt =>
-                {
-                    if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
-                        evt.keyCode != KeyCode.Space)
-                        return;
-                    SourceRequested?.Invoke(source);
-                    evt.StopPropagation();
-                });
             }
+
+            // Copy every message, warning and error, including messages without
+            // a source location. Preserve source navigation on the same click.
+            label.RegisterCallback<ClickEvent>(evt =>
+            {
+                CopyMessageToClipboard(entry.Text);
+                if (entry.Source.HasValue)
+                    SourceRequested?.Invoke(entry.Source.Value);
+                evt.StopPropagation();
+            });
+            label.RegisterCallback<KeyDownEvent>(evt =>
+            {
+                if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
+                    evt.keyCode != KeyCode.Space)
+                    return;
+                CopyMessageToClipboard(entry.Text);
+                if (entry.Source.HasValue)
+                    SourceRequested?.Invoke(entry.Source.Value);
+                evt.StopPropagation();
+            });
 
             _scroll.Add(label);
         }
+
+        /// <summary>Copies the exact visible message, preserving its original text.</summary>
+        public static void CopyMessageToClipboard(string text) =>
+            GUIUtility.systemCopyBuffer = text ?? string.Empty;
 
         private bool IsVisible(OutputSeverity severity)
         {

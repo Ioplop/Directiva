@@ -362,6 +362,9 @@ MonoBehaviour:
   worldCenter: {fileID: 532999693}
   entityContainer: {fileID: 930001011}
   effectContainer: {fileID: 930001021}
+  statusCamera: {fileID: 0}
+  statusBarWidth: 124
+  statusBarVerticalOffset: 1
 --- !u!1 &930001010
 GameObject:
   m_ObjectHideFlags: 0
@@ -480,30 +483,8 @@ MonoBehaviour:
   - {x: 9, y: 20}
   - {x: 14, y: 34}
   - {x: 19, y: 16}
-  playerModule: player
-  playerNexusFunction: nexus_main
-  playerScriptAsset: {fileID: 0}
-  playerSource: "shared built = 0\nshared assault = False\n\ndef nexus_main():\n   
-    if built < 5 and self.can_build:\n        if build(worker):\n            built
-    += 1\n    if built >= 5 and len(units()) >= 5 and self.resources >= 5 and not
-    assault:\n        assault = True\n        print(\"Bando 1: ataque\")\n\ndef worker():\n   
-    if assault:\n        target = enemy_nexus()\n        if target != None:\n           
-    move(target)\n            attack(target)\n    elif self.cargo >= 5:\n       
-    stop_action()\n        move(self.nexus)\n    else:\n        deposit = closest_resource()\n       
-    if deposit != None:\n            move(deposit)\n            gather(deposit)\n"
-  enemyModule: enemy
-  enemyNexusFunction: nexus_main
-  enemyScriptAsset: {fileID: 0}
-  enemySource: "shared built = 0\nshared charge = False\n\ndef nexus_main():\n   
-    if built < 5:\n        if self.can_build:\n            if build(worker):\n               
-    built += 1\n    if built >= 5 and len(self.units()) >= 5 and self.resources >=
-    5 and not charge:\n        charge = True\n        print(\"Bando 2: ataque\")\n\ndef
-    worker():\n    if charge:\n        base = enemy_nexus()\n        if base != None:\n           
-    attack(base)\n            move(base)\n    elif self.is_cargo_full:\n        stop_action()\n       
-    move(self.nexus)\n    else:\n        vein = closest_resource()\n        if vein
-    != None:\n            gather(vein)\n            move(vein)\n"
   vmStepsPerTick: 10
-  matchDurationSeconds: 300
+  matchDurationSeconds: 900
   maxTicksPerFrame: 250
   mirrorVmMessagesToUnityConsole: 1
 --- !u!1 &1021625510

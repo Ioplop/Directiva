@@ -63,6 +63,7 @@ namespace Directiva.SimulationUI
         public DirectivaCodeUIController CodeEditor => codeEditor;
         public SimulationControlEvents Controls => controlEvents;
         public SimulationNexusProgramPicker NexusPicker => _nexusPicker;
+        public SimulationMatchStatsBar MatchStats => _matchStats;
 
         private DirectivaUITheme _theme;
         private UIDocument _document;
@@ -86,6 +87,8 @@ namespace Directiva.SimulationUI
         private bool _editorMounted;
         private bool _pointerPressStartedOnUI;
         private SimulationNexusProgramPicker _nexusPicker;
+        private SimulationMatchStatsBar _matchStats;
+        private float _nextNexusWarningCheckAt;
 
         private static string T(string key, params object[] arguments) =>
             DirectivaLocalization.Get("Simulation", key, arguments);
@@ -110,6 +113,7 @@ namespace Directiva.SimulationUI
                 entry.Value.tooltip = T(entry.Key);
             SelectPlayback(_playbackState);
             _nexusPicker?.Relocalize();
+            _matchStats?.Relocalize();
             if (_editorPane != null) SetEditorMode(CurrentEditorMode);
         }
 
@@ -176,6 +180,7 @@ namespace Directiva.SimulationUI
             overlay.AddToClassList("sim-overlay");
             overlay.pickingMode = PickingMode.Ignore;
             _root.Add(overlay);
+            _matchStats = new SimulationMatchStatsBar(overlay);
 
             var hud = new VisualElement();
             hud.AddToClassList("sim-hud");
@@ -294,6 +299,15 @@ namespace Directiva.SimulationUI
 
         private void Update()
         {
+            // Checking closed .dscript.back files involves filesystem access;
+            // refresh this lightweight warning a few times per second, not per frame.
+            if (_nexusPicker != null && _nexusPicker.Visible &&
+                Time.unscaledTime >= _nextNexusWarningCheckAt)
+            {
+                RefreshNexusPickerUnsavedState();
+                _nextNexusWarningCheckAt = Time.unscaledTime + 0.2f;
+            }
+
             // A pointer released outside the UI may not deliver PointerUp to our panel.
             // Avoid leaving the world-input guard latched after such a release.
 #if ENABLE_INPUT_SYSTEM
@@ -344,6 +358,25 @@ namespace Directiva.SimulationUI
             string key = state == 0 ? "status_playing" : state == 1 ? "status_stopped" : "status_paused";
             _statusLabel.text = T(key) + " · " + _speed;
         }
+        /// <summary>
+        /// Keep HUD playback controls in sync when the debugger pauses the game
+        /// without a click on the HUD's own Pause button.
+        /// </summary>
+        public void SetPlaybackFromRuntime(ScriptExecutionState state)
+        {
+            int index = state == ScriptExecutionState.Running ? 0 :
+                state == ScriptExecutionState.Paused ? 2 : 1;
+            SelectPlayback(index);
+            string key = index == 0 ? "play" : index == 2 ? "pause" : "stop";
+            if (_activePlaybackButton != null)
+                _activePlaybackButton.RemoveFromClassList("sim-selected");
+            if (_controlButtons.TryGetValue(key, out Button button))
+            {
+                _activePlaybackButton = button;
+                button.AddToClassList("sim-selected");
+            }
+        }
+
         private void SelectSpeed(string speed)
         {
             _speed = speed;
@@ -440,6 +473,10 @@ namespace Directiva.SimulationUI
             var focused = _root?.panel?.focusController?.focusedElement as VisualElement;
             return focused is TextField || focused?.GetFirstAncestorOfType<TextField>() != null;
         }
+
+        /// <summary>Warn only when the embedded editor actually has unsaved DScript.</summary>
+        public void RefreshNexusPickerUnsavedState() =>
+            _nexusPicker?.SetUnsavedChanges(codeEditor != null && codeEditor.HasUnsavedScripts);
 
         /// <summary>Place the world-anchored Nexus program panel above its visual.</summary>
         public void PositionNexusPicker(Vector3 worldPosition, Camera worldCamera)

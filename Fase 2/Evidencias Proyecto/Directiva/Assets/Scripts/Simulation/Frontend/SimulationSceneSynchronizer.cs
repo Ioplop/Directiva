@@ -4,83 +4,30 @@ using System.IO;
 using DMath;
 using DOrchestration;
 using DSimulation;
+using DSCompilation.DScript;
 using DSCompilation.DScript.Backend;
 using DSCompilation.DScript.Modules;
 using Directiva.SimulationUI;
 using Directiva.MainMenu;
 using Directiva.Levels;
+using Directiva.Localization;
+using Directiva.CodeUI;
+using DSExecution.VirtualMachine;
 using UnityEngine;
 
 namespace Directiva.SimulationFrontend
 {
     /// <summary>
-    /// Scene-level playback host. Accepts an Orchestrator, consumes its event stream,
-    /// and advances it at 50 simulated Hz using Unity unscaled frame time.
-    /// Time.timeScale affects visuals only; never the authoritative tick accumulator.
-    /// The Inspector programs are a temporary demo bootstrap, NOT the code editor.
+    /// Hosts a selected level and the player's explicitly selected saved DScript.
+    /// No Inspector script may ever silently run as the player's program.
     /// </summary>
-    public sealed class SimulationSceneSynchronizer : MonoBehaviour
+    public sealed class SimulationSceneSynchronizer : MonoBehaviour, ISimulationDebugSession
     {
-        public const string DefaultPlayerScript =
-            "shared built = 0\n" +
-            "shared assault = False\n" +
-            "\n" +
-            "def nexus_main():\n" +
-            "    if built < 5 and self.can_build:\n" +
-            "        if build(worker):\n" +
-            "            built += 1\n" +
-            "    if built >= 5 and len(units()) >= 5 and self.resources >= 5 and not assault:\n" +
-            "        assault = True\n" +
-            "        print(\"Bando 1: ataque\")\n" +
-            "\n" +
-            "def worker():\n" +
-            "    if assault:\n" +
-            "        target = enemy_nexus()\n" +
-            "        if target != None:\n" +
-            "            move(target)\n" +
-            "            attack(target)\n" +
-            "    elif self.cargo >= 5:\n" +
-            "        stop_action()\n" +
-            "        move(self.nexus)\n" +
-            "    else:\n" +
-            "        deposit = closest_resource()\n" +
-            "        if deposit != None:\n" +
-            "            move(deposit)\n" +
-            "            gather(deposit)\n";
-
-        public const string DefaultEnemyScript =
-            "shared built = 0\n" +
-            "shared charge = False\n" +
-            "\n" +
-            "def nexus_main():\n" +
-            "    if built < 5:\n" +
-            "        if self.can_build:\n" +
-            "            if build(worker):\n" +
-            "                built += 1\n" +
-            "    if built >= 5 and len(self.units()) >= 5 and self.resources >= 5 and not charge:\n" +
-            "        charge = True\n" +
-            "        print(\"Bando 2: ataque\")\n" +
-            "\n" +
-            "def worker():\n" +
-            "    if charge:\n" +
-            "        base = enemy_nexus()\n" +
-            "        if base != None:\n" +
-            "            attack(base)\n" +
-            "            move(base)\n" +
-            "    elif self.is_cargo_full:\n" +
-            "        stop_action()\n" +
-            "        move(self.nexus)\n" +
-            "    else:\n" +
-            "        vein = closest_resource()\n" +
-            "        if vein != None:\n" +
-            "            gather(vein)\n" +
-            "            move(vein)\n";
-
         [Header("Scene connections")]
         [SerializeField] private SimulationUIController ui;
         [SerializeField] private SimulationSceneView view;
 
-        [Header("Demo world (50 x 50)")]
+        [Header("World (50 x 50)")]
         [SerializeField, Min(16)] private int worldWidth = 50;
         [SerializeField, Min(16)] private int worldHeight = 50;
         [SerializeField] private int seed = 20261111;
@@ -95,18 +42,6 @@ namespace Directiva.SimulationFrontend
             new Vector2Int(19, 16)
         };
 
-        [Header("DScript for side 1 (player)")]
-        [SerializeField] private string playerModule = "player";
-        [SerializeField] private string playerNexusFunction = "nexus_main";
-        [SerializeField] private TextAsset playerScriptAsset;
-        [SerializeField, TextArea(12, 26)] private string playerSource = DefaultPlayerScript;
-
-        [Header("DScript for side 2 (enemy)")]
-        [SerializeField] private string enemyModule = "enemy";
-        [SerializeField] private string enemyNexusFunction = "nexus_main";
-        [SerializeField] private TextAsset enemyScriptAsset;
-        [SerializeField, TextArea(12, 26)] private string enemySource = DefaultEnemyScript;
-
         [Header("Execution")]
         [SerializeField, Min(1)] private int vmStepsPerTick = 10;
         [SerializeField, Min(1)] private int matchDurationSeconds = 300;
@@ -117,7 +52,15 @@ namespace Directiva.SimulationFrontend
         // This is deliberately NOT the code editor's working buffer.
         private string selectedPlayerScript;
         private string selectedPlayerFunction;
+        // A selection made while stopped takes effect on the next Play.
+        private bool pendingPlayerProgram;
+        // A paused/finished match remains locked until the player presses Stop.
+        private bool programSelectionLocked;
         private Orchestrator orchestrator;
+        private SimulationWorldPointerController pointer;
+        private DirectivaCodeUIController connectedEditor;
+        private int selectedDebugEntityId;
+        private readonly List<VMOutputMessage> pendingEditorMessages = new List<VMOutputMessage>();
         private bool running;
         private float speed = 1f;
         private double accumulatedTime;
@@ -126,10 +69,21 @@ namespace Directiva.SimulationFrontend
 
         public Orchestrator CurrentMatch => orchestrator;
         public bool IsRunning => running;
+        public bool IsProgramSelectionLocked => programSelectionLocked;
         public float PlaybackSpeed => speed;
         public string PlayerScriptsRoot => Path.Combine(Application.persistentDataPath, "DirectivaScripts");
         public string SelectedPlayerScript => selectedPlayerScript;
         public string SelectedPlayerFunction => selectedPlayerFunction;
+        // A missing program is a normal, visible state until the player chooses one.
+        public ScriptExecutionState State => orchestrator == null ||
+            !programSelectionLocked || orchestrator.IsFinished ? ScriptExecutionState.Stopped :
+            running ? ScriptExecutionState.Running : ScriptExecutionState.Paused;
+        public bool HasSelectedVM => selectedDebugEntityId > 0 && orchestrator != null &&
+            orchestrator.TryGetVMStatus(selectedDebugEntityId, out _);
+        public long TotalLogicalSteps => orchestrator?.TotalVmSteps ?? 0L;
+        public bool HasSelectedPlayerProgram =>
+            !string.IsNullOrWhiteSpace(selectedPlayerScript) &&
+            !string.IsNullOrWhiteSpace(selectedPlayerFunction);
 
         private void Awake()
         {
@@ -138,38 +92,59 @@ namespace Directiva.SimulationFrontend
             var selection = GetComponent<SimulationNexusProgramController>();
             if (selection == null) selection = gameObject.AddComponent<SimulationNexusProgramController>();
             selection.Initialize(this, view, ui);
+            pointer = GetComponent<SimulationWorldPointerController>();
         }
 
         /// <summary>
-        /// Selects a saved player program. A successful choice rebuilds the match
-        /// so the current Nexus runs the selected entry immediately. Stop/Play
-        /// keeps this choice until this scene is unloaded.
+        /// Changes the selected saved program only while stopped. The choice
+        /// takes effect on Play; neither playback nor pause permits editing.
+        /// Invalid code never replaces the previously selected program.
         /// </summary>
         public bool TryAssignPlayerNexusProgram(string relativeScript, string entryFunction, out string error)
         {
+            return TryAssignPlayerNexusProgram(relativeScript, entryFunction, out error, out _);
+        }
+
+        /// <summary>
+        /// Preserve structured source diagnostics even when compilation fails.
+        /// Existing callers keep using the three-argument overload.
+        /// </summary>
+        public bool TryAssignPlayerNexusProgram(string relativeScript, string entryFunction,
+            out string error, out IReadOnlyList<DScriptDiagnostic> diagnostics)
+        {
+            diagnostics = Array.Empty<DScriptDiagnostic>();
+            // Enforce the same restriction at the backend boundary: disabling a
+            // DropdownField alone would not prevent assignments from other callers.
+            if (programSelectionLocked)
+            {
+                error = DirectivaLocalization.Get("Simulation", "nexus_locked_warning");
+                return false;
+            }
+
             try
             {
-                // Validate before changing the saved choice or current match.
+                if (string.Equals(selectedPlayerScript, relativeScript, StringComparison.Ordinal) &&
+                    string.Equals(selectedPlayerFunction, entryFunction, StringComparison.Ordinal))
+                {
+                    error = null;
+                    return true;
+                }
+
+                // Compile first: an invalid choice must not replace the current
+                // selection or alter the stopped world preview.
                 PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot, relativeScript, entryFunction);
-                bool resume = running;
-                string previousScript = selectedPlayerScript;
-                string previousFunction = selectedPlayerFunction;
                 selectedPlayerScript = relativeScript;
                 selectedPlayerFunction = entryFunction;
-                ResetDemo();
-                if (orchestrator == null)
-                {
-                    // An unrelated bootstrap problem must not permanently replace
-                    // a previously working Nexus selection.
-                    selectedPlayerScript = previousScript;
-                    selectedPlayerFunction = previousFunction;
-                    ResetDemo();
-                    if (resume && orchestrator != null) Play();
-                    throw new InvalidOperationException("Could not create the match with the selected program.");
-                }
-                if (resume) Play();
+                pendingPlayerProgram = true;
+
                 error = null;
                 return true;
+            }
+            catch (PlayerNexusCompilationException exception)
+            {
+                error = exception.Message;
+                diagnostics = exception.Diagnostics;
+                return false;
             }
             catch (Exception exception)
             {
@@ -216,26 +191,93 @@ namespace Directiva.SimulationFrontend
 
         private void Start()
         {
-            // Show the stopped demo world's nexuses/resources immediately in Play Mode.
-            ResetDemo();
+            // Show the stopped level world before any player program has been assigned.
+            ResetMatch();
+            ConnectEditorDebugger();
         }
 
-        public static DScriptCompiledProgram CompileSide(string module, string source)
+        private void ConnectEditorDebugger()
         {
-            if (string.IsNullOrWhiteSpace(module) || string.IsNullOrWhiteSpace(source))
-                throw new ArgumentException("Each side requires a module name and nonempty DScript.");
-            var provider = new InMemoryDScriptSourceProvider(
-                new Dictionary<string, string> { [module] = source });
-            DScriptCompilationResult compilation = DScriptCompiler.Compile(
-                module, provider, SimulationDScriptProfile.Options);
-            if (!compilation.Success)
-                throw new InvalidOperationException("DScript '" + module + "' compilation failed:\n" +
-                    string.Join("\n", compilation.Diagnostics));
-            return compilation.Program;
+            if (connectedEditor != null || ui == null || ui.CodeEditor == null)
+                return;
+            connectedEditor = ui.CodeEditor;
+            connectedEditor.AttachSimulationDebugger(this);
+            foreach (VMOutputMessage message in pendingEditorMessages)
+                connectedEditor.PublishSimulationOutput(message);
+            pendingEditorMessages.Clear();
+            if (pointer == null) pointer = GetComponent<SimulationWorldPointerController>();
+            if (pointer != null) pointer.SelectionChanged += OnEntitySelectedForDebug;
+            if (orchestrator != null) ConfigureRuntimeDebugger(orchestrator);
         }
 
-        private string PlayerSource => playerScriptAsset != null ? playerScriptAsset.text : playerSource;
-        private string EnemySource => enemyScriptAsset != null ? enemyScriptAsset.text : enemySource;
+        private void OnEntitySelectedForDebug(SimulationEntityIdentity identity)
+        {
+            // The enemy script lives in the level's private Resources module,
+            // not in the player's editable workspace. Never display it as if editable.
+            selectedDebugEntityId = identity != null && identity.SideId == 1 ? identity.EntityId : 0;
+            connectedEditor?.RefreshSimulationDebugger(followExecution: true);
+        }
+
+        private void ConfigureRuntimeDebugger(Orchestrator match)
+        {
+            match.BreakpointPredicate = (side, id, source, line) =>
+                side == 1 && connectedEditor != null &&
+                connectedEditor.HasSimulationBreakpoint(source, line);
+        }
+
+        private void OnBreakpointHit(int entityId, VMDebugState debug)
+        {
+            selectedDebugEntityId = entityId;
+            if (pointer != null && view != null &&
+                view.TryGetVisual(entityId, out VisualEntity selectedVisual))
+                pointer.SelectForDebug(selectedVisual.GetComponent<SimulationEntityIdentity>());
+            running = false;
+            accumulatedTime = 0;
+            ApplyPlaybackState();
+            if (connectedEditor != null && debug != null)
+            {
+                var source = debug.Line >= 0 && !string.IsNullOrWhiteSpace(debug.File)
+                    ? new OutputSourceLocation(debug.File, debug.Line + 1) :
+                        (OutputSourceLocation?)null;
+                connectedEditor.Output.Write(DirectivaLocalization.Get("Simulation",
+                    "debug_breakpoint_hit", entityId,
+                    debug.File ?? "?", debug.Line + 1), source);
+                connectedEditor.RefreshSimulationDebugger(followExecution: true);
+            }
+        }
+
+        private void OnEntityFaulted(int entityId) => view?.SetEntityFaulted(entityId, true);
+        private void OnEntityRecovered(int entityId) => view?.SetEntityFaulted(entityId, false);
+
+        public bool TryGetSelectedSource(out string file, out int oneBasedLine)
+        {
+            if (HasSelectedVM && orchestrator.TryGetDebugState(selectedDebugEntityId,
+                out VMDebugState debug) && debug.Line >= 0 &&
+                !string.IsNullOrWhiteSpace(debug.File))
+            {
+                file = debug.File;
+                oneBasedLine = debug.Line + 1;
+                return true;
+            }
+            file = null;
+            oneBasedLine = 0;
+            return false;
+        }
+
+        /// <summary>Advance only the chosen VM while simulation time is frozen.</summary>
+        public void Step()
+        {
+            if (orchestrator == null || !HasSelectedVM || !programSelectionLocked ||
+                orchestrator.IsFinished) return;
+            if (running) Pause();
+            if (orchestrator.StepEntity(selectedDebugEntityId))
+            {
+                view?.ConsumeEvents();
+                connectedEditor?.RefreshSimulationDebugger(followExecution: true);
+            }
+        }
+
+        public void Continue() => Play();
 
         /// <summary>
         /// Compile the selected level's entry module and every reachable import using
@@ -264,48 +306,89 @@ namespace Directiva.SimulationFrontend
             return result.Program;
         }
 
-        /// <summary>Creates and attaches a symmetric demo match from Inspector settings.</summary>
-        public void ResetDemo()
+        /// <summary>
+        /// Recreate the level's initial world whether or not the player has picked
+        /// a saved script. Never bind a Nexus VM without an explicit selection.
+        /// Compilation failures also retain a visible stopped world.
+        /// </summary>
+        public void ResetMatch()
         {
+            DSimulation.Simulation world = null;
             try
             {
-                DScriptCompiledProgram first = string.IsNullOrEmpty(selectedPlayerScript)
-                    ? CompileSide(playerModule, PlayerSource)
-                    : PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot,
-                        selectedPlayerScript, selectedPlayerFunction);
-                DirectivaLevel selectedLevel = LevelLaunchContext.CurrentLevel;
-                DScriptCompiledProgram second = selectedLevel != null
-                    ? CompileLevelEnemy(selectedLevel)
-                    : CompileSide(enemyModule, EnemySource);
-                string enemyEntry = selectedLevel != null
-                    ? selectedLevel.QualifiedEnemyEntry
-                    : enemyModule + "." + enemyNexusFunction;
-                DSimulation.Simulation world = BuildDemoWorld();
-                var next = new Orchestrator(world, first, second,
+                world = BuildWorld();
+
+                // At level entry neither dropdown has a value. Keep the world
+                // selectable, but do not construct a hidden fallback program.
+                DirectivaLevel level = LevelLaunchContext.CurrentLevel;
+                if (!HasSelectedPlayerProgram || level == null)
+                {
+                    AttachStoppedWorld(world);
+                    return;
+                }
+
+                // Each side compiles from its own isolated source root.
+                DScriptCompiledProgram player = PlayerNexusScriptCatalog.Compile(
+                    PlayerScriptsRoot, selectedPlayerScript, selectedPlayerFunction);
+                DScriptCompiledProgram enemy = CompileLevelEnemy(level);
+                var next = new Orchestrator(world, player, enemy,
                     stepsPerTick: vmStepsPerTick, maxDurationSeconds: matchDurationSeconds);
                 next.BindInitialEntity(world.GetSide(1).Nexus.id,
-                    string.IsNullOrEmpty(selectedPlayerScript)
-                        ? playerModule + "." + playerNexusFunction
-                        : PlayerNexusScriptCatalog.ModuleFromPath(selectedPlayerScript) + "." +
-                          selectedPlayerFunction);
-                next.BindInitialEntity(world.GetSide(2).Nexus.id, enemyEntry);
+                    PlayerNexusScriptCatalog.ModuleFromPath(selectedPlayerScript) + "." +
+                    selectedPlayerFunction);
+                next.BindInitialEntity(world.GetSide(2).Nexus.id, level.QualifiedEnemyEntry);
                 AttachOrchestrator(next);
+                pendingPlayerProgram = false;
             }
             catch (Exception exception)
             {
+                // A program can change on disk after it was selected. Make
+                // failures during Play/Stop visible in the editor too.
+                if (exception is PlayerNexusCompilationException compilationError)
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                        compilationError.Message, compilationError.Diagnostics);
+                else
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
                 Debug.LogException(exception, this);
                 running = false;
                 accumulatedTime = 0;
-                if (orchestrator != null) DetachOrchestrator();
-                if (view != null) view.Clear();
+                DetachOrchestrator();
+
+                if (world != null && view != null)
+                {
+                    try { AttachStoppedWorld(world); }
+                    catch (Exception viewException)
+                    {
+                        Debug.LogException(viewException, this);
+                        view.Clear();
+                    }
+                }
+                else if (view != null)
+                {
+                    view.Clear();
+                }
                 ApplyPlaybackState();
             }
         }
 
-        private DSimulation.Simulation BuildDemoWorld()
+        private void AttachStoppedWorld(DSimulation.Simulation world)
+        {
+            if (view == null)
+                throw new InvalidOperationException("SimulationSceneView is not assigned.");
+            running = false;
+            accumulatedTime = 0;
+            DetachOrchestrator();
+            world.Start(); // Idempotent if a partially built Orchestrator already started it.
+            view.Attach(world, worldWidth, worldHeight,
+                ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
+            pendingPlayerProgram = false;
+            ApplyPlaybackState();
+        }
+
+        private DSimulation.Simulation BuildWorld()
         {
             if (worldWidth < 16 || worldHeight < 16)
-                throw new InvalidOperationException("Demo world must be at least 16 x 16.");
+                throw new InvalidOperationException("World must be at least 16 x 16.");
             if (initialResourcesPerSide < 0 || resourcesPerDeposit <= 0 || depositRichness <= 0)
                 throw new InvalidOperationException("Invalid starting resource settings.");
             var world = new DSimulation.Simulation(unchecked((ulong)(uint)seed),
@@ -349,37 +432,67 @@ namespace Directiva.SimulationFrontend
             orchestrator = match;
             orchestrator.OutputEmitted += HandleOutput;
             orchestrator.MatchEnded += HandleMatchEnded;
-            // Shared initializers ran in the constructor before we could subscribe.
-            // Preserve those early messages when mirroring output to Unity's console.
-            if (mirrorVmMessagesToUnityConsole)
-            {
-                var initial = new List<VMOutputMessage>();
-                initial.AddRange(orchestrator.GetOutput(1));
-                initial.AddRange(orchestrator.GetOutput(2));
-                initial.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
-                foreach (VMOutputMessage message in initial) HandleOutput(message);
-            }
+            orchestrator.BreakpointHit += OnBreakpointHit;
+            orchestrator.EntityFaulted += OnEntityFaulted;
+            orchestrator.EntityRecovered += OnEntityRecovered;
+            ConfigureRuntimeDebugger(orchestrator);
+            // Initializers emitted messages before the host could subscribe.
+            // Replay them to BOTH output sinks, not only Unity's console.
+            var initial = new List<VMOutputMessage>();
+            initial.AddRange(orchestrator.GetOutput(1));
+            initial.AddRange(orchestrator.GetOutput(2));
+            initial.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
+            foreach (VMOutputMessage message in initial) HandleOutput(message);
             accumulatedTime = 0;
             running = false;
-            view.Attach(orchestrator.Simulation, worldWidth, worldHeight);
+            view.Attach(orchestrator.Simulation, worldWidth, worldHeight,
+                ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
             ApplyPlaybackState();
         }
 
         private void DetachOrchestrator()
         {
+            selectedDebugEntityId = 0;
+            pointer?.ClearSelection();
             if (orchestrator == null) return;
             orchestrator.OutputEmitted -= HandleOutput;
             orchestrator.MatchEnded -= HandleMatchEnded;
+            orchestrator.BreakpointHit -= OnBreakpointHit;
+            orchestrator.EntityFaulted -= OnEntityFaulted;
+            orchestrator.EntityRecovered -= OnEntityRecovered;
+            orchestrator.BreakpointPredicate = null;
             orchestrator = null;
         }
 
         public void Play()
         {
-            if (orchestrator == null || orchestrator.IsFinished)
-                ResetDemo();
+            if (!HasSelectedPlayerProgram)
+            {
+                WarnCannotPlay("nexus_select_before_play");
+                return;
+            }
+            if (LevelLaunchContext.CurrentLevel == null)
+            {
+                WarnCannotPlay("nexus_level_required");
+                return;
+            }
+            if (pendingPlayerProgram || orchestrator == null || orchestrator.IsFinished)
+                ResetMatch();
             if (orchestrator == null) return;
+            orchestrator.ResumeFromBreakpoint();
             running = true;
+            programSelectionLocked = true;
+            SyncProgramPickerLock();
             ApplyPlaybackState();
+        }
+
+        private void WarnCannotPlay(string localizationKey)
+        {
+            if (ui != null && ui.NexusPicker != null)
+                ui.NexusPicker.SetLocalizedStatus(localizationKey, true);
+            Debug.LogWarning("[Directiva] " +
+                DirectivaLocalization.Get("Simulation", localizationKey), this);
+            ui?.SetPlaybackFromRuntime(State);
         }
 
         public void Pause()
@@ -392,9 +505,17 @@ namespace Directiva.SimulationFrontend
         public void Stop()
         {
             running = false;
-            // Freeze visuals immediately, even if compiling/rebuilding the demo fails.
+            programSelectionLocked = false;
+            SyncProgramPickerLock();
+            // Freeze visuals immediately, even if recompilation fails.
             ApplyPlaybackState();
-            ResetDemo();
+            ResetMatch();
+        }
+
+        private void SyncProgramPickerLock()
+        {
+            if (ui != null && ui.NexusPicker != null)
+                ui.NexusPicker.SetSelectionLocked(programSelectionLocked);
         }
 
         public void SlowMotion() => SetSpeed(0.25f);
@@ -417,22 +538,35 @@ namespace Directiva.SimulationFrontend
             float rate = running ? speed : 0f;
             Time.timeScale = rate;
             if (view != null) view.SetPlaybackSpeed(rate);
+            ui?.SetPlaybackFromRuntime(State);
         }
 
         private void Update()
         {
+            if (connectedEditor == null) ConnectEditorDebugger();
             if (!running || orchestrator == null || orchestrator.IsFinished) return;
             accumulatedTime += Time.unscaledDeltaTime * speed;
             int steps = 0;
             try
             {
                 // Keep any backlog rather than skipping physics steps on a slow frame.
-                while (accumulatedTime >= simulationTickSeconds && steps < maxTicksPerFrame)
+                while ((accumulatedTime >= simulationTickSeconds || orchestrator.HasPendingTick) &&
+                    steps < maxTicksPerFrame)
                 {
-                    accumulatedTime -= simulationTickSeconds;
+                    // A debugger resumes the SAME partially executed tick. Its
+                    // time budget was already removed before the breakpoint.
+                    if (!orchestrator.HasPendingTick)
+                        accumulatedTime -= simulationTickSeconds;
                     orchestrator.Update();
                     view.ConsumeEvents();
                     steps++;
+                    if (orchestrator.IsPausedAtBreakpoint)
+                    {
+                        running = false;
+                        accumulatedTime = 0;
+                        ApplyPlaybackState();
+                        break;
+                    }
                     if (orchestrator.IsFinished) break;
                 }
             }
@@ -442,6 +576,13 @@ namespace Directiva.SimulationFrontend
                 ApplyPlaybackState();
                 Debug.LogException(exception, this);
             }
+        }
+
+        private void LateUpdate()
+        {
+            if (ui != null && ui.MatchStats != null)
+                ui.MatchStats.UpdateValues(orchestrator != null ? orchestrator.Simulation : view?.CurrentWorld,
+                    orchestrator, orchestrator != null ? orchestrator.MaxDurationSeconds : matchDurationSeconds);
         }
 
         private void HandleMatchEnded(MatchOutcome outcome)
@@ -457,6 +598,13 @@ namespace Directiva.SimulationFrontend
 
         private void HandleOutput(VMOutputMessage output)
         {
+            // The embedded editor is the player's primary console. Unity's
+            // console mirroring is only an optional developer diagnostic.
+            if (connectedEditor == null) ConnectEditorDebugger();
+            if (connectedEditor != null)
+                connectedEditor.PublishSimulationOutput(output);
+            else
+                pendingEditorMessages.Add(output);
             if (!mirrorVmMessagesToUnityConsole) return;
             string line = "[Directiva Side " + output.SideId + " / Entity " +
                 (output.EntityId.HasValue ? output.EntityId.Value.ToString() : "shared") +
@@ -472,6 +620,8 @@ namespace Directiva.SimulationFrontend
         private void OnDestroy()
         {
             Time.timeScale = 1f;
+            if (pointer != null) pointer.SelectionChanged -= OnEntitySelectedForDebug;
+            if (connectedEditor != null) connectedEditor.AttachSimulationDebugger(null);
             DetachOrchestrator();
         }
     }

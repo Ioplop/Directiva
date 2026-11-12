@@ -1,15 +1,14 @@
 using System;
 using System.Collections.Generic;
+using DSCompilation.DScript;
 using Directiva.SimulationUI;
-using Directiva.Localization;
 using UnityEngine;
 
 namespace Directiva.SimulationFrontend
 {
     /// <summary>
     /// Converts generic world clicks into a player-Nexus-only program picker.
-    /// All unit/resource/enemy clicks remain observable through the pointer
-    /// controller but have no game-specific action yet.
+    /// Script/function changes assign immediately; no apply or refresh buttons.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(300)]
@@ -21,8 +20,6 @@ namespace Directiva.SimulationFrontend
         private SimulationWorldPointerController pointer;
         private int selectedNexusId;
         private bool eventsAttached;
-
-        private static string T(string key) => DirectivaLocalization.Get("Simulation", key);
 
         public void Initialize(SimulationSceneSynchronizer host,
             SimulationSceneView sceneView, SimulationUIController uiController)
@@ -46,7 +43,7 @@ namespace Directiva.SimulationFrontend
             }
             pointer.EntityClicked += HandleClick;
             ui.NexusPicker.ScriptChanged += HandleScriptChanged;
-            ui.NexusPicker.ApplyRequested += HandleApply;
+            ui.NexusPicker.FunctionChanged += HandleFunctionChanged;
             ui.NexusPicker.RefreshRequested += RefreshScripts;
             eventsAttached = true;
         }
@@ -58,7 +55,7 @@ namespace Directiva.SimulationFrontend
             if (ui != null && ui.NexusPicker != null)
             {
                 ui.NexusPicker.ScriptChanged -= HandleScriptChanged;
-                ui.NexusPicker.ApplyRequested -= HandleApply;
+                ui.NexusPicker.FunctionChanged -= HandleFunctionChanged;
                 ui.NexusPicker.RefreshRequested -= RefreshScripts;
             }
         }
@@ -66,7 +63,6 @@ namespace Directiva.SimulationFrontend
         private void HandleClick(SimulationEntityIdentity identity)
         {
             // The enemy program remains private to its independent level source.
-            // Generic clicks still work for other entity types and future menus.
             if (identity == null || identity.Kind != SimulationVisualKind.Nexus || identity.SideId != 1)
             {
                 selectedNexusId = 0;
@@ -74,60 +70,138 @@ namespace Directiva.SimulationFrontend
                 return;
             }
             selectedNexusId = identity.EntityId;
-            RefreshScripts();
+            ui.NexusPicker.SetSelectionLocked(synchronizer.IsProgramSelectionLocked);
+            RefreshScripts(preferAppliedSelection: true);
+            ui.RefreshNexusPickerUnsavedState();
             ui.NexusPicker.Show();
         }
 
-        private void RefreshScripts()
+        // Used when either dropdown is about to open. It refreshes saved files
+        // without interpreting a passive refresh as a new program assignment.
+        private void RefreshScripts() => RefreshScripts(preferAppliedSelection: false);
+
+        private void RefreshScripts(bool preferAppliedSelection)
         {
             if (ui == null || ui.NexusPicker == null || synchronizer == null) return;
+            // A locked picker may display the current selection on open, but
+            // must never rebuild its choices in response to disabled controls.
+            if (synchronizer.IsProgramSelectionLocked && !preferAppliedSelection) return;
+            var picker = ui.NexusPicker;
             try
             {
+                string previousScript = picker.SelectedScript;
+                string previousFunction = picker.SelectedFunction;
                 List<string> scripts = PlayerNexusScriptCatalog.ListScripts(synchronizer.PlayerScriptsRoot);
-                string previous = ui.NexusPicker.Visible ? ui.NexusPicker.SelectedScript : null;
-                string preferred = !string.IsNullOrEmpty(previous)
-                    ? previous : synchronizer.SelectedPlayerScript;
-                ui.NexusPicker.SetScripts(scripts, preferred);
-                HandleScriptChanged(ui.NexusPicker.SelectedScript);
+                string preferred = preferAppliedSelection
+                    ? synchronizer.SelectedPlayerScript : previousScript;
+                picker.SetScripts(scripts, preferred);
                 if (scripts.Count == 0)
-                    ui.NexusPicker.SetStatus(T("nexus_no_scripts"), true);
+                {
+                    picker.SetFunctions(Array.Empty<string>(), null);
+                    picker.SetLocalizedStatus("nexus_no_scripts", true);
+                    return;
+                }
+                string selected = picker.SelectedScript;
+                if (string.IsNullOrWhiteSpace(selected))
+                {
+                    // Available scripts do not imply an assigned program.
+                    picker.SetFunctions(Array.Empty<string>(), null);
+                    picker.SetStatus(string.Empty);
+                    return;
+                }
+                string preferredFunction = !preferAppliedSelection &&
+                    string.Equals(selected, previousScript, StringComparison.Ordinal)
+                    ? previousFunction : null;
+                PopulateFunctions(selected, preferredFunction, assign: false);
             }
             catch (Exception exception)
             {
-                ui.NexusPicker.SetStatus(exception.Message, true);
+                picker.SetStatus(exception.Message, true);
+                ReportCompilationFailure(exception);
             }
         }
 
         private void HandleScriptChanged(string relativeScript)
         {
+            if (synchronizer.IsProgramSelectionLocked) return;
+            // Changing the script chooses its first zero-argument entry function
+            // (or preserves the previously applied function for this script).
+            PopulateFunctions(relativeScript, null, assign: true);
+        }
+
+        private void PopulateFunctions(string relativeScript, string preferredFunction, bool assign)
+        {
+            var picker = ui.NexusPicker;
             if (string.IsNullOrWhiteSpace(relativeScript))
             {
-                ui.NexusPicker.SetFunctions(Array.Empty<string>(), null);
+                picker.SetFunctions(Array.Empty<string>(), null);
+                picker.SetStatus(string.Empty);
                 return;
             }
             try
             {
                 List<string> functions = PlayerNexusScriptCatalog.ListEntryFunctions(
                     synchronizer.PlayerScriptsRoot, relativeScript);
-                string preferred = string.Equals(relativeScript, synchronizer.SelectedPlayerScript,
-                    StringComparison.Ordinal) ? synchronizer.SelectedPlayerFunction : null;
-                ui.NexusPicker.SetFunctions(functions, preferred);
-                ui.NexusPicker.SetStatus(functions.Count > 0
-                    ? string.Empty : T("nexus_no_functions"), functions.Count == 0);
+                if (preferredFunction == null)
+                {
+                    if (string.Equals(relativeScript, synchronizer.SelectedPlayerScript,
+                        StringComparison.Ordinal))
+                        preferredFunction = synchronizer.SelectedPlayerFunction;
+                    else if (functions.Contains("nexus_main"))
+                        preferredFunction = "nexus_main";
+                    else if (functions.Contains("main"))
+                        preferredFunction = "main";
+                }
+                picker.SetFunctions(functions, preferredFunction);
+                if (functions.Count == 0)
+                {
+                    picker.SetLocalizedStatus("nexus_no_functions", true);
+                    return;
+                }
+                picker.SetStatus(string.Empty);
+                if (assign)
+                    ApplySelection(relativeScript, picker.SelectedFunction);
             }
             catch (Exception exception)
             {
-                ui.NexusPicker.SetFunctions(Array.Empty<string>(), null);
-                ui.NexusPicker.SetStatus(exception.Message, true);
+                picker.SetFunctions(Array.Empty<string>(), null);
+                picker.SetStatus(exception.Message, true);
+                ReportCompilationFailure(exception);
             }
         }
 
-        private void HandleApply(string script, string function)
+        private void HandleFunctionChanged(string relativeScript, string entryFunction)
         {
-            if (synchronizer.TryAssignPlayerNexusProgram(script, function, out string error))
-                ui.NexusPicker.SetStatus(T("nexus_program_applied"));
+            if (synchronizer.IsProgramSelectionLocked) return;
+            ApplySelection(relativeScript, entryFunction);
+        }
+
+        private void ApplySelection(string relativeScript, string entryFunction)
+        {
+            if (string.IsNullOrWhiteSpace(relativeScript) || string.IsNullOrWhiteSpace(entryFunction))
+                return;
+            if (synchronizer.TryAssignPlayerNexusProgram(relativeScript, entryFunction,
+                out string error, out IReadOnlyList<DScriptDiagnostic> diagnostics))
+                ui.NexusPicker.SetStatus(string.Empty);
             else
+            {
+                // This failure happens outside the embedded editor's own
+                // Compile button. Publish it explicitly with source metadata.
+                ui.CodeEditor?.PublishPlayerCompilationFailure(error, diagnostics);
+                // A failed compilation must not leave a fictitious selection
+                // displayed in the UI while a different program is assigned.
+                RefreshScripts(preferAppliedSelection: true);
                 ui.NexusPicker.SetStatus(error, true);
+            }
+        }
+
+        private void ReportCompilationFailure(Exception exception)
+        {
+            if (exception is PlayerNexusCompilationException compilationError)
+                ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                    compilationError.Message, compilationError.Diagnostics);
+            else
+                ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
         }
 
         private void LateUpdate()

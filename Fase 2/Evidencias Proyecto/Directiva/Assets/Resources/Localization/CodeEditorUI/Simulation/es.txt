@@ -19,12 +19,20 @@
 [hide_solution]: Ocultar solución
 [menu_scene_unavailable]: [Directiva] La escena de menú '{{1}}' debe incluirse en los perfiles de compilación.
 [nexus_program_title]: Programa del nexo
-[nexus_program_help]: Se usa el DScript guardado en DirectivaScripts. Guarda tus cambios antes de aplicar.
+[nexus_unsaved_warning]: Recuerda guardar antes de seleccionar tu script.
+[nexus_locked_warning]: No puedes cambiar estos parámetros mientras la simulación está en marcha. Pulsa Detener primero.
 [nexus_script]: Script
 [nexus_function]: Función de entrada
-[nexus_apply]: Aplicar y reiniciar partida
-[nexus_refresh]: Actualizar scripts
 [nexus_close]: Cerrar
 [nexus_no_scripts]: No hay archivos .dscript guardados. Crea uno desde el Editor.
 [nexus_no_functions]: No hay funciones sin parámetros en el script seleccionado.
 [nexus_program_applied]: Programa asignado al nexo.
+[hud_resources]: Recursos
+[hud_units]: Unidades
+[hud_errors]: Errores
+[hud_time_remaining]: Tiempo restante
+[nexus_select_before_play]: Selecciona un script y una función de entrada para el nexo antes de iniciar la partida.
+[nexus_level_required]: Inicia la partida desde la selección de niveles. No hay un nivel cargado.
+
+[debug_output_prefix]: [Bando {{1}} / Entidad {{2}} / Tick {{3}}]
+[debug_breakpoint_hit]: Breakpoint: entidad {{1}} en {{2}}:{{3}}.

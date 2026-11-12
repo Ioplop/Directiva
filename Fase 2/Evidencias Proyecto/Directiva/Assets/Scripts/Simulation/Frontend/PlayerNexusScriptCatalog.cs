@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DSCompilation.DScript;
 using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Backend;
 using DSCompilation.DScript.Lexing;
@@ -11,6 +12,22 @@ using DOrchestration;
 
 namespace Directiva.SimulationFrontend
 {
+    /// <summary>
+    /// A player-script compilation error with original DScript source positions.
+    /// The Nexus picker and the editor console can show the same diagnostics,
+    /// while the console retains a clickable file/line/column target.
+    /// </summary>
+    public sealed class PlayerNexusCompilationException : InvalidOperationException
+    {
+        public IReadOnlyList<DScriptDiagnostic> Diagnostics { get; }
+
+        public PlayerNexusCompilationException(string message,
+            IEnumerable<DScriptDiagnostic> diagnostics) : base(message)
+        {
+            Diagnostics = new List<DScriptDiagnostic>(diagnostics ?? Array.Empty<DScriptDiagnostic>());
+        }
+    }
+
     /// <summary>
     /// Reads saved player scripts from one isolated workspace root. The embedded
     /// editor owns editing and saving; the match only reads files on disk.
@@ -74,11 +91,13 @@ namespace Directiva.SimulationFrontend
             var lexer = new DScriptLexer(module, source);
             var tokens = lexer.Tokenize();
             if (lexer.Diagnostics.Count != 0)
-                throw new InvalidOperationException(lexer.Diagnostics[0].ToString());
+                throw new PlayerNexusCompilationException(
+                    lexer.Diagnostics[0].ToString(), lexer.Diagnostics);
             var parser = new DScriptParser(module, tokens);
             ModuleNode ast = parser.Parse();
             if (parser.Diagnostics.Count != 0)
-                throw new InvalidOperationException(parser.Diagnostics[0].ToString());
+                throw new PlayerNexusCompilationException(
+                    parser.Diagnostics[0].ToString(), parser.Diagnostics);
 
             return ast.Statements.OfType<FunctionStatement>()
                 .Where(function => function.Parameters.Count == 0)
@@ -98,8 +117,8 @@ namespace Directiva.SimulationFrontend
             var compilation = DScriptCompiler.Compile(module,
                 new FileSystemDScriptSourceProvider(root), SimulationDScriptProfile.Options);
             if (!compilation.Success)
-                throw new InvalidOperationException("Player script compilation failed:\n" +
-                    string.Join("\n", compilation.Diagnostics));
+                throw new PlayerNexusCompilationException("Player script compilation failed:\n" +
+                    string.Join("\n", compilation.Diagnostics), compilation.Diagnostics);
             if (!compilation.Program.TryGetFunctionId(module + "." + function, out _))
                 throw new InvalidOperationException("Entry function not found: " + module + "." + function);
             return compilation.Program;

@@ -1,0 +1,82 @@
+shared target_enemy = None
+shared go = False
+
+# Basic stuff. Just create a unit whenever possible.
+# Give an attack order only if we have 5 or more troops.
+
+def main():
+    while True:
+        if not self.is_building and self.resources >= self.unit_cost:
+            build(unit_main)
+        # Aplicar orden de ataque solo cuando tenemos más de 4 unidades
+        if allies().length > 4:
+            if not go:
+                go = True
+        elif go:
+            go = False
+
+def unit_main():
+    while True:
+        if go:
+            fight()
+        else:
+            collect_resources()
+
+def fight():
+    te = target_enemy
+    if not te or not te.alive:
+        # Find a shared target to attack
+        te = closest_enemy(Type.Unit)
+    if not te or not te.alive:
+        # We have no units to kill. So we kill the enemy nexus!
+        move(self.enemy_nexus())
+        attack(self.enemy_nexus())
+    else:
+        # We have a shared target to attack! GO!
+        target_enemy = te
+        move(te)
+        attack(te)
+
+
+def find_gather_target():
+    # We need the nexuses to get info on what is safe to collect
+    us = self.nexus
+    en = self.enemy_nexus()
+
+    # First find all resources that are not being gathered from...
+    res = resource_nodes()
+    not_taken = []
+    for r in res:
+        if r.is_available_to_gather:
+            not_taken.append(r)
+    
+    # Now find which of those are closer to our nexus than they are from the enemy
+    safe = []
+    for r in not_taken:
+        if r.distance_squared_to(us) <= r.distance_squared_to(en):
+            safe.append(r)
+    
+    # Now pick the first safe resource
+    if safe.length:
+        return safe[0]
+    # If no safe resource was found, return the closest resource
+    return closest_resource()
+
+def collect_resources():
+    if self.is_gathering:
+        # If we are gathering, make sure that we have less than 10 resources.
+        if self.cargo >= 10:
+            self.stop_action()
+            self.move(self.nexus)
+    elif self.cargo > 0:
+        # If we are not gathering but have cargo, move to the nexus so we can unload
+        self.move(self.nexus)
+    else:
+        # If we are not gathering and have no cargo, we find a resource to gather and gather it...
+        resource = find_gather_target()
+        if resource:
+            self.move(resource)
+            self.gather(resource)
+        else:
+            # If there are no gather targets, it means there are no more resources. Thus, we just fight till death!
+            fight()

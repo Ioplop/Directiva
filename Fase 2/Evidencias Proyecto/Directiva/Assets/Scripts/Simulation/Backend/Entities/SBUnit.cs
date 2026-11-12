@@ -14,6 +14,10 @@ namespace DSimulation
         internal static readonly Fixed unloadDistance = 1;
         internal static readonly Fixed cargoSlowdown = Fixed.Decimal(9, 1);
         internal const int maxCargo = 15;
+        // The view reads capacity from each unit, rather than assuming a fixed
+        // number of slots when displaying cargo. Future unit variants can expose
+        // their own capacity through this property.
+        public int MaxCargo => maxCargo;
         /// How aggressively we close the distance.
         internal static readonly Fixed followGain = 4;
         internal static readonly Fixed aimAlignment = Fixed.Decimal(99, 2); // ~8 degrees of missalignment or less required to shoot
@@ -175,7 +179,7 @@ namespace DSimulation
         /// </summary>
         internal EventCreateUnit CreateUnitEvent()
         {
-            return new EventCreateUnit(id, side.id, MaxHealth, MaxShields, Position, Rotation);
+            return new EventCreateUnit(id, side.id, MaxHealth, MaxShields, Position, Rotation, MaxCargo);
         }
 
         /// <summary>

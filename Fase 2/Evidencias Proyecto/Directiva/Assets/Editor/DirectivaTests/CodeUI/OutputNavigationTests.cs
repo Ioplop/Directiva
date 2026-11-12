@@ -18,6 +18,28 @@ namespace Directiva.EditorTests.CodeUITests
             void Add(string id, string description, Action<DirectivaTestContext> run) =>
                 tests.Add(new DirectivaTestCase("CodeUI", "OutputNavigation", id, description, run));
 
+            Add("MessageClickCopiesClipboard",
+                "Console copy preserves message, warning and error text", t =>
+            {
+                string previous = UnityEngine.GUIUtility.systemCopyBuffer;
+                try
+                {
+                    foreach (OutputSeverity severity in new[] {
+                        OutputSeverity.Message, OutputSeverity.Warning, OutputSeverity.Error })
+                    {
+                        string text = "Code output " + severity + "\nLine 2";
+                        var entry = new OutputEntry(severity, text);
+                        OutputPanel.CopyMessageToClipboard(entry.Text);
+                        t.Equal(text, UnityEngine.GUIUtility.systemCopyBuffer,
+                            severity + " clipboard contains exact line breaks");
+                    }
+                }
+                finally
+                {
+                    UnityEngine.GUIUtility.systemCopyBuffer = previous;
+                }
+            });
+
             Add("LocationSurvivesBuffer", "A diagnostic location travels with its buffered console message", t =>
             {
                 var output = new OutputService(2);

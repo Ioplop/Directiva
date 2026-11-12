@@ -233,8 +233,12 @@ namespace Directiva.EditorTests.OrchestrationTests
             foreach (SimulationApiOperation entry in SimulationApiCatalog.Operations)
             {
                 SimulationApiOperation operation = entry;
+                // Names are unique per public overload, not per DScript method name.
+                // Keep older test IDs unchanged for the (much more common) single form.
                 string name = operation.Kind == SimulationApiKind.Observation
-                    ? "Observe_" + operation.Name
+                    ? "Observe_" + operation.Name +
+                        (SimulationApiCatalog.TryGetObservation(operation.Name, out var variants) &&
+                        variants.Count > 1 ? "_" + operation.Method.Name : string.Empty)
                     : "Order_" + operation.Method.Name;
                 if (operation.Kind == SimulationApiKind.Observation)
                     Add(name, "DScript/VM observes " + operation.Name,
@@ -252,6 +256,30 @@ namespace Directiva.EditorTests.OrchestrationTests
                         t => CheckImplicitMethod(t, operation));
                 }
             }
+
+            Add("FilterOverloadsFromDScript", "DScript can search from a neutral resource by type with optional side filtering", t =>
+            {
+                Fixture f = NewFixture();
+                var program = Compile(t,
+                    "def main():\n" +
+                    "    r = closest_resource()\n" +
+                    "    nearby = r.closest_entity(Type.Nexus)\n" +
+                    "    no_filter = closest_entity()\n" +
+                    "    enemy_base = closest_entity(Side.Enemy, Type.Nexus)\n" +
+                    "    all_nexuses = r.entities(Type.Nexus)\n" +
+                    "    anything = entities()\n" +
+                    "    enemy_units = entities(Side.Enemy, Type.Unit)\n" +
+                    "    in_range = r.entities_in_range(20, Type.Nexus)\n" +
+                    "    enemy_in_range = entities_in_range(20, Side.Enemy, Type.Unit)\n" +
+                    "    a = nearby == self.nexus and no_filter != None\n" +
+                    "    b = enemy_base == enemy_nexus() and all_nexuses.length == 2\n" +
+                    "    c = anything.length == 6 and enemy_units.length == 1\n" +
+                    "    d = in_range.length == 1 and enemy_in_range.length == 1\n" +
+                    "    return a and b and c and d\n");
+                var vm = Run(t, new SideRuntime(f.World, 1, program, 5UL), f.Unit.id);
+                t.Equal(DataTypeId.Bool, vm.ReturnValue.dataType, "filter expressions return Bool");
+                t.Equal(1UL, vm.ReturnValue.value, "type filters from neutral objects work end-to-end");
+            });
 
             Add("ShadowedByFunction", "A user def move() takes precedence over the implicit method", t =>
             {

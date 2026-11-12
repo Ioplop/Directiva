@@ -21,7 +21,7 @@ namespace Directiva.EditorTests.OrchestrationTests
 
             Add("Catalog", "All observations, overloaded orders and the manual build are registered", t =>
             {
-                t.Equal(85, SimulationApiCatalog.Operations.Count(o => o.Kind == SimulationApiKind.Observation),
+                t.Equal(88, SimulationApiCatalog.Operations.Count(o => o.Kind == SimulationApiKind.Observation),
                     "observation count");
                 t.Equal(8, SimulationApiCatalog.Operations.Count(o => o.Kind == SimulationApiKind.Order),
                     "order overload count");
@@ -33,6 +33,14 @@ namespace Directiva.EditorTests.OrchestrationTests
                 t.Check(SimulationApiCatalog.TryGetObservation("alive", out var alive) &&
                     alive[0].AllowsDeadReceiver && alive[0].MemberKind == SimulationObservationMemberKind.Property,
                     "alive is an identity property");
+                foreach (string name in new[] { "closest_entity", "entities", "entities_in_range" })
+                {
+                    t.Check(SimulationApiCatalog.TryGetObservation(name, out var filters) && filters.Count == 2,
+                        name + " supports both side-relative and type-only overloads");
+                    t.Check(filters.All(entry => entry.MemberKind == SimulationObservationMemberKind.Method),
+                        name + " remains callable as a method");
+                }
+
             });
 
             Add("PerspectivesAndSnapshots", "Queries on an enemy use its perspective; lists are independent", t =>
@@ -53,6 +61,68 @@ namespace Directiva.EditorTests.OrchestrationTests
                 var fresh = (List<SimulationEntityReference>)bridge.Observe(enemy.id, "enemies").Value;
                 t.Equal(1, fresh.Count, "mutating a returned list does not mutate simulation");
                 t.Equal(0L, world.Tick, "observation did not advance the world");
+            });
+
+            Add("FlexibleFilterDispatch", "Overloads select Side and Type independently and support neutral resource origins", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 80, height: 80);
+                var unit = SimulationTestHarness.AddUnit(world, 1, 10, 10, 0);
+                var ally = SimulationTestHarness.AddUnit(world, 1, 12, 10, 0);
+                var enemy = SimulationTestHarness.AddUnit(world, 2, 16, 10, 0);
+                var friendlyNexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(6, 20));
+                var enemyNexus = new SBNexus(world.GetSide(2), SimulationTestHarness.P(20, 20));
+                var resource = new SBResource(world.GetSide(0), SimulationTestHarness.P(24, 20), 0, 10);
+                world.EnqueueCreation(friendlyNexus);
+                world.EnqueueCreation(enemyNexus);
+                world.EnqueueCreation(resource);
+                world.Start();
+                var bridge = new SimulationBridge(world);
+
+                SimulationCallResult nearest = bridge.Observe(resource.id, "closest_entity", SimulationEntityType.Nexus);
+                t.Equal(SimulationCallStatus.Success, nearest.Status, "type-only query from resource");
+                t.Equal(enemyNexus.id, ((SimulationEntityReference)nearest.Value).Id,
+                    "resource finds its nearest nexus irrespective of side");
+                t.Equal(ally.id, ((SimulationEntityReference)
+                    bridge.Observe(unit.id, "closest_entity").Value).Id, "no-filter query");
+                t.Equal(enemy.id, ((SimulationEntityReference)
+                    bridge.Observe(unit.id, "closest_entity", SimulationSideRelation.Enemy).Value).Id,
+                    "side-only query");
+                t.Equal(enemyNexus.id, ((SimulationEntityReference)
+                    bridge.Observe(unit.id, "closest_entity", SimulationSideRelation.Enemy,
+                        SimulationEntityType.Nexus).Value).Id, "side and type query");
+
+                t.Equal(6, ((List<SimulationEntityReference>)bridge.Observe(resource.id, "entities").Value).Count,
+                    "unfiltered list from neutral resource");
+                t.Equal(2, ((List<SimulationEntityReference>)
+                    bridge.Observe(resource.id, "entities", SimulationEntityType.Nexus).Value).Count,
+                    "type-only list from neutral resource");
+                t.Equal(2, ((List<SimulationEntityReference>)
+                    bridge.Observe(unit.id, "entities", SimulationSideRelation.Enemy).Value).Count,
+                    "side-only list");
+                t.Equal(1, ((List<SimulationEntityReference>)
+                    bridge.Observe(unit.id, "entities", SimulationSideRelation.Enemy,
+                        SimulationEntityType.Unit).Value).Count, "combined list");
+
+                t.Equal(2, ((List<SimulationEntityReference>)
+                    bridge.Observe(resource.id, "entities_in_range", 5).Value).Count,
+                    "range without filters");
+                t.Equal(1, ((List<SimulationEntityReference>)
+                    bridge.Observe(resource.id, "entities_in_range", 5,
+                        SimulationEntityType.Nexus).Value).Count, "type-only range");
+                t.Equal(1, ((List<SimulationEntityReference>)
+                    bridge.Observe(unit.id, "entities_in_range", 12,
+                        SimulationSideRelation.Enemy, SimulationEntityType.Unit).Value).Count,
+                    "combined range filters");
+                t.Equal(SimulationCallStatus.Warning,
+                    bridge.Observe(resource.id, "closest_entity", SimulationSideRelation.Enemy).Status,
+                    "side-relative query is not meaningful for a neutral receiver");
+                t.Equal(SimulationCallStatus.Error,
+                    bridge.Observe(unit.id, "closest_entity", 1).Status,
+                    "numeric values cannot impersonate enum filters");
+                t.Equal(SimulationCallStatus.Error,
+                    bridge.Observe(unit.id, "entities_in_range", 1000000000).Status,
+                    "new range overload retains distance bounds protection");
+                t.Equal(0L, world.Tick, "read-only queries do not advance the world");
             });
 
             Add("DeadAndIncompatible", "Only id and alive survive death; unsupported receivers return a warning", t =>

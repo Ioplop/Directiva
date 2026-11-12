@@ -54,6 +54,12 @@ namespace Directiva.SimulationFrontend
             }
         }
 
+        /// <summary>Debugger selection does not synthesize an entity click or open menus.</summary>
+        public void SelectForDebug(SimulationEntityIdentity entity)
+        {
+            SetSelected(entity);
+        }
+
         public void ClearSelection()
         {
             if (Hovered != null)

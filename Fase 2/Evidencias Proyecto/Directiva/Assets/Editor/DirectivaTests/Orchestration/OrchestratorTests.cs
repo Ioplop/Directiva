@@ -147,10 +147,96 @@ namespace Directiva.EditorTests.OrchestrationTests
                 t.Equal(VMExecutionStatus.Faulted, status, "division by zero faults VM");
                 List<VMOutputMessage> errors = Messages(o, 1, VMOutputKind.Error);
                 t.Equal(1, errors.Count, "one error reported");
+                t.Equal(1L, o.GetErrorCount(1), "blue side accumulates one error");
+                t.Equal(0L, o.GetErrorCount(2), "red side error count remains zero");
                 t.Equal(f.FirstUnit.id, errors[0].EntityId.GetValueOrDefault(), "origin entity");
                 t.Check(!string.IsNullOrEmpty(errors[0].Text), "error text is preserved");
                 o.Update();
                 t.Equal(1, Messages(o, 1, VMOutputKind.Error).Count, "not repeated on later ticks");
+                t.Equal(1L, o.GetErrorCount(1), "fault counted once across later ticks");
+            });
+
+            Add("BreakpointPausesBeforeWorldAndResumesSameTick",
+                "Any friendly VM breakpoint freezes physics; Step advances only that VM", t =>
+            {
+                Fixture f = NewFixture(withAlly: true);
+                Orchestrator o = Create(t, f,
+                    "def main():\n    print(self.id)\n    pass\n", steps: 3);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BindInitialEntity(f.Ally.id, "test.main");
+                int hits = 0;
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    side == 1 && id == f.FirstUnit.id && file == "test.dscript" && line == 2;
+                o.BreakpointHit += (id, debug) => hits++;
+                o.Update();
+                t.Equal(1, hits, "one breakpoint at the requested source line");
+                t.Check(o.IsPausedAtBreakpoint, "match suspended by source breakpoint");
+                t.Check(o.HasPendingTick, "partially scheduled tick retained");
+                t.Equal(0L, f.World.Tick, "simulation physics has not advanced");
+                long beforeStep = o.TotalVmSteps;
+                t.Check(o.StepEntity(f.FirstUnit.id), "manually advance the paused VM");
+                t.Equal(beforeStep + 1, o.TotalVmSteps, "exactly one charged step");
+                t.Equal(0L, f.World.Tick, "manual step does not move the world");
+                t.Check(o.TryGetDebugState(f.FirstUnit.id, out var debug),
+                    "selected entity exposes current source position");
+                t.Check(debug != null, "debug snapshot available");
+                o.BreakpointPredicate = null;
+                o.ResumeFromBreakpoint();
+                o.Update();
+                t.Equal(1L, f.World.Tick, "interrupted tick finishes exactly once");
+                t.Check(!o.HasPendingTick, "no stale tick cursor after resume");
+                t.Equal(6L, o.TotalVmSteps,
+                    "2 VMs x 3 scheduled turns, including the single manual step");
+            });
+
+            Add("FaultRecoveryPreservesSharedMemory",
+                "Faulted entity VM restarts after simulated delay without resetting side globals", t =>
+            {
+                Fixture f = NewFixture();
+                Orchestrator o = Create(t, f,
+                    "shared n = 0\ndef main():\n    n += 1\n    print(n)\n    return 1 / 0\n",
+                    steps: 25);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                int faults = 0;
+                int recovered = 0;
+                o.EntityFaulted += id => { if (id == f.FirstUnit.id) faults++; };
+                o.EntityRecovered += id => { if (id == f.FirstUnit.id) recovered++; };
+                o.Update();
+                t.Equal(1, faults, "initial script failure reported exactly once");
+                t.Equal(0, recovered, "recovery is not immediate");
+                long due = o.FaultRestartDelayTicks;
+                for (long i = 0; i <= due + 2; i++) o.Update();
+                t.Check(recovered >= 1, "VM was restarted after the delay");
+                var printed = Messages(o, 1, VMOutputKind.Print).Select(m => m.Text).ToArray();
+                t.Check(printed.Contains("1") && printed.Contains("2"),
+                    "shared counter was not reinitialized during recovery");
+                t.Check(o.GetErrorCount(1) >= 2, "later faults count separately");
+            });
+
+            Add("LiveMatchStats", "Memory usage is side-specific and errors survive bounded output eviction", t =>
+            {
+                Fixture memoryFixture = NewFixture();
+                Orchestrator memory = Create(t, memoryFixture,
+                    "shared items = [1, 2, 3]\ndef main():\n    pass\n",
+                    "def main():\n    pass\n");
+                t.Check(memory.GetHeapUsage(1) > 0UL,
+                    "side one has a heap allocation from its shared list");
+                t.Equal(0UL, memory.GetHeapUsage(2),
+                    "side two has no heap allocation from its no-op program");
+
+                Fixture errorsFixture = NewFixture(withAlly: true);
+                Orchestrator match = Create(t, errorsFixture,
+                    "def boom():\n    return 1 / 0\n" +
+                    "def chatter():\n    print('still running')\n",
+                    steps: 80, logCapacity: 1);
+                match.BindInitialEntity(errorsFixture.FirstUnit.id, "test.boom");
+                match.BindInitialEntity(errorsFixture.Ally.id, "test.chatter");
+                match.Update();
+                t.Equal(1L, match.GetErrorCount(1),
+                    "one failing VM is counted regardless of other logs");
+                t.Equal(0, Messages(match, 1, VMOutputKind.Error).Count,
+                    "bounded buffer has already evicted the error message");
+                t.Equal(0L, match.GetErrorCount(2), "no failures on the enemy side");
             });
 
             Add("ImplicitOrderBeforePhysics", "Script orders execute before this tick's physical movement", t =>

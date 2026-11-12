@@ -100,7 +100,10 @@ namespace DSimulation
         private int? FindClosest(int receiverId, SimulationSideRelation? relation,
             SimulationEntityType? type)
         {
-            if (!TryAlive(receiverId, out SBEntity receiver) || receiver.side.id == 0)
+            // Side-relative filters need an affiliated receiver. Purely geometric/type
+            // queries work from neutral resources too (e.g. resource.closest_entity(Type.Nexus)).
+            if (!TryAlive(receiverId, out SBEntity receiver) ||
+                (relation.HasValue && receiver.side.id == 0))
                 return null;
 
             int? closestId = null;
@@ -319,10 +322,33 @@ namespace DSimulation
         public int? GetClosestAlly(int receiverId) =>
             FindClosest(receiverId, SimulationSideRelation.Ally, null);
 
+        /// <summary>
+        /// Returns all living entities or those of a requested type, from any side.
+        /// Includes the receiver itself; works for neutral resources as well.
+        /// </summary>
+        [SimulationObservation("entities", ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetEntitiesByType(int receiverId, SimulationEntityType? entityType = null) =>
+            FindEntities(receiverId, null, entityType);
+
         /// <summary>Returns entities matching a relative side and optional type filter.</summary>
         [SimulationObservation("entities", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
         public List<int> GetEntities(int receiverId, SimulationSideRelation side, SimulationEntityType? entityType = null) =>
             FindEntities(receiverId, side, entityType);
+
+        /// <summary>
+        /// Returns living entities within a distance, optionally restricted by type.
+        /// No side filter is required, so neutral resources can also use this query.
+        /// </summary>
+        [SimulationObservation("entities_in_range", ResultKind = SimulationObservationResultKind.EntityList)]
+        public List<int> GetEntitiesInRangeByType(int receiverId, Fixed distance,
+            SimulationEntityType? entityType = null)
+        {
+            if (!TryAlive(receiverId, out _))
+                return null;
+            if (distance < 0)
+                return new List<int>();
+            return FindEntities(receiverId, null, entityType, maximumDistance: distance);
+        }
 
         /// <summary>Returns entities within a distance that match the side and type filters.</summary>
         [SimulationObservation("entities_in_range", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.EntityList)]
@@ -335,6 +361,14 @@ namespace DSimulation
                 return new List<int>();
             return FindEntities(receiverId, side, entityType, maximumDistance: distance);
         }
+
+        /// <summary>
+        /// Finds the closest other entity, optionally restricted by type, from any side.
+        /// Unlike side-relative queries this is valid on neutral resource receivers.
+        /// </summary>
+        [SimulationObservation("closest_entity", ResultKind = SimulationObservationResultKind.Entity)]
+        public int? GetClosestEntityByType(int receiverId, SimulationEntityType? entityType = null) =>
+            FindClosest(receiverId, null, entityType);
 
         /// <summary>Finds the closest entity matching a side and optional type filter.</summary>
         [SimulationObservation("closest_entity", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity)]

@@ -24,13 +24,18 @@ namespace Directiva.EditorTests.LevelTests
                 t.Check(sample != null, "sample DirectivaLevel asset exists");
                 t.Equal(1, sample.LevelNumber, "sample level order");
                 t.Equal(0, sample.RequiredStars, "sample level is initially unlocked");
-                t.Equal("Level01", sample.CodeFolder, "enemy folder");
-                t.Equal("enemy", sample.EntryModule, "enemy entry module");
-                t.Equal("nexus_main", sample.EntryFunction, "enemy entry function");
+                // Level code is player-editable content. Validate the selected program,
+                // rather than assuming the original enemy.dscript fixture is still used.
+                t.Check(!string.IsNullOrWhiteSpace(sample.CodeFolder), "enemy folder is assigned");
+                t.Check(!string.IsNullOrWhiteSpace(sample.EntryModule), "enemy entry module is assigned");
+                t.Check(!string.IsNullOrWhiteSpace(sample.EntryFunction), "enemy entry function is assigned");
+                t.Check(!string.IsNullOrWhiteSpace(sample.ScenePath) &&
+                    sample.ScenePath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase),
+                    "selected scene is a Unity scene asset path");
                 t.Check(AssetDatabase.LoadAssetAtPath<SceneAsset>(sample.ScenePath) != null,
                     "selected scene asset exists");
-                t.Equal("Assets/Scenes/BaseSimulation", sample.SceneLoadPath,
-                    "Unity receives a scene path without the .unity extension");
+                t.Equal(sample.ScenePath.Substring(0, sample.ScenePath.Length - ".unity".Length),
+                    sample.SceneLoadPath, "Unity receives a scene path without the .unity extension");
             });
 
             Add("SampleSceneBuildIndex", "The level's full asset path resolves to an enabled scene", t =>
@@ -47,35 +52,46 @@ namespace Directiva.EditorTests.LevelTests
 
             Add("ImportedDscriptIsTextAsset", "A .dscript under Resources is importable as a TextAsset", t =>
             {
-                TextAsset text = Resources.Load<TextAsset>("Levels/Level01/enemy");
-                t.Check(text != null, "custom .dscript importer produced a TextAsset");
-                t.Contains("def nexus_main():", text.text, "source text retained");
+                DirectivaLevel sample = AssetDatabase.LoadAssetAtPath<DirectivaLevel>(SamplePath);
+                t.Check(sample != null, "sample DirectivaLevel asset exists");
+                string path = "Levels/" + sample.CodeFolder + "/" +
+                    sample.EntryModule.Replace('.', '/');
+                TextAsset text = Resources.Load<TextAsset>(path);
+                t.Check(text != null, "custom .dscript importer produced a TextAsset for " + path);
+                t.Contains("def " + sample.EntryFunction + "(", text.text,
+                    "selected entry function source retained");
             });
 
             Add("LevelProgramCompiles", "Selected enemy script compiles with its own module provider", t =>
             {
                 DirectivaLevel sample = AssetDatabase.LoadAssetAtPath<DirectivaLevel>(SamplePath);
+                t.Check(sample != null, "sample DirectivaLevel asset exists");
                 var compiled = SimulationSceneSynchronizer.CompileLevelEnemy(sample);
-                t.Check(compiled.TryGetFunctionId("enemy.nexus_main", out _),
-                    "selected nexus function linked");
-                t.Check(compiled.TryGetFunctionId("enemy.worker", out _),
-                    "the worker referenced by build is linked");
+                t.Check(compiled.TryGetFunctionId(sample.QualifiedEnemyEntry, out _),
+                    "configured entry function " + sample.QualifiedEnemyEntry + " is linked");
             });
 
             Add("RootedModuleProvider", "Imports cannot escape the selected level or reach player code", t =>
             {
-                var provider = new ResourcesLevelDScriptSourceProvider("Level01");
-                t.Check(provider.TryReadModule("enemy", out string source),
-                    "enemy module is available from its own folder");
-                t.Contains("shared charge", source, "expected enemy script read");
-                t.Check(!provider.TryReadModule("player", out _),
-                    "player workspace is never searched");
-                t.Check(!provider.TryReadModule("MissingOtherLevel.enemy", out _),
-                    "imports cannot load another level by prefix");
+                DirectivaLevel sample = AssetDatabase.LoadAssetAtPath<DirectivaLevel>(SamplePath);
+                t.Check(sample != null, "sample DirectivaLevel asset exists");
+                var provider = new ResourcesLevelDScriptSourceProvider(sample.CodeFolder);
+                t.Check(provider.TryReadModule(sample.EntryModule, out string source),
+                    "configured enemy module is available from its own folder");
+                t.Contains("def " + sample.EntryFunction + "(", source,
+                    "configured enemy source was read, not an old example script");
+                t.Check(!provider.TryReadModule("../player", out _),
+                    "module names cannot traverse into player files");
+                t.Check(!provider.TryReadModule("../Level02.lvl02", out _),
+                    "module names cannot traverse to another level");
                 bool rejected = false;
-                try { new ResourcesLevelDScriptSourceProvider("../Level01"); }
+                try { new ResourcesLevelDScriptSourceProvider("../" + sample.CodeFolder); }
                 catch (ArgumentException) { rejected = true; }
-                t.Check(rejected, "directory traversal is rejected");
+                t.Check(rejected, "directory traversal in the configured folder is rejected");
+                rejected = false;
+                try { new ResourcesLevelDScriptSourceProvider("/" + sample.CodeFolder); }
+                catch (ArgumentException) { rejected = true; }
+                t.Check(rejected, "absolute Resources folder is rejected");
             });
 
             Add("LevelSortPriority", "Number, required stars, name, then first list occurrence", t =>

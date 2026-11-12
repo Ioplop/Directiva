@@ -214,13 +214,28 @@ namespace DSExecution.VirtualMachine
 
         /// <summary>
         /// Re-enters a naturally completed function with fresh private execution state.
-        /// Globals, heap, random state and VM identity remain shared/unchanged. A faulted
-        /// VM cannot restart: the orchestrator reports the error and stops scheduling it.
+        /// Globals, heap, random state and VM identity remain shared/unchanged.
         /// </summary>
         public void RestartCompleted()
         {
             if (Status != VMExecutionStatus.Completed)
                 throw new InvalidOperationException("Only naturally completed VMs can restart.");
+            ResetToEntryFunction();
+        }
+
+        /// <summary>
+        /// Re-enter a faulted VM after its host's recovery delay. The same VM and
+        /// shared context are retained, but its locals, stack and error are cleared.
+        /// </summary>
+        public void RestartFaulted()
+        {
+            if (Status != VMExecutionStatus.Faulted)
+                throw new InvalidOperationException("Only faulted VMs can be recovered.");
+            ResetToEntryFunction();
+        }
+
+        private void ResetToEntryFunction()
+        {
             if (!Code.TryGetFunction(EntryFunctionId, out FunctionContext entry))
                 throw new InvalidOperationException("The VM entry function no longer exists.");
             if (entry.ParameterCount != 0)
