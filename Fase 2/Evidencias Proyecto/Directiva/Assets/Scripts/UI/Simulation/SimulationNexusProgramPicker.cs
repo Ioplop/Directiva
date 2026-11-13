@@ -44,7 +44,9 @@ namespace Directiva.SimulationUI
             panel = new VisualElement { pickingMode = PickingMode.Position };
             panel.AddToClassList("sim-nexus-program-panel");
             panel.style.display = DisplayStyle.None;
-            overlay.Add(panel);
+            // UI Toolkit's later siblings render and receive pointer input first.
+            // Always sit behind the editor/HUD, regardless of creation order.
+            overlay.Insert(0, panel);
 
             var header = new VisualElement();
             header.AddToClassList("sim-nexus-panel-header");
@@ -209,6 +211,17 @@ namespace Directiva.SimulationUI
             status.EnableInClassList("sim-nexus-panel-error", isError);
         }
 
+        /// <summary>
+        /// A dropdown can retain keyboard focus after another window is clicked.
+        /// Release only focus owned by this selector, leaving editor focus intact.
+        /// </summary>
+        public void ReleaseKeyboardFocus()
+        {
+            var focused = panel.panel?.focusController?.focusedElement as VisualElement;
+            if (focused != null && panel.Contains(focused))
+                focused.Blur();
+        }
+
         public void Show()
         {
             visible = true;
@@ -217,6 +230,7 @@ namespace Directiva.SimulationUI
 
         public void Hide()
         {
+            ReleaseKeyboardFocus();
             visible = false;
             panel.style.display = DisplayStyle.None;
         }

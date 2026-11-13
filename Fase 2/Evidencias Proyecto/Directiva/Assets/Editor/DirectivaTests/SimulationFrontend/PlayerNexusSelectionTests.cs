@@ -229,6 +229,36 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 });
             });
 
+            Add("PickerStaysBehindEditorAndReleasesVisibility",
+                "Nexus selector stays behind overlapping editor/HUD controls and closes cleanly", t =>
+            {
+                var overlay = new VisualElement();
+                var hud = new VisualElement { name = "hud" };
+                var editor = new VisualElement { name = "code-editor" };
+                overlay.Add(hud);
+                overlay.Add(editor);
+                // Construct AFTER the editor, as the simulation HUD does.
+                var picker = new SimulationNexusProgramPicker(overlay);
+                var pickerPanel = overlay.Q<VisualElement>(className: "sim-nexus-program-panel");
+                t.Check(pickerPanel != null, "picker panel exists");
+                t.Equal(0, overlay.IndexOf(pickerPanel),
+                    "selector must be behind even previously created UI panels");
+                t.Check(overlay.IndexOf(pickerPanel) < overlay.IndexOf(editor),
+                    "editor is visually and interactively above picker");
+                t.Equal(PickingMode.Position, pickerPanel.pickingMode,
+                    "selector remains clickable in its uncovered area");
+
+                picker.Show();
+                t.Check(picker.Visible, "selector opens normally");
+                t.Equal(DisplayStyle.Flex, pickerPanel.style.display.value,
+                    "selector is shown while selecting a program");
+                picker.ReleaseKeyboardFocus(); // Safe if no panel or dropdown has focus.
+                picker.Hide();
+                t.Check(!picker.Visible, "selector closes on request");
+                t.Equal(DisplayStyle.None, pickerPanel.style.display.value,
+                    "hidden selector is removed from hit testing");
+            });
+
             Add("PickerDoesNotInventAnInitialSelection",
                 "A populated script list still has blank script and function fields until chosen", t =>
             {

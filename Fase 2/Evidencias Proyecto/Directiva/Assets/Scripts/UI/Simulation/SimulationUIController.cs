@@ -86,6 +86,7 @@ namespace Directiva.SimulationUI
         // Disabled UI Toolkit buttons do not reliably receive hover events.
         // The enabled transparent sibling keeps the explanatory tooltip usable.
         private VisualElement _playDisabledHover;
+        private HoverTooltipController _hudTooltips;
         private string _playBlockReasonKey = "nexus_select_before_play";
         private float _dockedWidth;
         private bool _initialWidthMeasured;
@@ -117,6 +118,7 @@ namespace Directiva.SimulationUI
             foreach (var entry in _controlButtons)
                 entry.Value.tooltip = T(entry.Key);
             RefreshPlayAvailability();
+            _hudTooltips?.Hide();
             SelectPlayback(_playbackState);
             _nexusPicker?.Relocalize();
             _matchStats?.Relocalize();
@@ -289,8 +291,23 @@ namespace Directiva.SimulationUI
             _mainMenuButton = new Button(ReturnToMainMenu) { text = T("main_menu") };
             _mainMenuButton.AddToClassList("sim-menu-button");
             overlay.Add(_mainMenuButton);
-            // Inside the same UIDocument: no second full-screen hit-test layer.
+            // Inside this UIDocument, the picker inserts itself behind all other
+            // panels, so an overlapping code editor always receives the click.
             _nexusPicker = new SimulationNexusProgramPicker(overlay);
+
+            // VisualElement.tooltip is Editor-only. Reuse the editor's runtime
+            // tooltip implementation for Play, including when its Button is disabled.
+            // Register the always-enabled slot, not the disabled Button: the hover
+            // overlay catches pointer movement while the Button is unavailable.
+            // Construct last so the tooltip draws above the editor and HUD.
+            _hudTooltips = new HoverTooltipController(_root, overlay, 0.65f);
+            _hudTooltips.Register(playSlot, () => T(string.IsNullOrEmpty(_playBlockReasonKey)
+                ? "play" : _playBlockReasonKey));
+
+            // Clicking anywhere in the editor gives it priority over keyboard
+            // focus previously held by a dropdown in the Nexus selector.
+            _editorPane.RegisterCallback<PointerDownEvent>(
+                _ => _nexusPicker?.ReleaseKeyboardFocus(), TrickleDown.TrickleDown);
 
             // Observe UI-initiated drags so future 3D code can ignore their continuation.
             _root.RegisterCallback<PointerDownEvent>(evt =>
@@ -380,6 +397,8 @@ namespace Directiva.SimulationUI
         /// </summary>
         public void SetPlayAvailability(string disabledReasonKey)
         {
+            if (!string.Equals(_playBlockReasonKey, disabledReasonKey, StringComparison.Ordinal))
+                _hudTooltips?.Hide();
             _playBlockReasonKey = disabledReasonKey;
             RefreshPlayAvailability();
         }
@@ -390,8 +409,9 @@ namespace Directiva.SimulationUI
             bool canPlay = string.IsNullOrEmpty(_playBlockReasonKey);
             _playButton.SetEnabled(canPlay);
             string tooltip = T(canPlay ? "play" : _playBlockReasonKey);
+            // Keep the text on the Button for Editor inspection. Runtime tooltips
+            // are supplied by _hudTooltips, which tracks the enabled play slot.
             _playButton.tooltip = tooltip;
-            _playDisabledHover.tooltip = canPlay ? string.Empty : tooltip;
             _playDisabledHover.style.display = canPlay ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
@@ -408,6 +428,10 @@ namespace Directiva.SimulationUI
         /// </summary>
         public void SetPlaybackFromRuntime(ScriptExecutionState state)
         {
+            // Close only after the runtime confirms Play actually started.
+            // A rejected Play must leave the selector open for corrections.
+            if (state == ScriptExecutionState.Running)
+                _nexusPicker?.Hide();
             int index = state == ScriptExecutionState.Running ? 0 :
                 state == ScriptExecutionState.Paused ? 2 : 1;
             SelectPlayback(index);

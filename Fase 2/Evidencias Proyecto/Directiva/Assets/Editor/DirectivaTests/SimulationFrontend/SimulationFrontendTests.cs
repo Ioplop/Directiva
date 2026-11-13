@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Directiva.CodeUI;
 using Directiva.SimulationFrontend;
 using Directiva.SimulationUI;
 using DSimulation;
@@ -37,6 +38,36 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                     "valid saved program and level permit starting");
                 t.Check(Policy(true, true, true, true, false) == null,
                     "a paused match resumes its precompiled VM even after an invalid save");
+            });
+
+            Add("DisabledPlayUsesRuntimeTooltip",
+                "The Play explanation has a hoverable host and a real runtime popup", t =>
+            {
+                var root = new VisualElement();
+                var overlay = new VisualElement();
+                root.Add(overlay);
+                var playSlot = new VisualElement();
+                overlay.Add(playSlot);
+                var play = new Button();
+                playSlot.Add(play);
+                play.SetEnabled(false);
+                var hoverTarget = new VisualElement { pickingMode = PickingMode.Position };
+                playSlot.Add(hoverTarget);
+                var tooltips = new HoverTooltipController(root, overlay, 0.65f);
+                tooltips.Register(playSlot, () => "Cannot start: code has errors");
+
+                t.Check(!play.enabledInHierarchy, "Play is truly disabled");
+                t.Check(playSlot.enabledInHierarchy, "its parent slot remains enabled");
+                t.Equal(PickingMode.Position, hoverTarget.pickingMode,
+                    "enabled transparent overlay receives pointer movement");
+                var popup = overlay.Q<VisualElement>(className: "directiva-tooltip");
+                t.Check(popup != null, "custom runtime tooltip popup is created");
+                t.Check(popup.Q<Label>(className: "directiva-tooltip-label") != null,
+                    "tooltip includes the message label");
+                t.Equal(PickingMode.Ignore, popup.pickingMode,
+                    "tooltip never steals mouse input");
+                t.Equal(DisplayStyle.None, popup.style.display.value,
+                    "tooltip begins hidden until hover delay completes");
             });
 
             Add("PlayerProgramStartsUnassigned",
