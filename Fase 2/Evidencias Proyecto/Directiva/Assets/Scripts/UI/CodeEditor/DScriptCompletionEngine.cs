@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using DSCompilation.DScript;
 using DSCompilation.DScript.Ast;
 using DSCompilation.DScript.Lexing;
@@ -24,11 +25,14 @@ namespace Directiva.CodeUI
         public string Type { get; }
         public bool IsCallable { get; }
         public bool TakesArguments { get; }
+        // A callable is also a first-class value. Context decides whether to invoke it.
+        public bool InsertParentheses { get; }
         public DScriptCompletionItem(string name, string kind, string detail = null, string type = null,
-            bool isCallable = false, bool takesArguments = false)
+            bool isCallable = false, bool takesArguments = false, bool insertParentheses = true)
         {
             Name = name; Kind = kind; Detail = detail ?? string.Empty; Type = type ?? string.Empty;
             IsCallable = isCallable; TakesArguments = takesArguments;
+            InsertParentheses = isCallable && insertParentheses;
         }
     }
 
@@ -51,7 +55,7 @@ namespace Directiva.CodeUI
         private const string EntityType = "SimulationObject";
         private const string ModulePrefix = "module:";
         private static readonly string[] TypeNames =
-            { "SimulationObject", "Int", "Decimal", "Bool", "String", "Tuple", "List", "Set", "Dict", "Range", "None" };
+            { "SimulationObject", "Int", "Decimal", "Bool", "String", "Tuple", "List", "Set", "Dict", "Range", "None", "Function" };
         private static readonly string[] Keywords =
             { "def", "return", "if", "elif", "else", "for", "while", "in", "break", "continue", "pass",
               "shared", "import", "from", "as", "and", "or", "not", "True", "False", "None" };
@@ -153,6 +157,8 @@ namespace Directiva.CodeUI
                 else if (IsTypeHintContext(before))
                 {
                     foreach (string name in TypeNames) Add(name, "type");
+                    foreach (string name in NativeLibrary.SimulationEnumModules)
+                        Add(name, "type");
                 }
                 else if (IsImportContext(before, out string importedFrom))
                 {
@@ -200,13 +206,22 @@ namespace Directiva.CodeUI
                     {
                         foreach (var symbol in symbols.Exports.Values.Concat(symbols.Imports.Values))
                             Add(symbol.Name, SymbolLabel(symbol.Kind), DescribeSymbol(symbol, analysis),
-                                context.SymbolType(symbol, new HashSet<string>(StringComparer.Ordinal)));
+                                context.CompletionType(symbol));
                     }
                     foreach (var variable in env)
                     {
                         if (atModuleScope && variable.Key == "self") continue;
+                        // Local names take precedence over methods and functions
+                        // with the same spelling, just as the DScript binder does.
+                        if (candidates.ContainsKey(variable.Key)) candidates.Remove(variable.Key);
                         Add(variable.Key, "variable", variable.Value, variable.Value);
                     }
+                    // Recovery after an unfinished call (e.g. build(uni) can hide
+                    // later top-level defs from the parser. Read only complete,
+                    // column-zero function headers as a conservative fallback.
+                    foreach (var declared in FunctionHeaders(source))
+                        if (!candidates.ContainsKey(declared.Name))
+                            Add(declared.Name, "function", declared.Detail, declared.ReturnType);
                     if (!atModuleScope && function != null)
                         foreach (var method in SimulationApiCatalog.Operations.Where(op =>
                             op.Kind == SimulationApiKind.Order || op.MemberKind == SimulationObservationMemberKind.Method))
@@ -215,13 +230,50 @@ namespace Directiva.CodeUI
             }
             catch (Exception)
             {
-                // Editor assistance must never prevent typing because another module is
-                // incomplete, a file disappeared, or a native provider was unavailable.
-                return Empty(caret);
+                // A damaged/incomplete provider must not break the editor. The
+                // conservative header scan can still recover later user functions
+                // without making up locals, imports or member types.
+                if (afterDot || inImport || inTypeHint || atModuleScope) return Empty(caret);
+                foreach (var declared in FunctionHeaders(source))
+                    Add(declared.Name, "function", declared.Detail, declared.ReturnType);
             }
+            // Analyze once for the entire popup; each item shares its insertion
+            // context. Revalidation in CodeEditorCompletionText.Build is separate
+            // and happens only when the player actually accepts an item.
+            string expected = inImport ? null :
+                DScriptExpectedArgument.Get(moduleName, source, start, provider);
             var sorted = candidates.Values.OrderBy(i => i.Name.StartsWith(prefix, StringComparison.Ordinal) ? 0 : 1)
-                .ThenBy(i => i.Name.Length).ThenBy(i => i.Name, StringComparer.Ordinal).Take(40).ToArray();
+                .ThenBy(i => i.Name.Length).ThenBy(i => i.Name, StringComparer.Ordinal).Take(40)
+                .Select(item =>
+                {
+                    if (!item.IsCallable) return item;
+                    bool insert = !inImport && (expected != "Function" ||
+                        CanonicalType(item.Type) == "Function");
+                    return new DScriptCompletionItem(item.Name, item.Kind, item.Detail, item.Type,
+                        item.IsCallable, item.TakesArguments, insert);
+                }).ToArray();
             return new DScriptCompletionResult(start, caret, sorted);
+        }
+
+        /// <summary>
+        /// Final, source-based check for completing a function *call* rather than
+        /// a function *reference*. This is intentionally independent of the cached
+        /// completion result: Tab, Enter and pointer selection all use the current
+        /// replacement source, including import statements and nested calls.
+        /// </summary>
+        internal static bool ShouldInsertCallParentheses(string source, int replaceStart,
+            DScriptCompletionItem item)
+        {
+            if (item == null || !item.IsCallable || source == null ||
+                replaceStart < 0 || replaceStart > source.Length)
+                return false;
+
+            int lineStart = source.LastIndexOf('\n', Math.Max(0, replaceStart - 1)) + 1;
+            string before = source.Substring(lineStart, replaceStart - lineStart);
+            if (IsImportContext(before, out _)) return false;
+
+            string expected = DScriptExpectedArgument.Get(null, source, replaceStart, null);
+            return expected != "Function" || CanonicalType(item.Type) == "Function";
         }
 
         /// <summary>
@@ -275,6 +327,80 @@ namespace Directiva.CodeUI
             return types;
         }
 
+        internal readonly struct UserFunctionHeader
+        {
+            internal readonly int Start;
+            internal readonly string Name;
+            internal readonly string Detail;
+            internal readonly string ReturnType;
+            internal readonly IReadOnlyList<string> Parameters;
+            internal readonly IReadOnlyList<string> ParameterTypes;
+            internal UserFunctionHeader(int start, string name, string detail, string returnType,
+                IReadOnlyList<string> parameters, IReadOnlyList<string> parameterTypes)
+            { Start = start; Name = name; Detail = detail; ReturnType = returnType;
+              Parameters = parameters; ParameterTypes = parameterTypes; }
+        }
+
+        // Parser recovery sometimes loses everything after an unmatched '(' while
+        // editing. Only fully-formed, non-indented def headers are safe to recover;
+        // no guesses are made about incomplete headers or nested declarations.
+        internal static IEnumerable<UserFunctionHeader> FunctionHeaders(string source)
+        {
+            if (string.IsNullOrEmpty(source)) yield break;
+            const string pattern = @"(?m)^def[ \t]+(?<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\((?<args>[^\r\n)]*)\)[ \t]*(?:->[ \t]*(?<ret>[A-Za-z_][A-Za-z0-9_.]*)[ \t]*)?:";
+            foreach (Match match in Regex.Matches(source, pattern))
+            {
+                string raw = match.Groups["args"].Value;
+                var names = new List<string>();
+                var types = new List<string>();
+                bool valid = true;
+                if (raw.Trim().Length != 0)
+                    foreach (string part in raw.Split(','))
+                    {
+                        string[] pieces = part.Split(':');
+                        string name = pieces[0].Trim();
+                        if (pieces.Length > 2 || !Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+                        { valid = false; break; }
+                        names.Add(name);
+                        types.Add(pieces.Length == 2 ? CanonicalType(pieces[1].Trim()) : null);
+                    }
+                if (!valid) continue;
+                string ret = CanonicalType(match.Groups["ret"].Value);
+                string detail = "(" + string.Join(", ", names.Select((n,i) =>
+                    types[i] == null ? n : n + ": " + types[i])) + ")" +
+                    (ret == null ? "" : " -> " + ret);
+                yield return new UserFunctionHeader(match.Index, match.Groups["name"].Value, detail,
+                    ret, names, types);
+            }
+        }
+
+        internal static string CanonicalType(string type)
+        {
+            if (string.IsNullOrWhiteSpace(type)) return null;
+            switch (type.Trim().ToLowerInvariant())
+            {
+                case "bool": case "boolean": return "Bool";
+                case "int": case "integer": return "Int";
+                case "float": case "decimal": return "Decimal";
+                case "str": case "string": return "String";
+                case "function": case "callable": case "delegate": return "Function";
+                case "simulationobject": return "SimulationObject";
+                case "list": return "List"; case "tuple": return "Tuple";
+                case "set": return "Set"; case "dict": return "Dict";
+                case "range": return "Range"; case "none": return "None";
+                default: return type.Trim();
+            }
+        }
+
+        internal static string InferKnownType(DScriptAnalysis analysis, string module,
+            FunctionStatement function, Expression expression, int at)
+        {
+            if (analysis == null || expression == null) return null;
+            var context = new TypeContext(analysis, module, function);
+            return context.TypeOf(expression, context.LocalsAt(at),
+                new HashSet<string>(StringComparer.Ordinal));
+        }
+
         private static DScriptCompletionResult Empty(int caret) =>
             new DScriptCompletionResult(caret, caret, Array.Empty<DScriptCompletionItem>());
         private static bool IsIdentifierPart(char c) => c == '_' || char.IsLetterOrDigit(c);
@@ -300,6 +426,12 @@ namespace Directiva.CodeUI
 
         private static bool IsTypeHintContext(string before)
         {
+            // Both declaration kinds use type hints: def f(x: Type) and
+            // shared/local x: Type = expression. A colon in if/while/else
+            // is *not* a variable annotation.
+            if (Regex.IsMatch(before,
+                @"^\s*(?:shared\s+)?[A-Za-z_][A-Za-z0-9_]*\s*:\s*$"))
+                return true;
             int def = before.IndexOf("def ", StringComparison.Ordinal);
             if (def < 0) return false;
             int arrow = before.LastIndexOf("->", StringComparison.Ordinal);
@@ -431,8 +563,10 @@ namespace Directiva.CodeUI
             }
             else if (analysis.ModuleSymbols.TryGetValue(module, out var symbols))
             {
+                var typeContext = new TypeContext(analysis, module, null);
                 foreach (var symbol in symbols.Exports.Values)
-                    add(symbol.Name, SymbolLabel(symbol.Kind), DescribeSymbol(symbol, analysis), "");
+                    add(symbol.Name, SymbolLabel(symbol.Kind), DescribeSymbol(symbol, analysis),
+                        typeContext.CompletionType(symbol));
             }
         }
 
@@ -456,7 +590,7 @@ namespace Directiva.CodeUI
 
         private static string DescribeSimulation(SimulationApiOperation op)
         {
-            string arguments = op.ManualRegistration ? "entry_function" :
+            string arguments = op.ManualRegistration ? "entry_function: Function" :
                 string.Join(", ", op.Arguments.Select(a => a.Name));
             return (op.MemberKind == SimulationObservationMemberKind.Property && op.Kind == SimulationApiKind.Observation
                 ? "property" : "(" + arguments + ")") +
@@ -523,9 +657,44 @@ namespace Directiva.CodeUI
             private readonly DScriptAnalysis analysis;
             private readonly string module;
             private readonly FunctionStatement function;
+            private readonly Dictionary<string, string> declaredHints;
 
             public TypeContext(DScriptAnalysis analysis, string module, FunctionStatement function)
-            { this.analysis = analysis; this.module = module; this.function = function; }
+            {
+                this.analysis = analysis; this.module = module; this.function = function;
+                declaredHints = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var group in analysis.Modules.Values.SelectMany(x =>
+                    x.Statements.OfType<SharedStatement>()).Where(x => !string.IsNullOrEmpty(x.DeclaredType))
+                    .GroupBy(x => x.Name, StringComparer.Ordinal))
+                {
+                    var types = group.Select(x => CanonicalType(x.DeclaredType))
+                        .Distinct(StringComparer.Ordinal).ToArray();
+                    if (types.Length == 1) declaredHints[group.Key] = types[0];
+                }
+                if (function != null)
+                {
+                    foreach (var parameter in function.ParameterTypes)
+                        declaredHints[parameter.Key] = CanonicalType(parameter.Value);
+                    CollectHints(function.Body);
+                }
+            }
+
+            private void CollectHints(IReadOnlyList<Statement> statements)
+            {
+                foreach (var statement in statements)
+                {
+                    if (statement is AssignmentStatement typed && typed.Target is NameExpression target &&
+                        !string.IsNullOrEmpty(typed.DeclaredType))
+                        declaredHints[target.Name] = CanonicalType(typed.DeclaredType);
+                    else if (statement is IfStatement condition)
+                    {
+                        foreach (var branch in condition.Branches) CollectHints(branch.Body);
+                        CollectHints(condition.ElseBody);
+                    }
+                    else if (statement is WhileStatement loop) CollectHints(loop.Body);
+                    else if (statement is ForStatement iterator) CollectHints(iterator.Body);
+                }
+            }
 
             public Dictionary<string, string> LocalsAt(int caret)
             {
@@ -547,14 +716,27 @@ namespace Directiva.CodeUI
                 if (fn != null)
                 {
                     foreach (string param in fn.Parameters)
-                        types[param] = fn.ParameterTypes.TryGetValue(param, out var hint) ? hint : null;
+                        types[param] = fn.ParameterTypes.TryGetValue(param, out var hint) ? CanonicalType(hint) : null;
                 }
                 return types;
+            }
+
+            // Completion items for callables describe the result of invoking them,
+            // not their first-class Function value. Mixing these up would insert
+            // () for every function when a callback is expected.
+            public string CompletionType(DScriptSymbol symbol)
+            {
+                var visited = new HashSet<string>(StringComparer.Ordinal);
+                if (symbol.Kind == SymbolKind.Function || symbol.Kind == SymbolKind.NativeFunction)
+                    return CanonicalType(TypeOfCallableSymbol(symbol, visited));
+                return CanonicalType(SymbolType(symbol, visited));
             }
 
             public string SymbolType(DScriptSymbol symbol, HashSet<string> visited)
             {
                 if (symbol.Kind == SymbolKind.Module) return ModulePrefix + symbol.QualifiedName;
+                if (symbol.Kind == SymbolKind.Function || symbol.Kind == SymbolKind.NativeFunction)
+                    return "Function";
                 if (symbol.Kind == SymbolKind.NativeConstant)
                     return symbol.QualifiedName.StartsWith("math.", StringComparison.Ordinal) ? "Decimal" : "Int";
                 if (symbol.Kind == SymbolKind.Global)
@@ -565,8 +747,13 @@ namespace Directiva.CodeUI
                     {
                         foreach (var part in analysis.Modules)
                             foreach (var shared in part.Value.Statements.OfType<SharedStatement>())
-                                if (shared.Name == symbol.Name && shared.Initializer != null)
-                                    return TypeOf(shared.Initializer, NewEnvironmentWithoutShared(part.Key), visited);
+                                if (shared.Name == symbol.Name)
+                                {
+                                    if (!string.IsNullOrEmpty(shared.DeclaredType))
+                                        return CanonicalType(shared.DeclaredType);
+                                    if (shared.Initializer != null)
+                                        return TypeOf(shared.Initializer, NewEnvironmentWithoutShared(part.Key), visited);
+                                }
                     }
                     finally { visited.Remove(identity); }
                 }
@@ -594,7 +781,8 @@ namespace Directiva.CodeUI
                 { "Dictionary" => "Dict", _ => collection.Kind.ToString() };
                 if (expr is NameExpression name)
                 {
-                    if (types.TryGetValue(name.Name, out var typ)) return typ;
+                    if (types.TryGetValue(name.Name, out var typ)) return CanonicalType(typ);
+                    if (NativeLibrary.TryGetFunctionSignature(name.Name, out _)) return "Function";
                     if (NativeLibrary.SimulationEnumModules.Contains(name.Name)) return ModulePrefix + name.Name;
                     if (analysis.ModuleSymbols.TryGetValue(module, out var symbols))
                     {
@@ -623,7 +811,16 @@ namespace Directiva.CodeUI
                     if (receiver.StartsWith(ModulePrefix, StringComparison.Ordinal))
                     {
                         string qualified = receiver.Substring(ModulePrefix.Length) + "." + property.Attribute;
-                        if (NativeLibrary.TryGetConstant(qualified, out _)) return qualified.StartsWith("math.") ? "Decimal" : "Int";
+                        if (NativeLibrary.TryGetConstant(qualified, out _))
+                        {
+                            // Simulation enums are first-class script values,
+                            // not untyped integers in editor diagnostics.
+                            string enumModule = receiver.Substring(ModulePrefix.Length);
+                            if (NativeLibrary.SimulationEnumModules.Contains(enumModule))
+                                return enumModule;
+                            return qualified.StartsWith("math.", StringComparison.Ordinal)
+                                ? "Decimal" : "Int";
+                        }
                         if (analysis.ModuleSymbols.TryGetValue(receiver.Substring(ModulePrefix.Length), out var mod) &&
                             mod.Exports.TryGetValue(property.Attribute, out var sym)) return SymbolType(sym, visited);
                     }
@@ -713,7 +910,7 @@ namespace Directiva.CodeUI
                 {
                     FunctionStatement fn = FindFunction(analysis, key);
                     if (fn == null) return null;
-                    if (!string.IsNullOrEmpty(fn.ReturnType)) return fn.ReturnType;
+                    if (!string.IsNullOrEmpty(fn.ReturnType)) return CanonicalType(fn.ReturnType);
                     string fnModule = key.Substring(0, key.LastIndexOf('.'));
                     var nested = new TypeContext(analysis, fnModule, fn);
                     var vars = nested.NewEnvironment(fnModule, fn);
@@ -751,7 +948,8 @@ namespace Directiva.CodeUI
                     if (statement is AssignmentStatement assignment && assignment.Target is NameExpression target)
                     {
                         if (assignment.Operator == "=")
-                            vars[target.Name] = TypeOf(assignment.Value, vars, visited);
+                            vars[target.Name] = declaredHints.TryGetValue(target.Name, out string typeHint)
+                                ? typeHint : TypeOf(assignment.Value, vars, visited);
                         else
                             vars[target.Name] = null;
                     }

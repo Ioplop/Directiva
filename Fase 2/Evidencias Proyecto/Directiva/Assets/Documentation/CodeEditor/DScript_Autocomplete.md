@@ -26,14 +26,25 @@ def escoger_objetivo(candidato: SimulationObject, prioridad: Int) -> SimulationO
 
 def primero() -> List:
     return list()
+
+shared atacante: Bool = False
+
+def crear():
+    objetivo: SimulationObject = self.closest_enemy()
+    return objetivo
 ```
 
 Se pueden anotar parámetros y retornos, de forma completamente opcional.
-Tipos reconocidos para sugerencias: `Int`, `Decimal`, `Bool`, `String`,
-`List`, `Set`, `Tuple`, `Dict`, `Range`, `SimulationObject` y `None`.
+También se pueden anotar variables `shared` y locales, usando `nombre: Tipo = valor`.
+Se reconoce `Function` para referencias a funciones, por ejemplo `build(unit)`.
+Tipos reconocidos para sugerencias: `Function`, `Int`, `Decimal`, `Bool`,
+`String`, `List`, `Set`, `Tuple`, `Dict`, `Range`, `SimulationObject` y `None`.
 Las anotaciones se almacenan en el AST, pero **no se emiten a DIL** ni alteran
 el tipado dinámico, el coste de instrucciones o el resultado de la VM.
-En esta versión no se realizan comprobaciones de tipo en la compilación.
+En esta versión el editor puede mostrar **advertencias no bloqueantes** cuando
+encuentra tipos incompatibles, variables no invocables o nombres que ocultan
+funciones conocidas. Las advertencias usan localización ES/EN y solo afectan a
+la vista de diagnósticos en vivo; la compilación y la VM siguen siendo dinámicas.
 
 ## Capacidades
 
@@ -48,7 +59,13 @@ En esta versión no se realizan comprobaciones de tipo en la compilación.
   del usuario; los retornos sencillos se infieren, y los complejos pueden
   llevar una anotación explícita.
 - Tolera fragmentos incompletos y no ofrece sugerencias dentro de comentarios
-  ni cadenas de texto.
+  ni cadenas de texto. Recupera declaraciones `def` posteriores al caret aunque
+  una llamada incompleta dificulte analizar el módulo.
+- El autocompletado de una función inserta `()` cuando se espera el **resultado**
+  de llamarla. Al importar o pasar una función a un parámetro `Function`, inserta
+  solo el nombre. Si la función devuelve otra función, completa la llamada `()`.
+- Los avisos sobre funciones usadas como valores pueden sugerir los paréntesis
+  al consultar el error, si se han activado las sugerencias en Opciones.
 
 ## Límites conocidos
 

@@ -92,3 +92,12 @@
 [static_module_missing_symbol]: Module '{{1}}' has no symbol '{{2}}'.
 [static_namespace_not_imported]: Namespace '{{1}}' is not imported.
 [self_reserved]: 'self' is a read-only contextual reference and cannot be declared or modified.
+
+[typed_local_initializer]: A typed local variable requires an initializer.
+
+[hint_shadow]: Warning: '{{1}}' shadows the existing symbol '{{2}}'. Later references use the new value.
+[hint_incompatible]: Warning: '{{1}}' is declared as {{2}}, but the assigned value appears to be {{3}}.
+[hint_noncallable]: Warning: '{{1}}' appears to be {{2}}, not a callable function.
+[hint_function_value]: Warning: a function value is used where {{1}} is expected.
+
+[hint_function_argument]: Warning: none of the overloads accepts a function reference in this argument.

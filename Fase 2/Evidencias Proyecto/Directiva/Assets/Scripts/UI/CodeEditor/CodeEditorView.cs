@@ -500,9 +500,8 @@ namespace Directiva.CodeUI
         {
             _signaturePopup = new VisualElement();
             _signaturePopup.name = "dscript-call-signature";
-            // The navigation arrows must receive pointer events, while their
-            // non-focusable buttons leave the typing caret in the TextField.
-            _signaturePopup.pickingMode = PickingMode.Position;
+            // Informational only: clicks on the popup pass through to the script.
+            _signaturePopup.pickingMode = PickingMode.Ignore;
             _signaturePopup.style.position = Position.Absolute;
             _signaturePopup.style.minWidth = 140f;
             _signaturePopup.style.maxWidth = 440f;
@@ -536,23 +535,18 @@ namespace Directiva.CodeUI
             _signatureName.pickingMode = PickingMode.Ignore;
             header.Add(_signatureName);
 
-            // The popup is not focusable: navigating an overload must not steal the
-            // caret from the script or turn Arrow/Tab into another editor shortcut.
+            // Show the overload count, but let Up/Down on the text input navigate.
+            // No button is drawn here: the popup intentionally cannot take focus.
             _signatureNavigation = new VisualElement();
+            _signatureNavigation.pickingMode = PickingMode.Ignore;
             _signatureNavigation.style.flexDirection = FlexDirection.Row;
             _signatureNavigation.style.alignItems = Align.Center;
             _signatureNavigation.style.marginLeft = 12f;
-            var previous = CreateSignatureNavigationButton("<", -1);
-            _signatureNavigation.Add(previous);
             _signatureOverloadCounter = new Label();
             _signatureOverloadCounter.pickingMode = PickingMode.Ignore;
             _signatureOverloadCounter.style.color = new Color(0.72f, 0.82f, 0.94f);
             _signatureOverloadCounter.style.fontSize = 11f;
-            _signatureOverloadCounter.style.marginLeft = 5f;
-            _signatureOverloadCounter.style.marginRight = 5f;
             _signatureNavigation.Add(_signatureOverloadCounter);
-            var next = CreateSignatureNavigationButton(">", +1);
-            _signatureNavigation.Add(next);
             header.Add(_signatureNavigation);
             _signaturePopup.Add(header);
             _signatureParameters = new VisualElement();
@@ -578,25 +572,6 @@ namespace Directiva.CodeUI
             popupLayer.Add(_signaturePopup);
         }
 
-        private Button CreateSignatureNavigationButton(string label, int direction)
-        {
-            var button = new Button(() => CycleSignatureOverload(direction)) { text = label };
-            button.focusable = false;
-            button.style.width = 20f;
-            button.style.height = 20f;
-            button.style.paddingLeft = 0f;
-            button.style.paddingRight = 0f;
-            button.style.paddingTop = 0f;
-            button.style.paddingBottom = 0f;
-            button.style.backgroundColor = new Color(0.19f, 0.26f, 0.35f, 0.94f);
-            button.style.color = new Color(0.91f, 0.95f, 1f);
-            button.style.borderTopLeftRadius = 3f;
-            button.style.borderTopRightRadius = 3f;
-            button.style.borderBottomLeftRadius = 3f;
-            button.style.borderBottomRightRadius = 3f;
-            return button;
-        }
-
         private void CycleSignatureOverload(int direction)
         {
             if (_signatureResult == null || _signatureResult.Overloads.Count < 2) return;
@@ -604,9 +579,8 @@ namespace Directiva.CodeUI
                 ? _signatureManualOverloadIndex : _signatureResult.PreferredOverloadIndex;
             _signatureManualOverloadIndex = DScriptCallSignatureHelp.CycleOverload(
                 current, _signatureResult.Overloads.Count, direction);
-            // Redraw the help only. Do not modify the buffer, undo stack or caret.
+            // Redraw the help only. Keyboard focus and caret remain on the input.
             RefreshSignatureHelp();
-            _textField.Focus();
         }
 
         private void ScheduleSignatureRefresh()
@@ -681,7 +655,7 @@ namespace Directiva.CodeUI
             float panelHeight = _completionLayer.resolvedStyle.height;
             string parameterText = "(" + string.Join(", ", shown.Parameters) + ")";
             int longestLine = Math.Max(info.Name.Length +
-                (info.Overloads.Count > 1 ? 18 : 0),
+                (info.Overloads.Count > 1 ? 10 : 0),
                 Math.Max(parameterText.Length, shown.ActiveArgumentChoices.Length));
             float availableWidth = Mathf.Max(1f, panelWidth - 8f);
             float popupWidth = Mathf.Min(availableWidth, Mathf.Clamp(
@@ -993,6 +967,9 @@ namespace Directiva.CodeUI
                             _diagnosticMarks.Add(mark);
                         }
                         var underline = _diagnosticMarks[used++];
+                        underline.style.backgroundColor = issue.Severity == DScriptDiagnosticSeverity.Warning
+                            ? new Color(0.98f, 0.75f, 0.24f, 0.98f)
+                            : new Color(1f, 0.35f, 0.39f, 0.95f);
                         underline.style.left = x;
                         underline.style.top = y;
                         underline.style.width = (partEnd - start) * _characterWidth;
@@ -2435,6 +2412,20 @@ namespace Directiva.CodeUI
                     HideCompletion();
                 }
             }
+            // Completion takes priority above. If there is no completion popup,
+            // Up/Down browse signatures only while multiple overloads are visible.
+            // Without signature help, Up/Down still move the caret normally.
+            if (ShouldNavigateSignatureOverloads(_completionOpen,
+                _signatureResult != null && _signaturePopup != null &&
+                    _signaturePopup.style.display.value == DisplayStyle.Flex,
+                _signatureResult?.Overloads.Count ?? 0, _isReadOnly, evt.keyCode,
+                evt.ctrlKey, evt.commandKey, evt.altKey, evt.shiftKey))
+            {
+                evt.StopImmediatePropagation();
+                CycleSignatureOverload(evt.keyCode == KeyCode.DownArrow ? +1 : -1);
+                return;
+            }
+
             // Capture Alt+Up/Down before the native TextField moves its caret.
             // Shift is deliberately excluded (VS Code uses Alt+Shift to duplicate).
             if (evt.altKey && !evt.ctrlKey && !evt.commandKey && !evt.shiftKey &&
@@ -2489,6 +2480,17 @@ namespace Directiva.CodeUI
             var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
             var edit = CodeEditorTextCommands.DeleteSelectedLines(text, cursor, select);
             ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+        }
+
+        // Pure keyboard-routing rule, kept separate for regression testing.
+        // Modified arrows must continue supporting selections and line movement.
+        private static bool ShouldNavigateSignatureOverloads(bool completionOpen,
+            bool signatureVisible, int overloadCount, bool readOnly, KeyCode keyCode,
+            bool ctrl, bool command, bool alt, bool shift)
+        {
+            return !completionOpen && signatureVisible && overloadCount > 1 && !readOnly &&
+                !ctrl && !command && !alt && !shift &&
+                (keyCode == KeyCode.UpArrow || keyCode == KeyCode.DownArrow);
         }
 
         private void OnEditorLineShortcutReleased(KeyUpEvent evt)

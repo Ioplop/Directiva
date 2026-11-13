@@ -20,7 +20,11 @@ namespace Directiva.CodeUI
             string inserted = item.Name;
             int caret = start + inserted.Length;
             string suffix = source.Substring(end);
-            if (item.IsCallable)
+            // Recheck the live insertion context, not just the cached suggestion.
+            // A function name in a `from ... import` or a Function-typed argument
+            // must remain a reference even if popup metadata was computed earlier.
+            if (item.InsertParentheses &&
+                DScriptCompletionEngine.ShouldInsertCallParentheses(source, start, item))
             {
                 // Completing an already typed call must not duplicate its parentheses.
                 if (suffix.Length == 0 || suffix[0] != '(')

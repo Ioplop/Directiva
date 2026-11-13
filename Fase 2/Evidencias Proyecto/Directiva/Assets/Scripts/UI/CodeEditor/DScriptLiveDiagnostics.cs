@@ -38,6 +38,9 @@ namespace Directiva.CodeUI
                 var visible = analysis.Diagnostics
                     .Where(d => d.Module == module && d.Span.Length > 0 &&
                         d.Span.Start >= 0 && d.Span.End <= source.Length).ToList();
+                // Informative, non-blocking diagnostics live only in the editor.
+                // An annotated dynamic value must never become a compile error.
+                visible.AddRange(DScriptSemanticWarnings.Analyze(module, source, analysis));
 
                 // The lexer reports DS1006 at EOF, without a highlightable span.
                 // Find its actual opener only after the player has moved on to a
@@ -72,9 +75,18 @@ namespace Directiva.CodeUI
         public static string Suggest(string module, string source, DScriptDiagnostic issue,
             IDScriptSourceProvider provider)
         {
-            if (issue == null || issue.Code != "DS4016" || provider == null ||
+            if (issue == null || provider == null ||
                 string.IsNullOrEmpty(module) || source == null)
                 return null;
+            if (issue.Code == "DS6204")
+            {
+                int at = issue.Span.Start;
+                int len = issue.Span.Length;
+                if (at >= 0 && len > 0 && at + len <= source.Length)
+                    return source.Substring(at, len) + "()";
+                return null;
+            }
+            if (issue.Code != "DS4016") return null;
 
             int start = issue.Span.Start;
             int length = issue.Span.Length;

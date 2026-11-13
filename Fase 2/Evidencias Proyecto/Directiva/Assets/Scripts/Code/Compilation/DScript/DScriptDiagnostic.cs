@@ -26,6 +26,8 @@ namespace DSCompilation.DScript
         public override string ToString() => Line + ":" + Column;
     }
 
+    public enum DScriptDiagnosticSeverity { Error, Warning }
+
     /// <summary>Frontend-only diagnostic, distinct from DIL parsing and runtime errors.</summary>
     public sealed class DScriptDiagnostic
     {
@@ -35,14 +37,22 @@ namespace DSCompilation.DScript
         public SourceSpan Span { get; }
         public string LocalizationKey { get; }
         public object[] LocalizationArguments { get; }
+        public DScriptDiagnosticSeverity Severity { get; }
 
         public DScriptDiagnostic(string module, string code, string message, SourceSpan span,
             string localizationKey = null, params object[] localizationArguments)
+            : this(module, code, message, span, DScriptDiagnosticSeverity.Error,
+                localizationKey, localizationArguments) { }
+
+        public DScriptDiagnostic(string module, string code, string message, SourceSpan span,
+            DScriptDiagnosticSeverity severity, string localizationKey = null,
+            params object[] localizationArguments)
         {
             Module = module ?? string.Empty;
             Code = code ?? string.Empty;
             Message = message ?? string.Empty;
             Span = span;
+            Severity = severity;
             LocalizationKey = localizationKey;
             LocalizationArguments = localizationArguments ?? Array.Empty<object>();
         }

@@ -356,6 +356,43 @@ namespace Directiva.EditorTests.DScript
                     "empty overload lists are safe");
             });
 
+            Add("SignatureKeyboardNavigationPriority", "Up/Down browse overloads only when completion is not active", t =>
+            {
+                var routing = typeof(CodeEditorView).GetMethod("ShouldNavigateSignatureOverloads",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                t.Check(routing != null, "keyboard routing rule is available");
+                bool Captures(bool completion, bool visible, int count, UnityEngine.KeyCode key,
+                    bool readOnly = false, bool ctrl = false, bool command = false,
+                    bool alt = false, bool shift = false)
+                {
+                    return (bool)routing.Invoke(null, new object[]
+                    {
+                        completion, visible, count, readOnly, key, ctrl, command, alt, shift
+                    });
+                }
+
+                t.Check(Captures(false, true, 2, UnityEngine.KeyCode.DownArrow),
+                    "Down browses visible overloads");
+                t.Check(Captures(false, true, 2, UnityEngine.KeyCode.UpArrow),
+                    "Up browses visible overloads backwards");
+                t.Check(!Captures(true, true, 2, UnityEngine.KeyCode.DownArrow),
+                    "completion popup has priority over overload navigation");
+                t.Check(!Captures(false, false, 2, UnityEngine.KeyCode.DownArrow),
+                    "hidden signature help does not capture the caret arrows");
+                t.Check(!Captures(false, true, 1, UnityEngine.KeyCode.UpArrow),
+                    "a single overload does not capture caret arrows");
+                t.Check(!Captures(false, true, 2, UnityEngine.KeyCode.LeftArrow),
+                    "horizontal caret navigation remains normal");
+                t.Check(!Captures(false, true, 2, UnityEngine.KeyCode.UpArrow, alt: true),
+                    "Alt+Up remains the move-line shortcut");
+                t.Check(!Captures(false, true, 2, UnityEngine.KeyCode.DownArrow, shift: true),
+                    "Shift+Down still extends the selection");
+                t.Check(!Captures(false, true, 2, UnityEngine.KeyCode.UpArrow, ctrl: true),
+                    "Ctrl+Up keeps the native editor behavior");
+                t.Check(!Captures(false, true, 2, UnityEngine.KeyCode.DownArrow, readOnly: true),
+                    "read-only editor does not capture overload arrows");
+            });
+
             Add("SignatureRankByArguments", "Visible arguments favor compatible overloads without hiding alternatives", t =>
             {
                 var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
@@ -514,6 +551,277 @@ namespace Directiva.EditorTests.DScript
                 const string closed = "def run():\n    move(\n        10,\n        20)\n    print('ok')\n";
                 t.Check(!DScriptLiveDiagnostics.Analyze("test", closed, provider, closed.Length)
                     .Any(i => i.Code == "DS1006"), "completed multiline call remains valid");
+            });
+
+            Add("LaterFunctionVisibleDuringIncompleteCall", "Forward function declarations survive an unfinished call", t =>
+            {
+                const string source = "def main():\n    build(uni\n\ndef unit():\n    pass\n";
+                int caret = source.IndexOf("uni\n", StringComparison.Ordinal) + 3;
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                var result = DScriptCompletionEngine.Complete("test", source, caret, provider);
+                var item = result.Items.FirstOrDefault(i => i.Name == "unit");
+                t.Check(item != null && item.IsCallable, "later def unit is offered while build( is incomplete");
+                t.Check(!item.InsertParentheses, "build expects a function reference, not unit()");
+            });
+
+            Add("LaterFunctionsInValidPrograms", "Source order does not limit function suggestions", t =>
+            {
+                const string source = "def main():\n    helper\n\ndef helper() -> Int:\n    return 4\n";
+                int caret = source.IndexOf("helper\n", StringComparison.Ordinal) + 6;
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                t.Check(DScriptCompletionEngine.Complete("test", source, caret, provider)
+                    .Items.Any(i => i.Name == "helper" && i.Type == "Int"),
+                    "a later function has the same visibility as an earlier function");
+            });
+
+            Add("ImportedFunctionsAreReferences", "Completing a from-import never inserts parentheses", t =>
+            {
+                var modules = new Dictionary<string,string> {
+                    ["test"] = "from helper import sup",
+                    ["helper"] = "def supertest():\n    pass\n"
+                };
+                var source = modules["test"];
+                var result = DScriptCompletionEngine.Complete("test", source, source.Length,
+                    new InMemoryDScriptSourceProvider(modules));
+                var item = result.Items.Single(x => x.Name == "supertest");
+                t.Check(!item.InsertParentheses, "import receives a function reference");
+                t.Equal("from helper import supertest", CodeEditorCompletionText.Build(source,
+                    result.ReplaceStart, result.ReplaceEnd, item, false).Text, "no call in an import");
+            });
+
+            Add("DelegateCompletionAndFactory", "Function-typed parameters accept refs but call factories that return Function", t =>
+            {
+                const string source = "def unit():\n    pass\ndef factory() -> Function:\n    return unit\ndef main():\n    build(fac";
+                var factory = Complete(source).Items.First(i => i.Name == "factory");
+                t.Check(factory.InsertParentheses, "factory returning Function must be called for build");
+                var refSource = source.Substring(0, source.Length - 3) + "uni";
+                var unit = Complete(refSource).Items.First(i => i.Name == "unit");
+                t.Check(!unit.InsertParentheses, "ordinary function stays a reference in build");
+                const string typed = "def launch(cb: Function):\n    cb()\ndef unit():\n    pass\ndef main():\n    launch(uni";
+                var typedItem = Complete(typed).Items.First(i => i.Name == "unit");
+                t.Check(!typedItem.InsertParentheses, "user function annotations also expect delegates");
+                var plain = Complete("def get_target() -> SimulationObject:\n    return self.nexus\ndef main():\n    move(get_tar")
+                    .Items.First(i => i.Name == "get_target");
+                t.Check(plain.InsertParentheses, "a non-function argument needs the returned value");
+            });
+
+            Add("CompletionInsertionRechecksFromImport", "Tab or Enter never calls a function named in a from-import", t =>
+            {
+                // A stale menu item may still say 'insert parentheses'. The
+                // source text, not the cached flag, is authoritative at commit.
+                const string source = "from Test.test import super";
+                var modules = new Dictionary<string, string> {
+                    ["test"] = source,
+                    ["Test.test"] = "def supertest():\n    pass\n"
+                };
+                var result = DScriptCompletionEngine.Complete("test", source, source.Length,
+                    new InMemoryDScriptSourceProvider(modules));
+                var item = result.Items.FirstOrDefault(i => i.Name == "supertest");
+                t.Check(item != null && item.IsCallable, "imported function offered");
+                t.Check(!item.InsertParentheses, "import context produces reference metadata");
+                var stale = new DScriptCompletionItem(item.Name, item.Kind, item.Detail,
+                    item.Type, true, false, true);
+                var edit = CodeEditorCompletionText.Build(source,
+                    result.ReplaceStart, result.ReplaceEnd, stale, false);
+                t.Equal("from Test.test import supertest", edit.Text,
+                    "commit revalidates the from-import instead of inserting ()");
+            });
+
+            Add("CompletionInsertionRechecksCallback", "Tab/Enter insert references for callback parameters", t =>
+            {
+                const string source =
+                    "from Test.test import supertest\n\nshared atacar = False\n\n" +
+                    "def unit():\n    move(self.nexus)\n\n" +
+                    "def main():\n    build(uni";
+                var modules = new Dictionary<string, string> {
+                    ["test"] = source, ["Test.test"] = "def supertest():\n    pass\n"
+                };
+                var result = DScriptCompletionEngine.Complete("test", source, source.Length,
+                    new InMemoryDScriptSourceProvider(modules));
+                var unit = result.Items.FirstOrDefault(i => i.Name == "unit");
+                t.Check(unit != null && unit.IsCallable, "unit() is offered as a callback");
+                t.Check(!unit.InsertParentheses, "cached metadata recognizes the delegate");
+                var stale = new DScriptCompletionItem(unit.Name, unit.Kind, unit.Detail,
+                    unit.Type, true, false, true);
+                var edit = CodeEditorCompletionText.Build(source,
+                    result.ReplaceStart, result.ReplaceEnd, stale, false);
+                t.Check(edit.Text.EndsWith("build(unit", StringComparison.Ordinal),
+                    "even a stale item inserts unit, never unit() in build");
+
+                const string factorySrc =
+                    "def unit():\n    pass\ndef factory() -> Function:\n    return unit\n" +
+                    "def main():\n    build(fac";
+                var factory = Complete(factorySrc).Items.Single(i => i.Name == "factory");
+                var factoryEdit = CodeEditorCompletionText.Build(factorySrc,
+                    factorySrc.Length - 3, factorySrc.Length, factory, false);
+                t.Check(factoryEdit.Text.EndsWith("build(factory()", StringComparison.Ordinal),
+                    "a factory returning a function must still be called");
+            });
+
+            Add("CompletionInsertionValueVersusReference", "Normal calls keep () while annotated references do not", t =>
+            {
+                const string valueSource =
+                    "def target() -> SimulationObject:\n    return self.nexus\n" +
+                    "def main():\n    move(tar";
+                var callable = Complete(valueSource).Items.First(i => i.Name == "target");
+                var value = CodeEditorCompletionText.Build(valueSource,
+                    valueSource.Length - 3, valueSource.Length, callable, false);
+                t.Check(value.Text.EndsWith("move(target()", StringComparison.Ordinal),
+                    "a value-taking argument receives the invoked result");
+
+                const string sharedSource =
+                    "shared callback: Function = uni\ndef unit():\n    pass\n";
+                int caret = sharedSource.IndexOf("uni\n", StringComparison.Ordinal) + 3;
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string>
+                    { ["test"] = sharedSource });
+                var result = DScriptCompletionEngine.Complete("test", sharedSource, caret, provider);
+                var unit = result.Items.First(i => i.Name == "unit");
+                var stale = new DScriptCompletionItem(unit.Name, unit.Kind, unit.Detail,
+                    unit.Type, true, false, true);
+                var reference = CodeEditorCompletionText.Build(sharedSource,
+                    result.ReplaceStart, result.ReplaceEnd, stale, false);
+                t.Check(reference.Text.StartsWith("shared callback: Function = unit\n",
+                    StringComparison.Ordinal), "annotated Function assignment keeps a reference");
+            });
+
+            Add("InferredFunctionReturningFunction", "Inferred callback factories are called when completed", t =>
+            {
+                const string source = "def unit():\n    pass\ndef factory():\n    return unit\ndef main():\n    build(fac";
+                var result = Complete(source);
+                var item = result.Items.First(i => i.Name == "factory");
+                t.Equal("Function", item.Type, "factory inferred to return a callable");
+                t.Check(item.InsertParentheses, "factory() must be called to supply a callback");
+            });
+
+            Add("AnnotatedSharedAndLocalCompile", "Optional typed assignments are valid and not enforced by the VM", t =>
+            {
+                const string source = "shared atacar: bool = False\ndef main():\n    objetivo: SimulationObject = None\n    atacar = True\n    return atacar\n";
+                var ast = DScriptTestHarness.Parse(t, source, out var errors);
+                t.Equal(0, errors.Count, "parser accepts both annotations");
+                var shared = ast.Statements.OfType<SharedStatement>().Single();
+                var local = ((FunctionStatement)ast.Statements.OfType<FunctionStatement>().Single())
+                    .Body.OfType<AssignmentStatement>().First();
+                t.Equal("bool", shared.DeclaredType, "shared annotation metadata");
+                t.Equal("SimulationObject", local.DeclaredType, "local annotation metadata");
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                t.Check(DScriptCompiler.Compile("test", provider).Success,
+                    "annotations disappear from executable DIL as intended");
+            });
+
+            Add("SemanticWarningsDoNotBlockCompilation", "Shadowing, wrong types and non-callable values are editor warnings", t =>
+            {
+                const string source = "shared attack: Bool = False\ndef main():\n    attack()\n    value: Int = 'hello'\n    return value\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                var issues = DScriptLiveDiagnostics.Analyze("test", source, provider);
+                foreach (string code in new[] { "DS6201", "DS6202", "DS6203" })
+                    t.Check(issues.Any(d => d.Code == code &&
+                        d.Severity == DSCompilation.DScript.DScriptDiagnosticSeverity.Warning),
+                        "expected non-blocking semantic warning " + code);
+                t.Check(DScriptCompiler.Compile("test", provider).Success,
+                    "warnings do not make otherwise-compilable DScript illegal");
+            });
+
+            Add("AnnotatedReassignments", "Typed shared and local variables keep their declared types", t =>
+            {
+                const string source = "shared active: Bool = False\ndef main():\n    active = 'wrong'\n    item: Bool = True\n    item = 10\n    active()\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                var issues = DScriptLiveDiagnostics.Analyze("test", source, provider);
+                t.Check(issues.Count(i => i.Code == "DS6202") >= 2,
+                    "shared and local incompatible reassignments are reported");
+                t.Check(issues.Any(i => i.Code == "DS6203"),
+                    "a shared Bool remains non-callable after a mismatched assignment");
+                t.Check(DScriptCompiler.Compile("test", provider).Success,
+                    "typed warnings never prevent dynamic execution");
+            });
+
+            Add("FunctionAsValueWarningsAreContextual", "Missing-call hints apply only where a non-callable is expected", t =>
+            {
+                const string source = "def unit():\n    pass\ndef main():\n    flag: Bool = unit\n    build(unit)\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source });
+                var issues = DScriptLiveDiagnostics.Analyze("test", source, provider);
+                var missing = issues.Where(i => i.Code == "DS6204").ToArray();
+                t.Equal(1, missing.Length, "typed Bool assignment warns but build(unit) does not");
+                t.Equal("unit()", DScriptLiveDiagnostics.Suggest("test", source, missing[0], provider),
+                    "optional hover-only missing-parentheses hint");
+                const string factory = "def unit():\n    pass\ndef make() -> Function:\n    return unit\ndef main():\n    build(make())\n";
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", factory,
+                    new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = factory }))
+                    .Any(i => i.Code == "DS6204"), "factory returning Function is valid");
+            });
+
+            Add("VariableAnnotationSuggestions", "Shared and local variable annotations complete type names", t =>
+            {
+                t.Check(Complete("shared callback: Fun").Items.Any(i => i.Name == "Function"),
+                    "shared Function type suggested");
+                t.Check(Complete("def main():\n    status: Bo").Items.Any(i => i.Name == "Bool"),
+                    "local Bool type suggested");
+                t.Check(Complete("def main():\n    side: Si").Items.Any(i => i.Name == "Side"),
+                    "native enum type suggested for typed variables");
+                var fromShared = Complete("shared callback: Function = un\ndef unit():\n    pass\n")
+                    .Items; // Completed declarations do not spuriously open a popup.
+                t.Check(fromShared != null, "annotated declaration is safe to analyze");
+            });
+
+            Add("AnnotatedFunctionReferences", "Typed assignments and returns insert function names without calls", t =>
+            {
+                const string shared = "shared entry: Function = uni\ndef unit():\n    pass\n";
+                int caret = shared.IndexOf("uni\n", StringComparison.Ordinal) + 3;
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = shared });
+                var item = DScriptCompletionEngine.Complete("test", shared, caret, provider)
+                    .Items.First(i => i.Name == "unit");
+                t.Check(!item.InsertParentheses, "typed shared Function receives a reference");
+                const string returning = "def unit():\n    pass\ndef factory() -> Function:\n    return uni";
+                var fn = Complete(returning).Items.First(i => i.Name == "unit");
+                t.Check(!fn.InsertParentheses, "Function return annotation accepts a function value");
+            });
+
+            Add("ShadowedNativeSignatureNoFalseWarning", "User function definitions override implicit self signatures", t =>
+            {
+                const string code = "def build(value: Int):\n    return value\ndef unit():\n    pass\ndef main():\n    build(unit)\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = code });
+                var issues = DScriptLiveDiagnostics.Analyze("test", code, provider);
+                // The user-defined build takes an Int, even though native build
+                // takes a Function. We should warn at most for the user's own
+                // annotation, never reason from the hidden native overload.
+                t.Check(issues.Any(i => i.Code == "DS6204"),
+                    "typed user build argument gets the function-as-value warning");
+                const string callback = "def build(cb: Function):\n    return cb\ndef unit():\n    pass\ndef main():\n    build(unit)\n";
+                var typedProvider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = callback });
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", callback, typedProvider)
+                    .Any(i => i.Code == "DS6204"),
+                    "typed user callback never inherits a mistaken native signature");
+            });
+
+            Add("TypedEnumerationValues", "Enum literals satisfy their script-facing type annotations", t =>
+            {
+                const string code = "def main():\n    side: Side = Side.Enemy\n    entity_type: Type = Type.Unit\n    pass\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = code });
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", code, provider)
+                    .Any(i => i.Code == "DS6202"),
+                    "Side.Enemy and Type.Unit are not incorrectly treated as Int");
+            });
+
+            Add("UntypedSharedCanChangeType", "Shared values remain dynamic without an explicit type hint", t =>
+            {
+                const string dynamicCode = "shared callback = False\ndef main():\n    callback()\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = dynamicCode });
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", dynamicCode, provider)
+                    .Any(i => i.Code == "DS6203"),
+                    "untyped shared might receive a function from a different VM");
+                const string typedCode = "shared callback: Bool = False\ndef main():\n    callback()\n";
+                var typedProvider = new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = typedCode });
+                t.Check(DScriptLiveDiagnostics.Analyze("test", typedCode, typedProvider)
+                    .Any(i => i.Code == "DS6203"),
+                    "a Bool annotation signals that invoking the value is suspicious");
+            });
+
+            Add("NoWarningOnUnknownCallable", "Unannotated dynamic variables are not falsely declared non-callable", t =>
+            {
+                const string source = "def main(x):\n    x()\n";
+                var issues = DScriptLiveDiagnostics.Analyze("test", source,
+                    new InMemoryDScriptSourceProvider(new Dictionary<string,string> { ["test"] = source }));
+                t.Check(!issues.Any(i => i.Code == "DS6203"),
+                    "a dynamic function-valued argument remains valid");
             });
 
             Add("NativeMetadata", "Native signatures are script-facing, not unhelpful CLR NativeResult", t =>

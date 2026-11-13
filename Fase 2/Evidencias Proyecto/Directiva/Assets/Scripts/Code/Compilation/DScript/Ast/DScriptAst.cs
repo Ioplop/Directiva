@@ -75,8 +75,11 @@ namespace DSCompilation.DScript.Ast
         public string Name { get; }
         public SourceSpan NameSpan { get; }
         public Expression Initializer { get; }
-        public SharedStatement(string name, SourceSpan nameSpan, Expression initializer, SourceSpan span)
-            : base(span) { Name = name; NameSpan = nameSpan; Initializer = initializer; }
+        // Optional editor-only declaration hint. No runtime type enforcement.
+        public string DeclaredType { get; }
+        public SharedStatement(string name, SourceSpan nameSpan, Expression initializer, SourceSpan span,
+            string declaredType = null)
+            : base(span) { Name = name; NameSpan = nameSpan; Initializer = initializer; DeclaredType = declaredType; }
     }
 
     public sealed class AssignmentStatement : Statement
@@ -84,8 +87,11 @@ namespace DSCompilation.DScript.Ast
         public Expression Target { get; }
         public Expression Value { get; }
         public string Operator { get; } // "=" or a supported augmented operator, e.g. "+=".
-        public AssignmentStatement(Expression target, string operation, Expression value, SourceSpan span)
-            : base(span) { Target = target; Operator = operation; Value = value; }
+        // Optional annotation on a local assignment: value: Bool = expression.
+        public string DeclaredType { get; }
+        public AssignmentStatement(Expression target, string operation, Expression value, SourceSpan span,
+            string declaredType = null)
+            : base(span) { Target = target; Operator = operation; Value = value; DeclaredType = declaredType; }
     }
 
     public sealed class ExpressionStatement : Statement

@@ -118,7 +118,7 @@ namespace Directiva.CodeUI
                             {
                                 var operation = x.Operation;
                                 var parameters = operation.ManualRegistration
-                                    ? new[] { "entry_function" }
+                                    ? new[] { "entry_function: Function" }
                                     : operation.Arguments.Select(p => DescribeArgument(p, name)).ToArray();
                                 string choices = string.Empty;
                                 if (!operation.ManualRegistration && active < operation.Arguments.Count)

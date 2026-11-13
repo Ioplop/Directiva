@@ -92,3 +92,12 @@
 [static_module_missing_symbol]: El módulo '{{1}}' no contiene el símbolo '{{2}}'.
 [static_namespace_not_imported]: El espacio de nombres '{{1}}' no está importado.
 [self_reserved]: 'self' es una referencia contextual de solo lectura y no puede declararse ni modificarse.
+
+[typed_local_initializer]: Una variable local con tipo declarado necesita un valor inicial.
+
+[hint_shadow]: Advertencia: '{{1}}' oculta el símbolo existente '{{2}}'. Las referencias posteriores usarán el nuevo valor.
+[hint_incompatible]: Advertencia: '{{1}}' tiene tipo declarado {{2}}, pero el valor asignado parece {{3}}.
+[hint_noncallable]: Advertencia: '{{1}}' parece ser {{2}}, no una función invocable.
+[hint_function_value]: Advertencia: se está usando una función donde se espera {{1}}.
+
+[hint_function_argument]: Advertencia: ninguna sobrecarga acepta una referencia a función en este argumento.

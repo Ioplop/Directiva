@@ -185,10 +185,11 @@ namespace DSCompilation.DScript.Parsing
             }
             var begin = Advance();
             var name = Expect(TokenKind.Identifier, "Expected shared variable name.", "expected_shared_name");
+            string declaredType = Match(TokenKind.Colon) ? ReadTypeHint() : null;
             Expression initializer = Match(TokenKind.Equals) ? ReadExpression() : null;
             var end = Expect(TokenKind.Newline, "Expected end of shared declaration.", "end_shared_declaration");
             return new SharedStatement(name.Text, name.Span, initializer,
-                SourceSpan.Through(begin.Span, end.Span));
+                SourceSpan.Through(begin.Span, end.Span), declaredType);
         }
 
         private Statement ReadIf()
@@ -241,7 +242,27 @@ namespace DSCompilation.DScript.Parsing
         private Statement ReadSimple()
         {
             Expression lhs = ReadExpression();
+            string declaredType = null;
+            if (lhs is NameExpression && Match(TokenKind.Colon))
+            {
+                declaredType = ReadTypeHint();
+                // Typed locals are ordinary assignments to existing VM slots.
+                // A typed declaration without initialization would introduce a
+                // new uninitialized runtime state, so require an expression.
+                if (!Is(TokenKind.Equals))
+                {
+                    Error("DS2022", "A typed local must have an initializer.", Current.Span,
+                        "typed_local_initializer");
+                    throw new BadSyntax();
+                }
+            }
             TokenKind kind = Current.Kind;
+            if (declaredType != null && kind != TokenKind.Equals)
+            {
+                Error("DS2022", "A typed local must have an initializer.", Current.Span,
+                    "typed_local_initializer");
+                throw new BadSyntax();
+            }
             if (kind == TokenKind.Equals || kind == TokenKind.PlusEqual || kind == TokenKind.MinusEqual ||
                 kind == TokenKind.StarEqual || kind == TokenKind.SlashEqual || kind == TokenKind.DoubleSlashEqual ||
                 kind == TokenKind.PercentEqual || kind == TokenKind.DoubleStarEqual)
@@ -251,7 +272,7 @@ namespace DSCompilation.DScript.Parsing
                     Error("DS2004", "Assignment target must be a variable, index or attribute.", lhs.Span, "invalid_assignment_target");
                 Expression rhs = ReadExpression();
                 var end = Expect(TokenKind.Newline, "Expected end of assignment.", "end_assignment");
-                return new AssignmentStatement(lhs, op.Text, rhs, SourceSpan.Through(lhs.Span, end.Span));
+                return new AssignmentStatement(lhs, op.Text, rhs, SourceSpan.Through(lhs.Span, end.Span), declaredType);
             }
             Expect(TokenKind.Newline, "Expected end of expression statement.", "end_expression");
             return new ExpressionStatement(lhs, lhs.Span);
