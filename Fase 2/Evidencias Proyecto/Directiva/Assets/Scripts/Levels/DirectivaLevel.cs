@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Directiva.Levels
 {
     /// <summary>
-    /// A level's menu metadata and the enemy program to load. World layout remains
-    /// owned by the chosen scene for now; this asset never stores player code.
+    /// A level owns the initial layout, simulation tuning and enemy entry program.
+    /// Player code is never stored in the level.
     /// </summary>
     [CreateAssetMenu(fileName = "NewLevel", menuName = "Directiva/Level")]
     public sealed class DirectivaLevel : ScriptableObject
@@ -29,6 +29,19 @@ namespace Directiva.Levels
         [SerializeField] private string codeFolder;
         [SerializeField] private string entryModule;
         [SerializeField] private string entryFunction;
+
+        [Header("Simulation and map")]
+        [SerializeField] private LevelWorldLayout worldLayout = new LevelWorldLayout();
+        [SerializeField] private LevelSimulationSettings simulationSettings = new LevelSimulationSettings();
+
+        // Existing assets predate these fields. Use exactly the original scene
+        // defaults when Unity deserializes a legacy level without them.
+        public LevelWorldLayout World => worldLayout ?? (worldLayout = new LevelWorldLayout());
+        public LevelSimulationSettings Settings => simulationSettings ??
+            (simulationSettings = new LevelSimulationSettings());
+
+        public DSimulation.SimulationParameters CreateSimulationParameters() =>
+            Settings.ToParameters();
 
         public string LevelName => string.IsNullOrWhiteSpace(levelName) ? name : levelName;
         public int LevelNumber => levelNumber;

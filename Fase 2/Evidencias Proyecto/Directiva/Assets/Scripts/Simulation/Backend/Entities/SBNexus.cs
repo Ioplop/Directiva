@@ -18,10 +18,10 @@ namespace DSimulation
 
         public SBNexus(SBSide side, FixedVector2 position) : base(
             side,
-            SConstants.NexusDamage, SConstants.NexusRange, SConstants.NexusAttackSpeed,
+            side.Settings.NexusDamage, side.Settings.NexusRange, side.Settings.NexusAttackSpeed,
             position, 0,
-            SConstants.NexusRadius, SConstants.NexusPriority,
-            SConstants.NexusHealth, SConstants.NexusShield, SConstants.NexusShieldRegen)
+            side.Settings.NexusRadius, side.Settings.NexusPriority,
+            side.Settings.NexusHealth, side.Settings.NexusShield, side.Settings.NexusShieldRegen)
         {
         }
 
@@ -55,7 +55,7 @@ namespace DSimulation
             FixedVector2 direction = sum / count - Position;
             // A lone nexus (or coincident centers) has no defined direction.
             direction = direction == FixedVector2.Zero ? FixedVector2.Right : direction.Normalized;
-            return Position + direction * (Radius + SConstants.UnitRadius);
+            return Position + direction * (Radius + simulation.Parameters.UnitRadius);
         }
 
         /// <summary>
@@ -66,8 +66,8 @@ namespace DSimulation
             if (!buildingRequestId.HasValue)
                 return;
 
-            buildTime += SConstants.deltaTime;
-            if (buildTime < SConstants.unitBuildTime)
+            buildTime += simulation.Parameters.DeltaTime;
+            if (buildTime < simulation.Parameters.UnitBuildTime)
                 return;
 
             FixedVector2 spawnPosition = GetSpawnPosition();

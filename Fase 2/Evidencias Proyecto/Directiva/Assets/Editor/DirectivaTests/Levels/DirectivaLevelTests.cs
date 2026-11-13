@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Directiva.Levels;
+using DMath;
+using DSimulation;
 using Directiva.MainMenu;
 using Directiva.Progress;
 using Directiva.SimulationFrontend;
@@ -104,6 +106,92 @@ namespace Directiva.EditorTests.LevelTests
                         path + ": enemy entry function is assigned");
                     t.Note(path + ": basic configuration OK");
                 }
+            });
+
+            Add("AllLevelWorldLayouts", "Every level builds a valid world from its own stored layout", t =>
+            {
+                foreach (LevelAsset asset in FindLevels(t))
+                {
+                    DirectivaLevel level = asset.Level;
+                    LevelWorldLayout layout = level.World;
+                    t.Check(layout != null, asset.Path + ": layout exists");
+                    t.Check(level.Settings != null, asset.Path + ": simulation parameters exist");
+                    try
+                    {
+                        DSimulation.Simulation sim = LevelWorldBuilder.Build(level);
+                        sim.Start();
+                        t.Equal(layout.InitialResourcesSide1, sim.GetSide(1).Resources,
+                            asset.Path + ": side 1 resources loaded from asset");
+                        t.Equal(layout.InitialResourcesSide2, sim.GetSide(2).Resources,
+                            asset.Path + ": side 2 resources loaded from asset");
+                        t.Equal(layout.Deposits.Count, sim.GetSide(0).ResourceEntities.Count,
+                            asset.Path + ": no implicit mirrored deposits added");
+                        t.Check(sim.GetSide(1).Nexus != null && sim.GetSide(2).Nexus != null,
+                            asset.Path + ": both nexus positions loaded");
+                        t.Note(asset.Path + ": world constructed from its layout");
+                    }
+                    catch (Exception ex)
+                    {
+                        t.Check(false, asset.Path + ": invalid layout/parameters: " + ex.Message);
+                    }
+                }
+            });
+
+            Add("IndependentLevelSimulationParameters",
+                "Level parameters change a new world's entities without changing unrelated worlds", t =>
+            {
+                var level = ScriptableObject.CreateInstance<DirectivaLevel>();
+                try
+                {
+                    var original = LevelWorldBuilder.Build(level);
+                    original.Start();
+                    level.Settings.nexusHealth = 220;
+                    level.Settings.unitHealth = 27;
+                    level.Settings.unitCost = 17;
+                    level.Settings.resourceHealth = 135;
+                    level.Settings.deltaTime = 0.04f;
+                    level.World.Deposits[0].Amount = 218;
+                    level.World.Deposits[0].Richness = 3;
+                    var modified = LevelWorldBuilder.Build(level);
+                    modified.Start();
+                    t.Equal((Fixed)100, original.GetSide(1).Nexus.MaxHealth,
+                        "first simulation uses original nexus health");
+                    t.Equal((Fixed)220, modified.GetSide(1).Nexus.MaxHealth,
+                        "new simulation uses configured nexus health");
+                    t.Equal((Fixed)10, original.GetSide(1).Nexus.simulation.Parameters.UnitHealth,
+                        "old simulation unit parameters remain independent");
+                    t.Equal((Fixed)27, modified.Parameters.UnitHealth,
+                        "new simulation unit parameters changed");
+                    t.Equal(10, original.Parameters.UnitCost, "old world keeps building cost");
+                    t.Equal(17, modified.Parameters.UnitCost, "new world uses changed building cost");
+                    t.Equal((Fixed)100, original.GetSide(0).ResourceEntities[0].MaxHealth,
+                        "default deposit health");
+                    t.Equal((Fixed)135, modified.GetSide(0).ResourceEntities[0].MaxHealth,
+                        "custom deposit health");
+                    t.Equal(218, modified.GetSide(0).ResourceEntities[0].Amount,
+                        "custom deposit amount");
+                    t.Equal(3, modified.GetSide(0).ResourceEntities[0].GatherAmount,
+                        "custom deposit richness");
+                    modified.Update();
+                    t.Equal(Fixed.Decimal(4, 2), modified.Time,
+                        "simulation time uses configured tick duration");
+                }
+                finally { UnityEngine.Object.DestroyImmediate(level); }
+            });
+
+            Add("LevelMirrorGeometry", "Axis and point reflections yield expected coordinates", t =>
+            {
+                var center = new Vector2(25f, 25f);
+                var source = new Vector2(9f, 20f);
+                Vector2 point = LevelMirrorMath.Reflect(source, LevelMirrorMode.Point, center, 90f);
+                Vector2 vertical = LevelMirrorMath.Reflect(source, LevelMirrorMode.Axis, center, 90f);
+                t.Check(Vector2.Distance(point, new Vector2(41f, 30f)) < 0.0001f,
+                    "point reflection mirrors both axes");
+                t.Check(Vector2.Distance(vertical, new Vector2(41f, 20f)) < 0.0001f,
+                    "vertical-axis reflection preserves Y");
+                t.Check(Vector2.Distance(LevelMirrorMath.Reflect(point, LevelMirrorMode.Point,
+                    center, 90f), source) < 0.0001f,
+                    "reflection is its own inverse");
             });
 
             Add("AllLevelsUnlockable", "Every level can be unlocked using stars from lower-numbered levels", t =>

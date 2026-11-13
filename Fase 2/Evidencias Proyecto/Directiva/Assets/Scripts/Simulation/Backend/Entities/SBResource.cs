@@ -15,8 +15,8 @@ namespace DSimulation
 
         public SBResource(SBSide side, FixedVector2 position, Fixed rotation, int resources, int richness = 1) : base(
             side, position, rotation,
-            SConstants.ResourceRadius, SConstants.ResourcePriority,
-            SConstants.ResourceHealth, SConstants.ResourceShields, SConstants.ResourceShieldRegen)
+            side.Settings.ResourceRadius, side.Settings.ResourcePriority,
+            side.Settings.ResourceHealth, side.Settings.ResourceShields, side.Settings.ResourceShieldRegen)
         { 
             Amount = resources;
             InitialAmount = resources;

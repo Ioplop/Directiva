@@ -233,10 +233,10 @@ namespace DSimulation
         /// </summary>
         protected virtual void RegenShields()
         {
-            if (ShieldRegen * SConstants.deltaTime != 0 &&
-                simulation.Time - LastDamage >= SConstants.ShieldRegenCooldown)
+            if (ShieldRegen * simulation.Parameters.DeltaTime != 0 &&
+                simulation.Time - LastDamage >= simulation.Parameters.ShieldRegenCooldown)
             {
-                Fixed newShields = (Shields + ShieldRegen * SConstants.deltaTime)
+                Fixed newShields = (Shields + ShieldRegen * simulation.Parameters.DeltaTime)
                     .Clamp(0, MaxShields);
 
                 if (newShields != Shields)

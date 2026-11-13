@@ -271,7 +271,7 @@ namespace DSimulation
         {
             if (!TryUnit(receiverId, out SBUnit unit) || !TryResource(resourceId, out SBResource resource))
                 return null;
-            Fixed range = unit.Radius + resource.Radius + SBUnit.gatherDistance;
+            Fixed range = unit.Radius + resource.Radius + simulation.Parameters.GatherDistance;
             return (resource.Position - unit.Position).SqrMagnitude <= range * range;
         }
 
@@ -426,7 +426,7 @@ namespace DSimulation
         {
             if (!TryAlive(receiverId, out SBEntity entity))
                 return null;
-            return Fixed.Max(0, SConstants.ShieldRegenCooldown - (simulation.Time - entity.LastDamage));
+            return Fixed.Max(0, simulation.Parameters.ShieldRegenCooldown - (simulation.Time - entity.LastDamage));
         }
 
         /// <summary>Returns the attack range of a unit or nexus.</summary>
@@ -555,12 +555,12 @@ namespace DSimulation
         /// <summary>Returns the unit linear acceleration.</summary>
         [SimulationObservation("acceleration", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetAcceleration(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.acceleration : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.Acceleration : null;
 
         /// <summary>Returns the unit maximum angular velocity.</summary>
         [SimulationObservation("turn_speed", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetTurnSpeed(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.angularVelocity : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.AngularVelocity : null;
 
         // Cargo and gathering
 
@@ -572,12 +572,12 @@ namespace DSimulation
         /// <summary>Returns the maximum number of resources the unit can carry.</summary>
         [SimulationObservation("cargo_capacity", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetCargoCapacity(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.maxCargo : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.MaxCargo : null;
 
         /// <summary>Checks whether the unit cargo is at capacity.</summary>
         [SimulationObservation("is_cargo_full", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public bool? IsCargoFull(int receiverId) =>
-            TryUnit(receiverId, out SBUnit unit) ? unit.Cargo >= SBUnit.maxCargo : null;
+            TryUnit(receiverId, out SBUnit unit) ? unit.Cargo >= simulation.Parameters.MaxCargo : null;
 
         /// <summary>Returns elapsed time toward the unit next resource extraction.</summary>
         [SimulationObservation("gather_progress", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
@@ -587,22 +587,22 @@ namespace DSimulation
         /// <summary>Returns the time required for one resource extraction.</summary>
         [SimulationObservation("gather_interval", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetGatherInterval(int receiverId) =>
-            TryUnit(receiverId, out _) ? SConstants.resourceGatherSpeed : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.ResourceGatherSpeed : null;
 
         /// <summary>Returns the gathering margin beyond the combined entity radii.</summary>
         [SimulationObservation("gather_distance", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetGatherDistance(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.gatherDistance : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.GatherDistance : null;
 
         /// <summary>Returns the automatic unloading margin beyond the combined entity radii.</summary>
         [SimulationObservation("unload_distance", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetUnloadDistance(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.unloadDistance : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.UnloadDistance : null;
 
         /// <summary>Returns the multiplicative speed factor applied for each carried resource.</summary>
         [SimulationObservation("cargo_slowdown_factor", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetCargoSlowdownFactor(int receiverId) =>
-            TryUnit(receiverId, out _) ? SBUnit.cargoSlowdown : null;
+            TryUnit(receiverId, out _) ? simulation.Parameters.CargoSlowdown : null;
 
         /// <summary>Checks whether a loaded unit is within unloading range of its living nexus.</summary>
         [SimulationObservation("can_unload", AppliesTo = SimulationEntityKinds.Unit, MemberKind = SimulationObservationMemberKind.Property)]
@@ -613,7 +613,7 @@ namespace DSimulation
             SBNexus nexus = unit.side.Nexus;
             if (unit.Cargo == 0 || nexus == null || !nexus.alive)
                 return false;
-            Fixed distance = unit.Radius + nexus.Radius + SBUnit.unloadDistance;
+            Fixed distance = unit.Radius + nexus.Radius + simulation.Parameters.UnloadDistance;
             return (nexus.Position - unit.Position).SqrMagnitude <= distance * distance;
         }
 
@@ -663,18 +663,18 @@ namespace DSimulation
         /// <summary>Returns the resource cost of constructing a unit.</summary>
         [SimulationObservation("unit_cost", MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetUnitCost(int receiverId) =>
-            TryAlive(receiverId, out _) ? SConstants.unitCost : null;
+            TryAlive(receiverId, out _) ? simulation.Parameters.UnitCost : null;
 
         /// <summary>Returns the time needed to construct a unit.</summary>
         [SimulationObservation("unit_build_time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetUnitBuildTime(int receiverId) =>
-            TryAlive(receiverId, out _) ? SConstants.unitBuildTime : null;
+            TryAlive(receiverId, out _) ? simulation.Parameters.UnitBuildTime : null;
 
         /// <summary>Returns the time left in the nexus current construction.</summary>
         [SimulationObservation("build_time_remaining", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetBuildTimeRemaining(int receiverId) =>
             TryNexus(receiverId, out SBNexus nexus) && nexus.IsBuilding
-                ? Fixed.Max(0, SConstants.unitBuildTime - nexus.BuildProgress) : null;
+                ? Fixed.Max(0, simulation.Parameters.UnitBuildTime - nexus.BuildProgress) : null;
 
         /// <summary>Returns the elapsed time of the nexus current construction.</summary>
         [SimulationObservation("build_progress", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
@@ -690,7 +690,7 @@ namespace DSimulation
         [SimulationObservation("can_build", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
         public bool? CanBuild(int receiverId) =>
             TryNexus(receiverId, out SBNexus nexus)
-                ? nexus.side.id != 0 && !nexus.IsBuilding && nexus.side.Resources >= SConstants.unitCost
+                ? nexus.side.id != 0 && !nexus.IsBuilding && nexus.side.Resources >= simulation.Parameters.UnitCost
                 : null;
 
         // Simulation time and world rules; still require a living receiver.
@@ -708,7 +708,7 @@ namespace DSimulation
         /// <summary>Returns the fixed duration of one simulation tick.</summary>
         [SimulationObservation("delta_time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetDeltaTime(int receiverId) =>
-            TryAlive(receiverId, out _) ? SConstants.deltaTime : null;
+            TryAlive(receiverId, out _) ? simulation.Parameters.DeltaTime : null;
 
         /// <summary>Returns the world dimensions.</summary>
         [SimulationObservation("world_size", MemberKind = SimulationObservationMemberKind.Property)]

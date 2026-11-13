@@ -28,7 +28,7 @@ namespace Directiva.SimulationFrontend
         [SerializeField] private SimulationUIController ui;
         [SerializeField] private SimulationSceneView view;
 
-        [Header("World (50 x 50)")]
+        [Header("World fallback (only when NO DirectivaLevel is selected)")]
         [SerializeField, Min(16)] private int worldWidth = 50;
         [SerializeField, Min(16)] private int worldHeight = 50;
         [SerializeField] private int seed = 20261111;
@@ -71,8 +71,15 @@ namespace Directiva.SimulationFrontend
         private bool running;
         private float speed = 1f;
         private double accumulatedTime;
-        private readonly double simulationTickSeconds =
-            (double)SConstants.deltaTime.RawValue / Constants.FixedScale;
+        private double simulationTickSeconds =>
+            (double)(orchestrator != null ? orchestrator.Simulation.Parameters.DeltaTime.RawValue :
+                view != null && view.CurrentWorld != null
+                    ? view.CurrentWorld.Parameters.DeltaTime.RawValue : SConstants.deltaTime.RawValue) /
+                Constants.FixedScale;
+        private float ActiveWorldWidth => LevelLaunchContext.CurrentLevel != null
+            ? LevelLaunchContext.CurrentLevel.World.Width : worldWidth;
+        private float ActiveWorldHeight => LevelLaunchContext.CurrentLevel != null
+            ? LevelLaunchContext.CurrentLevel.World.Height : worldHeight;
 
         public Orchestrator CurrentMatch => orchestrator;
         public bool IsRunning => running;
@@ -459,7 +466,7 @@ namespace Directiva.SimulationFrontend
             accumulatedTime = 0;
             DetachOrchestrator();
             world.Start(); // Idempotent if a partially built Orchestrator already started it.
-            view.Attach(world, worldWidth, worldHeight,
+            view.Attach(world, ActiveWorldWidth, ActiveWorldHeight,
                 ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
             ConfigureCamera();
             pendingPlayerProgram = false;
@@ -468,6 +475,11 @@ namespace Directiva.SimulationFrontend
 
         private DSimulation.Simulation BuildWorld()
         {
+            // Level assets now own the authoritative map, seed and entity parameters.
+            // Scene values are retained as a backwards-compatible no-level fallback.
+            DirectivaLevel selectedLevel = LevelLaunchContext.CurrentLevel;
+            if (selectedLevel != null)
+                return LevelWorldBuilder.Build(selectedLevel);
             if (worldWidth < 16 || worldHeight < 16)
                 throw new InvalidOperationException("World must be at least 16 x 16.");
             if (initialResourcesPerSide < 0 || resourcesPerDeposit <= 0 || depositRichness <= 0)
@@ -526,7 +538,7 @@ namespace Directiva.SimulationFrontend
             foreach (VMOutputMessage message in initial) HandleOutput(message);
             accumulatedTime = 0;
             running = false;
-            view.Attach(orchestrator.Simulation, worldWidth, worldHeight,
+            view.Attach(orchestrator.Simulation, ActiveWorldWidth, ActiveWorldHeight,
                 ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
             ConfigureCamera();
             ApplyPlaybackState();

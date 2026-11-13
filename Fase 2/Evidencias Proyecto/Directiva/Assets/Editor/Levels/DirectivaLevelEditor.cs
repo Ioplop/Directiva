@@ -29,6 +29,8 @@ namespace Directiva.Editor.Levels
         private SerializedProperty codeFolder;
         private SerializedProperty entryModule;
         private SerializedProperty entryFunction;
+        private SerializedProperty worldLayout;
+        private SerializedProperty simulationSettings;
 
         private struct ScriptChoice
         {
@@ -48,6 +50,8 @@ namespace Directiva.Editor.Levels
             codeFolder = serializedObject.FindProperty("codeFolder");
             entryModule = serializedObject.FindProperty("entryModule");
             entryFunction = serializedObject.FindProperty("entryFunction");
+            worldLayout = serializedObject.FindProperty("worldLayout");
+            simulationSettings = serializedObject.FindProperty("simulationSettings");
         }
 
         public override void OnInspectorGUI()
@@ -87,6 +91,23 @@ namespace Directiva.Editor.Levels
                 "Cada nivel compila únicamente los .dscript de su carpeta dentro de " +
                 "Resources/Levels. El programa del jugador se compila por separado.",
                 MessageType.Info);
+
+            EditorGUILayout.Space(12);
+            EditorGUILayout.LabelField("Diseño inicial y reglas", EditorStyles.boldLabel);
+            if (GUILayout.Button("Abrir editor visual del nivel", GUILayout.Height(32)))
+            {
+                serializedObject.ApplyModifiedProperties();
+                DirectivaLevelLayoutWindow.Open((DirectivaLevel)target);
+            }
+            EditorGUILayout.HelpBox(
+                "El layout, los depósitos y los parámetros pertenecen al DirectivaLevel. " +
+                "La escena solo conserva prefabs, cámara y presentación visual.", MessageType.Info);
+            if (worldLayout != null)
+                EditorGUILayout.PropertyField(worldLayout,
+                    new GUIContent("Mapa / Layout (valores)"), includeChildren: true);
+            if (simulationSettings != null)
+                EditorGUILayout.PropertyField(simulationSettings,
+                    new GUIContent("Parámetros de simulación"), includeChildren: true);
 
             serializedObject.ApplyModifiedProperties();
         }

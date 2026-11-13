@@ -119,15 +119,15 @@ namespace DOrchestration
                 throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds));
             if (faultRestartDelaySeconds <= 0)
                 throw new ArgumentOutOfRangeException(nameof(faultRestartDelaySeconds));
-            if (SConstants.deltaTime.RawValue <= 0)
+            if (simulation.Parameters.DeltaTime.RawValue <= 0)
                 throw new InvalidOperationException("Simulation tick duration must be positive.");
             MaxDurationSeconds = maxDurationSeconds;
             faultRestartDelayTicks = checked((long)faultRestartDelaySeconds * Constants.FixedScale +
-                SConstants.deltaTime.RawValue - 1) / SConstants.deltaTime.RawValue;
+                simulation.Parameters.DeltaTime.RawValue - 1) / simulation.Parameters.DeltaTime.RawValue;
             // Round up instead of ending before the requested simulated duration.
             long durationRaw = checked((long)maxDurationSeconds * Constants.FixedScale);
-            MaxSimulationTicks = checked(durationRaw + SConstants.deltaTime.RawValue - 1) /
-                SConstants.deltaTime.RawValue;
+            MaxSimulationTicks = checked(durationRaw + simulation.Parameters.DeltaTime.RawValue - 1) /
+                simulation.Parameters.DeltaTime.RawValue;
             StepsPerTick = stepsPerTick;
             this.outputCapacityPerSide = outputCapacityPerSide;
             outputBySide = new Queue<VMOutputMessage>[3];

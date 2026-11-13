@@ -18,7 +18,8 @@ namespace DSimulation
         private int nextBuildRequestId = 1;
 
         // Sides are indexed by their ID: neutral (0), player 1 (1), player 2 (2).
-        private readonly SBSide[] sides = { new SBSide(0), new SBSide(1), new SBSide(2) };
+        private readonly SBSide[] sides;
+        public SimulationParameters Parameters { get; }
 
         public SBSide GetSide(int side) => sides[side];
         // Allows nexus spawn calculations to inspect all existing nexuses.
@@ -71,8 +72,12 @@ namespace DSimulation
         /// The seed is used
         /// </summary>
         /// <param name="seed">Starting seed for all random number generations in the simulation.</param>
-        public Simulation(ulong seed, FixedVector2 dimensions)
+        public Simulation(ulong seed, FixedVector2 dimensions, SimulationParameters parameters = null)
         {
+            Parameters = (parameters ?? new SimulationParameters()).Clone();
+            Parameters.Validate();
+            sides = new[] { new SBSide(0, Parameters), new SBSide(1, Parameters),
+                new SBSide(2, Parameters) };
             Observer = new SimulationObserver(this);
             Controller = new SimulationController(this);
 
@@ -128,11 +133,11 @@ namespace DSimulation
             request = default;
             if (!entityRegistry.TryGetValue(nexusId, out SBEntity entity) ||
                 entity is not SBNexus nexus || !nexus.alive || nexus.side.id == 0 ||
-                nexus.IsBuilding || nexus.side.Resources < SConstants.unitCost)
+                nexus.IsBuilding || nexus.side.Resources < Parameters.UnitCost)
                 return false;
 
             request = new UnitBuildRequest(nextBuildRequestId++, nexusId);
-            nexus.side.Resources -= SConstants.unitCost;
+            nexus.side.Resources -= Parameters.UnitCost;
             nexus.BeginBuild(request.requestId);
             return true;
         }
@@ -190,7 +195,7 @@ namespace DSimulation
             NotifyMovements();
 
             // Update time state
-            Time += SConstants.deltaTime;
+            Time += Parameters.DeltaTime;
             Tick++;
             // Add LateUpdate here only if necessary
         }

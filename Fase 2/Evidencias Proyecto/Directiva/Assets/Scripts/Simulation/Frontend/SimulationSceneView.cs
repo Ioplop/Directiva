@@ -42,8 +42,8 @@ namespace Directiva.SimulationFrontend
         private readonly Dictionary<int, ActiveGather> activeGather = new Dictionary<int, ActiveGather>();
         private Simulation simulation;
         private SimulationWorldPointerController pointerController;
-        private int worldWidth;
-        private int worldHeight;
+        private float worldWidth;
+        private float worldHeight;
         private float playbackSpeed;
 
         private sealed class EntityVisual
@@ -67,7 +67,7 @@ namespace Directiva.SimulationFrontend
         public Rect WorldBounds => CalculateWorldBounds(
             worldCenter != null ? worldCenter.position : Vector3.zero, worldWidth, worldHeight);
 
-        public static Rect CalculateWorldBounds(Vector3 center, int width, int height) =>
+        public static Rect CalculateWorldBounds(Vector3 center, float width, float height) =>
             new Rect(center.x - width * 0.5f, center.z - height * 0.5f, width, height);
 
         public Simulation CurrentWorld => simulation;
@@ -80,7 +80,7 @@ namespace Directiva.SimulationFrontend
         /// are not replayed: the view can attach after simulation has already begun.
         /// The caller must then call ConsumeEvents after every Orchestrator.Update().
         /// </summary>
-        public void Attach(Simulation world, int width, int height, UIDocument uiDocument = null)
+        public void Attach(Simulation world, float width, float height, UIDocument uiDocument = null)
         {
             if (world == null) throw new ArgumentNullException(nameof(world));
             if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
@@ -162,7 +162,7 @@ namespace Directiva.SimulationFrontend
                     case EventCreateResource createdResource:
                         Spawn(createdResource.id, 0, SimulationVisualKind.Resource, resourcePrefab, createdResource.position, 0,
                             new SimulationStatusValues(createdResource.maxHealth, createdResource.maxHealth,
-                                SConstants.ResourceShields, SConstants.ResourceShields),
+                                simulation.Parameters.ResourceShields, simulation.Parameters.ResourceShields),
                             createdResource.amount, createdResource.amount);
                         break;
                     case EventResources resourceChange:

@@ -8,6 +8,7 @@ namespace DSimulation
     public sealed class SBSide
     {
         public int id { get; }
+        internal SimulationParameters Settings { get; }
         public SBNexus Nexus { get; internal set; }
         public int Resources { get; internal set; }
 
@@ -17,9 +18,10 @@ namespace DSimulation
         public IReadOnlyList<SBUnit> Units => units;
         public IReadOnlyList<SBResource> ResourceEntities => resourceEntities;
 
-        internal SBSide(int id)
+        internal SBSide(int id, SimulationParameters settings)
         {
             this.id = id;
+            Settings = settings;
         }
     }
 }

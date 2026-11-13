@@ -5,22 +5,20 @@ namespace DSimulation
 {
     public class SBUnit : SBVMEntity
     {
-        internal static readonly Fixed followDistance = Fixed.Decimal(1, 1); // 0.1
-        internal static readonly Fixed maxSpeed = 5;
-        internal static readonly Fixed acceleration = 5;
-        internal static readonly Fixed angularVelocity = 360;
-        internal static readonly Fixed rotationSoftness = 10;
-        internal static readonly Fixed gatherDistance = Fixed.Decimal(2, 1);
-        internal static readonly Fixed unloadDistance = 1;
-        internal static readonly Fixed cargoSlowdown = Fixed.Decimal(9, 1);
-        internal const int maxCargo = 15;
-        // The view reads capacity from each unit, rather than assuming a fixed
-        // number of slots when displaying cargo. Future unit variants can expose
-        // their own capacity through this property.
+        // Snapshot the unit-specific rules when this entity is created. Values are
+        // never fetched from global mutable state during deterministic updates.
+        private readonly Fixed followDistance;
+        private readonly Fixed maxSpeed;
+        private readonly Fixed acceleration;
+        private readonly Fixed angularVelocity;
+        private readonly Fixed rotationSoftness;
+        private readonly Fixed gatherDistance;
+        private readonly Fixed unloadDistance;
+        private readonly Fixed cargoSlowdown;
+        private readonly int maxCargo;
+        private readonly Fixed followGain;
+        private readonly Fixed aimAlignment;
         public int MaxCargo => maxCargo;
-        /// How aggressively we close the distance.
-        internal static readonly Fixed followGain = 4;
-        internal static readonly Fixed aimAlignment = Fixed.Decimal(99, 2); // ~8 degrees of missalignment or less required to shoot
 
         // Speed
         internal FixedVector2 linearVelocity = FixedVector2.Zero;
@@ -122,13 +120,25 @@ namespace DSimulation
 
         public SBUnit(SBSide side, FixedVector2 position, Fixed rotation) : base(
             side,
-            SConstants.UnitDamage, SConstants.UnitRange, SConstants.UnitAttackSpeed,
-            position, rotation, 
-            SConstants.UnitRadius, SConstants.UnitPriority, 
-            SConstants.UnitHealth, SConstants.UnitShields, SConstants.UnitShieldRegen
+            side.Settings.UnitDamage, side.Settings.UnitRange, side.Settings.UnitAttackSpeed,
+            position, rotation,
+            side.Settings.UnitRadius, side.Settings.UnitPriority,
+            side.Settings.UnitHealth, side.Settings.UnitShields, side.Settings.UnitShieldRegen
             )
         {
-            aimDistance = SConstants.UnitRange * Fixed.Decimal(15, 1);
+            var settings = side.Settings;
+            followDistance = settings.FollowDistance;
+            maxSpeed = settings.MaxSpeed;
+            acceleration = settings.Acceleration;
+            angularVelocity = settings.AngularVelocity;
+            rotationSoftness = settings.RotationSoftness;
+            gatherDistance = settings.GatherDistance;
+            unloadDistance = settings.UnloadDistance;
+            cargoSlowdown = settings.CargoSlowdown;
+            maxCargo = settings.MaxCargo;
+            followGain = settings.FollowGain;
+            aimAlignment = settings.AimAlignment;
+            aimDistance = settings.UnitRange * settings.AimDistanceFactor;
             currentMaxSpeed = maxSpeed;
         }
 
@@ -232,7 +242,7 @@ namespace DSimulation
         private void ApproachVelocity(FixedVector2 desiredVelocity)
         {
             FixedVector2 change = desiredVelocity - linearVelocity;
-            Fixed maxChange = acceleration * SConstants.deltaTime;
+            Fixed maxChange = acceleration * simulation.Parameters.DeltaTime;
 
             linearVelocity += change.ClampMagnitude(maxChange);
         }
@@ -297,7 +307,7 @@ namespace DSimulation
                 rotate -= 360;
 
             Fixed remaining = Fixed.Abs(rotate);
-            Fixed step = angularVelocity * SConstants.deltaTime;
+            Fixed step = angularVelocity * simulation.Parameters.DeltaTime;
 
             // Slow down when approaching the target.
             if (remaining < rotationSoftness)
@@ -372,7 +382,7 @@ namespace DSimulation
         /// </summary>
         internal void Move()
         {
-            Position += linearVelocity * SConstants.deltaTime;
+            Position += linearVelocity * simulation.Parameters.DeltaTime;
         }
 
         /// <summary>
@@ -450,8 +460,8 @@ namespace DSimulation
                 // First check that we are attached to it.
                 if (resource.GatheringUnit == this && resource == attachedResource) // Two way check. Sure either match both sides or none if the logic is good.
                 {
-                    timeGathering += SConstants.deltaTime;
-                    if (timeGathering >= SConstants.resourceGatherSpeed)
+                    timeGathering += simulation.Parameters.DeltaTime;
+                    if (timeGathering >= simulation.Parameters.ResourceGatherSpeed)
                     {
                         Cargo += resource.TryGather(maxCargo - Cargo);
                         timeGathering = 0;
