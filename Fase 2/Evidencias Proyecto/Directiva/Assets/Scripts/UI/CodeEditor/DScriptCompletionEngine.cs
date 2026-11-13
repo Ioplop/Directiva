@@ -224,6 +224,57 @@ namespace Directiva.CodeUI
             return new DScriptCompletionResult(start, caret, sorted);
         }
 
+        /// <summary>
+        /// Best-effort type hints for actual call arguments. The unfinished call is
+        /// excluded from analysis so a missing ')' cannot invalidate preceding locals.
+        /// Unknown expressions remain null, never an invented static type.
+        /// </summary>
+        internal static IReadOnlyList<string> InferCallArgumentTypes(string module, string source,
+            int opening, IReadOnlyList<string> arguments, IDScriptSourceProvider provider)
+        {
+            var types = new string[arguments.Count];
+            if (arguments.All(string.IsNullOrWhiteSpace)) return types;
+            try
+            {
+                int lineStart = source.LastIndexOf('\n', Math.Max(0, opening - 1)) + 1;
+                int indentEnd = lineStart;
+                while (indentEnd < source.Length &&
+                    (source[indentEnd] == ' ' || source[indentEnd] == '\t')) indentEnd++;
+                // A complete dummy statement preserves the containing function's AST
+                // and locals even if the original buffer has unfinished parentheses.
+                string clean = source.Substring(0, lineStart) +
+                    source.Substring(lineStart, indentEnd - lineStart) + "pass\n";
+                var analysis = DScriptFrontend.AnalyzeForRefactoring(module,
+                    new EditorSourceOverride(provider, module, clean), SimulationDScriptProfile.Options);
+                analysis.Modules.TryGetValue(module, out var ast);
+                var function = FindContainingFunction(ast, clean, clean.Length - 1);
+                var context = new TypeContext(analysis, module, function);
+                var environment = context.LocalsAt(clean.Length);
+                for (int i = 0; i < arguments.Count; i++)
+                {
+                    string value = arguments[i].Trim();
+                    if (value.Length == 0) continue;
+                    foreach (string enumModule in NativeLibrary.SimulationEnumModules)
+                        if (value.StartsWith(enumModule + ".", StringComparison.Ordinal))
+                        {
+                            types[i] = enumModule;
+                            break;
+                        }
+                    if (types[i] != null) continue;
+                    Expression expression = ParseReceiver(value);
+                    if (expression != null)
+                        types[i] = context.TypeOf(expression, environment,
+                            new HashSet<string>(StringComparer.Ordinal));
+                }
+            }
+            catch (Exception)
+            {
+                // Editing can temporarily produce malformed syntax. Keep all
+                // overloads available rather than treating parse failure as a type.
+            }
+            return types;
+        }
+
         private static DScriptCompletionResult Empty(int caret) =>
             new DScriptCompletionResult(caret, caret, Array.Empty<DScriptCompletionItem>());
         private static bool IsIdentifierPart(char c) => c == '_' || char.IsLetterOrDigit(c);

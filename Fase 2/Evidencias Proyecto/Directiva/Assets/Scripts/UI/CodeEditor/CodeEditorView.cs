@@ -102,6 +102,13 @@ namespace Directiva.CodeUI
         private VisualElement _signaturePopup;
         private VisualElement _signatureParameters;
         private Label _signatureName;
+        private VisualElement _signatureNavigation;
+        private Label _signatureOverloadCounter;
+        private DScriptCallSignatureResult _signatureResult;
+        private int _signatureManualOverloadIndex = -1;
+        private int _signatureCallOpening = -1;
+        private string _signatureRenderedSource;
+        private int _signatureRenderedCaret = -1;
         private Label _signatureChoices;
         private Label _signatureReturn;
         private IVisualElementScheduledItem _signatureTask;
@@ -493,7 +500,9 @@ namespace Directiva.CodeUI
         {
             _signaturePopup = new VisualElement();
             _signaturePopup.name = "dscript-call-signature";
-            _signaturePopup.pickingMode = PickingMode.Ignore;
+            // The navigation arrows must receive pointer events, while their
+            // non-focusable buttons leave the typing caret in the TextField.
+            _signaturePopup.pickingMode = PickingMode.Position;
             _signaturePopup.style.position = Position.Absolute;
             _signaturePopup.style.minWidth = 140f;
             _signaturePopup.style.maxWidth = 440f;
@@ -516,11 +525,36 @@ namespace Directiva.CodeUI
             _signaturePopup.style.paddingTop = 6f;
             _signaturePopup.style.paddingBottom = 6f;
             _signaturePopup.style.display = DisplayStyle.None;
+            var header = new VisualElement();
+            header.pickingMode = PickingMode.Ignore;
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.justifyContent = Justify.SpaceBetween;
+            header.style.alignItems = Align.Center;
             _signatureName = new Label();
             _signatureName.style.color = new Color(0.88f, 0.94f, 1f);
             _signatureName.style.unityFontStyleAndWeight = FontStyle.Bold;
             _signatureName.pickingMode = PickingMode.Ignore;
-            _signaturePopup.Add(_signatureName);
+            header.Add(_signatureName);
+
+            // The popup is not focusable: navigating an overload must not steal the
+            // caret from the script or turn Arrow/Tab into another editor shortcut.
+            _signatureNavigation = new VisualElement();
+            _signatureNavigation.style.flexDirection = FlexDirection.Row;
+            _signatureNavigation.style.alignItems = Align.Center;
+            _signatureNavigation.style.marginLeft = 12f;
+            var previous = CreateSignatureNavigationButton("<", -1);
+            _signatureNavigation.Add(previous);
+            _signatureOverloadCounter = new Label();
+            _signatureOverloadCounter.pickingMode = PickingMode.Ignore;
+            _signatureOverloadCounter.style.color = new Color(0.72f, 0.82f, 0.94f);
+            _signatureOverloadCounter.style.fontSize = 11f;
+            _signatureOverloadCounter.style.marginLeft = 5f;
+            _signatureOverloadCounter.style.marginRight = 5f;
+            _signatureNavigation.Add(_signatureOverloadCounter);
+            var next = CreateSignatureNavigationButton(">", +1);
+            _signatureNavigation.Add(next);
+            header.Add(_signatureNavigation);
+            _signaturePopup.Add(header);
             _signatureParameters = new VisualElement();
             _signatureParameters.pickingMode = PickingMode.Ignore;
             _signatureParameters.style.flexDirection = FlexDirection.Row;
@@ -542,6 +576,37 @@ namespace Directiva.CodeUI
             _signatureReturn.style.marginTop = 3f;
             _signaturePopup.Add(_signatureReturn);
             popupLayer.Add(_signaturePopup);
+        }
+
+        private Button CreateSignatureNavigationButton(string label, int direction)
+        {
+            var button = new Button(() => CycleSignatureOverload(direction)) { text = label };
+            button.focusable = false;
+            button.style.width = 20f;
+            button.style.height = 20f;
+            button.style.paddingLeft = 0f;
+            button.style.paddingRight = 0f;
+            button.style.paddingTop = 0f;
+            button.style.paddingBottom = 0f;
+            button.style.backgroundColor = new Color(0.19f, 0.26f, 0.35f, 0.94f);
+            button.style.color = new Color(0.91f, 0.95f, 1f);
+            button.style.borderTopLeftRadius = 3f;
+            button.style.borderTopRightRadius = 3f;
+            button.style.borderBottomLeftRadius = 3f;
+            button.style.borderBottomRightRadius = 3f;
+            return button;
+        }
+
+        private void CycleSignatureOverload(int direction)
+        {
+            if (_signatureResult == null || _signatureResult.Overloads.Count < 2) return;
+            int current = _signatureManualOverloadIndex >= 0
+                ? _signatureManualOverloadIndex : _signatureResult.PreferredOverloadIndex;
+            _signatureManualOverloadIndex = DScriptCallSignatureHelp.CycleOverload(
+                current, _signatureResult.Overloads.Count, direction);
+            // Redraw the help only. Do not modify the buffer, undo stack or caret.
+            RefreshSignatureHelp();
+            _textField.Focus();
         }
 
         private void ScheduleSignatureRefresh()
@@ -567,22 +632,38 @@ namespace Directiva.CodeUI
             DScriptCallSignatureResult info;
             try { info = _signatureProvider(source, caret); }
             catch (Exception) { HideSignatureHelp(); return; }
-            if (info == null) { HideSignatureHelp(); return; }
+            if (info == null || info.Overloads.Count == 0) { HideSignatureHelp(); return; }
+            // User selection lasts while inspecting this unchanged call. Editing the
+            // text or moving to another call restores automatic overload ranking.
+            if (_signatureCallOpening != info.OpeningOffset || _signatureRenderedCaret != caret ||
+                !string.Equals(_signatureRenderedSource, source, StringComparison.Ordinal))
+                _signatureManualOverloadIndex = -1;
+            _signatureCallOpening = info.OpeningOffset;
+            _signatureRenderedCaret = caret;
+            _signatureRenderedSource = source;
+            _signatureResult = info;
+            int selected = _signatureManualOverloadIndex >= 0 &&
+                _signatureManualOverloadIndex < info.Overloads.Count
+                ? _signatureManualOverloadIndex : info.PreferredOverloadIndex;
+            var shown = info.Overloads[selected];
             _signatureName.text = info.Name;
+            _signatureNavigation.style.display = info.Overloads.Count > 1
+                ? DisplayStyle.Flex : DisplayStyle.None;
+            _signatureOverloadCounter.text = (selected + 1) + " / " + info.Overloads.Count;
             _signatureParameters.Clear();
             AddSignatureText("(", false);
-            for (int i = 0; i < info.Parameters.Count; i++)
+            for (int i = 0; i < shown.Parameters.Count; i++)
             {
                 if (i > 0) AddSignatureText(", ", false);
-                AddSignatureText(info.Parameters[i], i == info.ActiveParameter);
+                AddSignatureText(shown.Parameters[i], i == info.ActiveParameter);
             }
             AddSignatureText(")", false);
-            _signatureChoices.text = info.ActiveArgumentChoices;
-            _signatureChoices.style.display = string.IsNullOrEmpty(info.ActiveArgumentChoices)
+            _signatureChoices.text = shown.ActiveArgumentChoices;
+            _signatureChoices.style.display = string.IsNullOrEmpty(shown.ActiveArgumentChoices)
                 ? DisplayStyle.None : DisplayStyle.Flex;
-            _signatureReturn.text = string.IsNullOrEmpty(info.ReturnType)
-                ? string.Empty : "→ " + info.ReturnType;
-            _signatureReturn.style.display = string.IsNullOrEmpty(info.ReturnType)
+            _signatureReturn.text = string.IsNullOrEmpty(shown.ReturnType)
+                ? string.Empty : "→ " + shown.ReturnType;
+            _signatureReturn.style.display = string.IsNullOrEmpty(shown.ReturnType)
                 ? DisplayStyle.None : DisplayStyle.Flex;
 
             int lineStart = FindLineStart(source, caret);
@@ -598,16 +679,17 @@ namespace Directiva.CodeUI
             // 440 px. Long enum alternatives can wrap without covering the line.
             float panelWidth = _completionLayer.resolvedStyle.width;
             float panelHeight = _completionLayer.resolvedStyle.height;
-            string parameterText = "(" + string.Join(", ", info.Parameters) + ")";
-            int longestLine = Math.Max(info.Name.Length,
-                Math.Max(parameterText.Length, info.ActiveArgumentChoices.Length));
+            string parameterText = "(" + string.Join(", ", shown.Parameters) + ")";
+            int longestLine = Math.Max(info.Name.Length +
+                (info.Overloads.Count > 1 ? 18 : 0),
+                Math.Max(parameterText.Length, shown.ActiveArgumentChoices.Length));
             float availableWidth = Mathf.Max(1f, panelWidth - 8f);
             float popupWidth = Mathf.Min(availableWidth, Mathf.Clamp(
                 longestLine * 7f + 24f, 160f, 440f));
             _signaturePopup.style.width = popupWidth;
-            float estimatedHeight = 58f +
-                (string.IsNullOrEmpty(info.ReturnType) ? 0f : 17f) +
-                (string.IsNullOrEmpty(info.ActiveArgumentChoices) ? 0f : 19f);
+            float estimatedHeight = 62f +
+                (string.IsNullOrEmpty(shown.ReturnType) ? 0f : 17f) +
+                (string.IsNullOrEmpty(shown.ActiveArgumentChoices) ? 0f : 19f);
             if (longestLine * 7f + 24f > popupWidth)
                 estimatedHeight += 18f;
 
@@ -635,6 +717,11 @@ namespace Directiva.CodeUI
         private void HideSignatureHelp()
         {
             _signatureTask?.Pause();
+            _signatureResult = null;
+            _signatureCallOpening = -1;
+            _signatureManualOverloadIndex = -1;
+            _signatureRenderedCaret = -1;
+            _signatureRenderedSource = null;
             if (_signaturePopup != null)
                 _signaturePopup.style.display = DisplayStyle.None;
         }

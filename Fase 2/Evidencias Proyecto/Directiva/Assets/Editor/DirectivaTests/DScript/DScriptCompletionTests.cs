@@ -317,9 +317,14 @@ namespace Directiva.EditorTests.DScript
                 var info = DScriptCallSignatureHelp.Get("test", src, src.Length, provider);
                 t.Check(info != null, "implicit self method shows a signature despite an open call");
                 t.Equal("move", info.Name, "order name");
-                t.Equal(2, info.Parameters.Count, "position overload has two parameters");
-                t.Equal("x: Decimal", info.Parameters[0], "first parameter uses DScript type");
-                t.Equal("y: Decimal", info.Parameters[1], "second parameter uses DScript type");
+                t.Equal(2, info.Overloads.Count, "both move overloads are available");
+                t.Equal(1, info.Parameters.Count, "entity overload is shown first");
+                t.Equal("entity: SimulationObject", info.Parameters[0],
+                    "preferred overload accepts an entity, not an entity ID");
+                t.Equal("x: Decimal", info.Overloads[1].Parameters[0],
+                    "coordinate overload is still available");
+                t.Equal("y: Decimal", info.Overloads[1].Parameters[1],
+                    "second coordinate remains available");
                 t.Equal(0, info.ActiveParameter, "first argument is active");
 
                 const string member = "def run():\n    self.move(10, ";
@@ -327,6 +332,80 @@ namespace Directiva.EditorTests.DScript
                 t.Check(next != null, "explicit self call is recognized");
                 t.Equal(1, next.ActiveParameter, "comma advances active argument");
                 t.Equal("y: Decimal", next.Parameters[1], "second parameter label");
+            });
+
+            Add("SignatureOverloadsAndCycling", "Multiple signatures remain available and can be browsed", t =>
+            {
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = "def run():\n    pass\n" });
+                const string empty = "def run():\n    move(";
+                var result = DScriptCallSignatureHelp.Get("test", empty, empty.Length, provider);
+                t.Check(result != null, "move help appears");
+                t.Equal(2, result.Overloads.Count, "the catalog exposes both overloads");
+                t.Equal("entity: SimulationObject", result.Parameters[0],
+                    "move(entity) is the default");
+                t.Equal("x: Decimal", result.Overloads[1].Parameters[0],
+                    "move(x,y) can be explored");
+                t.Equal(1, DScriptCallSignatureHelp.CycleOverload(0, 2, 1),
+                    "next selects the second overload");
+                t.Equal(0, DScriptCallSignatureHelp.CycleOverload(1, 2, 1),
+                    "next wraps around");
+                t.Equal(1, DScriptCallSignatureHelp.CycleOverload(0, 2, -1),
+                    "previous wraps around");
+                t.Equal(0, DScriptCallSignatureHelp.CycleOverload(0, 0, -1),
+                    "empty overload lists are safe");
+            });
+
+            Add("SignatureRankByArguments", "Visible arguments favor compatible overloads without hiding alternatives", t =>
+            {
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = "def run():\n    pass\n" });
+                const string numeric = "def run():\n    move(10";
+                var number = DScriptCallSignatureHelp.Get("test", numeric, numeric.Length, provider);
+                t.Check(number != null, "numeric call has help");
+                t.Equal("x: Decimal", number.Parameters[0], "an integer can be used as a coordinate");
+                t.Equal(2, number.Overloads.Count, "entity choice remains available");
+                const string second = "def run():\n    move(10, ";
+                var two = DScriptCallSignatureHelp.Get("test", second, second.Length, provider);
+                t.Equal(1, two.ActiveParameter, "comma activates second coordinate");
+                t.Equal("y: Decimal", two.Parameters[1], "two coordinates preferred");
+                const string expression = "def run():\n    move(math.atan2(10, 20), ";
+                var nested = DScriptCallSignatureHelp.Get("test", expression,
+                    expression.Length, provider);
+                t.Check(nested != null, "nested call stays readable");
+                t.Equal("x: Decimal", nested.Parameters[0], "nested numeric function prefers coordinates");
+                const string entity = "def run():\n    target = closest_enemy()\n    move(target";
+                var target = DScriptCallSignatureHelp.Get("test", entity, entity.Length, provider);
+                t.Check(target != null, "entity variable has help");
+                t.Equal("entity: SimulationObject", target.Parameters[0],
+                    "an inferred entity uses the entity overload");
+                const string direct = "def run():\n    move(closest_enemy()";
+                var chained = DScriptCallSignatureHelp.Get("test", direct, direct.Length, provider);
+                t.Check(chained != null, "entity-producing call has help");
+                t.Equal("entity: SimulationObject", chained.Parameters[0],
+                    "return type prefers the entity overload");
+            });
+
+            Add("SignatureOverloadEnumArguments", "Enum filters choose matching signatures without hiding others", t =>
+            {
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = "def run():\n    pass\n" });
+                const string side = "def run():\n    entities(Side.Enemy";
+                var a = DScriptCallSignatureHelp.Get("test", side, side.Length, provider);
+                t.Check(a != null, "entities Side call is known");
+                t.Equal("side: Side", a.Parameters[0], "Side variant is automatically prioritized");
+                t.Equal(2, a.Overloads.Count, "Type variant is still browsable");
+                const string type = "def run():\n    entities(Type.Unit";
+                var b = DScriptCallSignatureHelp.Get("test", type, type.Length, provider);
+                t.Check(b != null, "entities Type call is known");
+                t.Equal("entityType: Type?", b.Parameters[0], "Type variant is prioritized");
+                t.Equal(2, b.Overloads.Count, "Side variant is still browsable");
+                const string two = "def run():\n    entities(Side.Enemy, Type.Unit";
+                var c = DScriptCallSignatureHelp.Get("test", two, two.Length, provider);
+                t.Equal(1, c.ActiveParameter, "second argument is active");
+                t.Equal("side: Side", c.Parameters[0], "two-arg filter picks Side overload");
+                t.Check(c.ActiveArgumentChoices.Contains("Type.Unit"),
+                    "active enum options are for Type in second position");
             });
 
             Add("SignatureSimulationEnums", "Signature help uses actual DScript enum namespaces, not CLR integers", t =>
