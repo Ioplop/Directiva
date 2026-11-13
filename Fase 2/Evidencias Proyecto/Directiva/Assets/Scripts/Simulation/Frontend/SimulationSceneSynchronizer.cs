@@ -10,6 +10,7 @@ using DSCompilation.DScript.Modules;
 using Directiva.SimulationUI;
 using Directiva.MainMenu;
 using Directiva.Levels;
+using Directiva.Progress;
 using Directiva.Localization;
 using Directiva.CodeUI;
 using DSExecution.VirtualMachine;
@@ -44,6 +45,7 @@ namespace Directiva.SimulationFrontend
 
         [Header("Execution")]
         [SerializeField, Min(1)] private int vmStepsPerTick = 10;
+        // Fallback for a scene without a selected level; levels override this setting.
         [SerializeField, Min(1)] private int matchDurationSeconds = 300;
         [SerializeField, Min(1)] private int maxTicksPerFrame = 250;
         [SerializeField] private bool mirrorVmMessagesToUnityConsole = true;
@@ -202,12 +204,24 @@ namespace Directiva.SimulationFrontend
                 return;
             connectedEditor = ui.CodeEditor;
             connectedEditor.AttachSimulationDebugger(this);
+            connectedEditor.SavedScriptsChanged += OnPlayerScriptsSaved;
             foreach (VMOutputMessage message in pendingEditorMessages)
                 connectedEditor.PublishSimulationOutput(message);
             pendingEditorMessages.Clear();
             if (pointer == null) pointer = GetComponent<SimulationWorldPointerController>();
             if (pointer != null) pointer.SelectionChanged += OnEntitySelectedForDebug;
             if (orchestrator != null) ConfigureRuntimeDebugger(orchestrator);
+        }
+
+        /// <summary>
+        /// A saved change to ANY player module can affect the selected Nexus
+        /// program through imports. Recompile on the next fresh match; do not
+        /// replace the VMs of a running or paused match mid-execution.
+        /// </summary>
+        private void OnPlayerScriptsSaved()
+        {
+            if (HasSelectedPlayerProgram)
+                pendingPlayerProgram = true;
         }
 
         private void OnEntitySelectedForDebug(SimulationEntityIdentity identity)
@@ -332,7 +346,7 @@ namespace Directiva.SimulationFrontend
                     PlayerScriptsRoot, selectedPlayerScript, selectedPlayerFunction);
                 DScriptCompiledProgram enemy = CompileLevelEnemy(level);
                 var next = new Orchestrator(world, player, enemy,
-                    stepsPerTick: vmStepsPerTick, maxDurationSeconds: matchDurationSeconds);
+                    stepsPerTick: vmStepsPerTick, maxDurationSeconds: level.MaxMatchDurationSeconds);
                 next.BindInitialEntity(world.GetSide(1).Nexus.id,
                     PlayerNexusScriptCatalog.ModuleFromPath(selectedPlayerScript) + "." +
                     selectedPlayerFunction);
@@ -476,7 +490,10 @@ namespace Directiva.SimulationFrontend
                 WarnCannotPlay("nexus_level_required");
                 return;
             }
-            if (pendingPlayerProgram || orchestrator == null || orchestrator.IsFinished)
+            // Saving while paused must NOT restart the ongoing match. Stop
+            // unlocks selection and rebuilds from the latest saved sources.
+            if ((!programSelectionLocked && pendingPlayerProgram) ||
+                orchestrator == null || orchestrator.IsFinished)
                 ResetMatch();
             if (orchestrator == null) return;
             orchestrator.ResumeFromBreakpoint();
@@ -582,11 +599,31 @@ namespace Directiva.SimulationFrontend
         {
             if (ui != null && ui.MatchStats != null)
                 ui.MatchStats.UpdateValues(orchestrator != null ? orchestrator.Simulation : view?.CurrentWorld,
-                    orchestrator, orchestrator != null ? orchestrator.MaxDurationSeconds : matchDurationSeconds);
+                    orchestrator, orchestrator != null ? orchestrator.MaxDurationSeconds :
+                        (LevelLaunchContext.CurrentLevel != null
+                            ? LevelLaunchContext.CurrentLevel.MaxMatchDurationSeconds
+                            : matchDurationSeconds));
         }
 
         private void HandleMatchEnded(MatchOutcome outcome)
         {
+            // Only a genuine side-1 victory awards stars. Stop/Restart, draws and
+            // losses do not write progress. The callback is invoked once per match.
+            DirectivaLevel level = LevelLaunchContext.CurrentLevel;
+            if (level != null && level.LevelNumber > 0 && orchestrator != null &&
+                outcome == MatchOutcome.Side1Won)
+            {
+                SBNexus playerNexus = orchestrator.Simulation.GetSide(1).Nexus;
+                LevelStarFlags achieved = LevelStarRules.Evaluate(outcome,
+                    playerNexus == null || playerNexus.HasTakenHealthDamage,
+                    orchestrator.Simulation.Time, level.FastVictorySeconds);
+                if (LevelProgress.Current.TryAwardStars(level.LevelNumber, achieved,
+                    out LevelStarFlags newlyEarned) && newlyEarned != LevelStarFlags.None)
+                    Debug.Log("[Directiva] Level " + level.LevelNumber +
+                        " earned new stars: " + newlyEarned +
+                        " (total: " + LevelStarRules.Count(
+                            LevelProgress.Current.GetStars(level.LevelNumber)) + "/3).", this);
+            }
             running = false;
             // Stop backend ticks, but let the last attack/death particles finish.
             // ConsumeEvents() runs after this callback and may spawn the final effect.
@@ -621,7 +658,11 @@ namespace Directiva.SimulationFrontend
         {
             Time.timeScale = 1f;
             if (pointer != null) pointer.SelectionChanged -= OnEntitySelectedForDebug;
-            if (connectedEditor != null) connectedEditor.AttachSimulationDebugger(null);
+            if (connectedEditor != null)
+            {
+                connectedEditor.SavedScriptsChanged -= OnPlayerScriptsSaved;
+                connectedEditor.AttachSimulationDebugger(null);
+            }
             DetachOrchestrator();
         }
     }

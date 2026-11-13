@@ -8,6 +8,7 @@ using Directiva.Settings;
 using Directiva.Localization;
 using Directiva.UI;
 using Directiva.Levels;
+using Directiva.Progress;
 
 namespace Directiva.MainMenu
 {
@@ -86,7 +87,7 @@ namespace Directiva.MainMenu
         [SerializeField] private StyleSheet styleSheet;
         [SerializeField] private string gameTitle = "DIRECTIVA";
         [SerializeField] private string levelsTitle = "Niveles";
-        [SerializeField] private int maxStars = 3;
+        // Every level has exactly three objectives, independent of old maxStars scene data.
 
         // Legacy serialized values remain hidden for non-destructive migration.
         // Assign new icons in DirectivaUITheme instead. No character fallback is used.
@@ -131,8 +132,7 @@ namespace Directiva.MainMenu
 
         [Header("Levels (ScriptableObjects)")]
         [SerializeField] private List<DirectivaLevel> levelDefinitions = new List<DirectivaLevel>();
-        [Tooltip("Temporary star total for testing level locks. Not saved or awarded yet.")]
-        [SerializeField, Min(0)] private int availableStars;
+        // Level unlocks are now based solely on earned progress in Save.bin.
 
         // Preserve old scene data for migration, but never use legacy entries as levels.
         [HideInInspector, SerializeField] private List<LevelMenuEntry> levels = new List<LevelMenuEntry>();
@@ -407,17 +407,6 @@ namespace Directiva.MainMenu
             RefreshLevelButtons();
             UpdateStars();
             ShowScreen(levelSelection);
-        }
-
-        /// <summary>
-        /// Temporary runtime hook for a future score/progression service. This value
-        /// is NOT persisted: opening the menu again starts from its Inspector value.
-        /// </summary>
-        public void SetAvailableStars(int value)
-        {
-            availableStars = Mathf.Max(0, value);
-            RefreshLevelButtons();
-            UpdateStars();
         }
 
         private void ShowScreen(VisualElement screen)
@@ -751,9 +740,10 @@ namespace Directiva.MainMenu
         {
             if (levelGrid == null) return;
             levelGrid.Clear();
+            int earnedTotal = LevelProgress.CountStarsInLevels(levelDefinitions);
             foreach (DirectivaLevel level in DirectivaLevelOrder.Sort(levelDefinitions))
             {
-                bool locked = availableStars < level.RequiredStars;
+                bool locked = earnedTotal < level.RequiredStars;
                 var button = CreateButton("", () => Load(level), "dm-level-button");
                 button.SetEnabled(!locked);
                 button.Add(Label(level.LevelName, "dm-level-name"));
@@ -767,8 +757,7 @@ namespace Directiva.MainMenu
                 }
                 else
                 {
-                    // Earned stars for individual levels are not implemented yet.
-                    AddScoreStars(score, 0);
+                    AddScoreStars(score, level, LevelProgress.Current.GetStars(level.LevelNumber));
                 }
                 button.Add(score);
                 SetButtonColor(button, ButtonVisualState.Normal);
@@ -777,27 +766,37 @@ namespace Directiva.MainMenu
         }
 
         /// <summary>Displays icon slots using assigned sprites only, never Unicode glyphs.</summary>
-        private void AddScoreStars(VisualElement score, int count)
+        private void AddScoreStars(VisualElement score, DirectivaLevel level, LevelStarFlags earned)
         {
-            int slots = Mathf.Max(0, maxStars);
-            int earned = Mathf.Clamp(count, 0, slots);
-            for (int i = 0; i < slots; i++)
+            // Each slot represents its OWN objective; two earned stars need not be adjacent.
+            LevelStarFlags[] objectives =
             {
-                Sprite icon = i < earned
+                LevelStarFlags.Victory, LevelStarFlags.UntouchedNexus, LevelStarFlags.FastVictory
+            };
+            foreach (LevelStarFlags objective in objectives)
+            {
+                bool hasStar = (earned & objective) != 0;
+                Sprite sprite = hasStar
                     ? GetIcon(_theme?.icons?.earnedStar, earnedStarSprite)
                     : GetIcon(_theme?.icons?.unearnedStar, unearnedStarSprite);
-                score.Add(UIIconView.Create(icon, "dm-score-sprite"));
+                var slot = UIIconView.Create(sprite, "dm-score-sprite");
+                slot.tooltip = objective == LevelStarFlags.Victory ? T("star_victory") :
+                    objective == LevelStarFlags.UntouchedNexus ? T("star_untouched") :
+                    T("star_fast", level.FastVictorySeconds);
+                score.Add(slot);
             }
         }
 
         private void UpdateStars()
         {
-            if (starTotal != null) starTotal.text = Mathf.Max(0, availableStars).ToString();
+            if (starTotal != null)
+                starTotal.text = LevelProgress.CountStarsInLevels(levelDefinitions).ToString();
         }
 
         private void Load(DirectivaLevel level)
         {
-            if (level == null || availableStars < level.RequiredStars) return;
+            if (level == null || LevelProgress.CountStarsInLevels(levelDefinitions) < level.RequiredStars)
+                return;
             if (string.IsNullOrWhiteSpace(level.ScenePath))
             {
                 Debug.LogError(T("level_missing_scene", level.LevelName), this);

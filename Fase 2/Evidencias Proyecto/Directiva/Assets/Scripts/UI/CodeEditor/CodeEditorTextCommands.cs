@@ -16,11 +16,123 @@ namespace Directiva.CodeUI
     }
 
     /// <summary>
+    /// A whole-line move retains the caret/selection direction and reports the
+    /// original line range so line-based annotations can follow the source.
+    /// </summary>
+    public readonly struct CodeEditorLineMoveEdit
+    {
+        public string Text { get; }
+        public int Cursor { get; }
+        public int Selection { get; }
+        public int FirstLine { get; }
+        public int LastLine { get; }
+        public bool MovingDown { get; }
+        public bool Changed { get; }
+
+        public CodeEditorLineMoveEdit(string text, int cursor, int selection,
+            int firstLine, int lastLine, bool movingDown, bool changed)
+        {
+            Text = text ?? string.Empty;
+            Cursor = Math.Max(0, Math.Min(cursor, Text.Length));
+            Selection = Math.Max(0, Math.Min(selection, Text.Length));
+            FirstLine = firstLine;
+            LastLine = lastLine;
+            MovingDown = movingDown;
+            Changed = changed;
+        }
+
+        /// <summary>Map a one-based line number when swapping the selected block with a neighbor.</summary>
+        public int MapLine(int line)
+        {
+            if (!Changed || line <= 0)
+                return line;
+
+            if (MovingDown)
+            {
+                if (line >= FirstLine && line <= LastLine) return line + 1;
+                if (line == LastLine + 1) return FirstLine;
+            }
+            else
+            {
+                if (line >= FirstLine && line <= LastLine) return line - 1;
+                if (line == FirstLine - 1) return LastLine;
+            }
+            return line;
+        }
+    }
+
+    /// <summary>
     /// Pure text transformations for editor shortcuts. The UI applies the result
     /// through its normal value-change and undo/redo pipeline.
     /// </summary>
     public static class CodeEditorTextCommands
     {
+        /// <summary>
+        /// VS Code-style Alt+Up/Down: move the whole line or selected contiguous
+        /// block one position without changing its contents or indentation.
+        /// A selection ending immediately after a newline excludes the next line.
+        /// </summary>
+        public static CodeEditorLineMoveEdit MoveSelectedLines(
+            string text, int cursor, int selection, bool moveDown)
+        {
+            text = NormalizeLineEndings(text);
+            cursor = Clamp(cursor, text.Length);
+            selection = Clamp(selection, text.Length);
+
+            int start = Math.Min(cursor, selection);
+            int end = Math.Max(cursor, selection);
+            int lastRelevant = end > start && end > 0 && text[end - 1] == '\n'
+                ? end - 1 : end;
+
+            // Split preserves a trailing empty logical line, unlike many
+            // line enumerators. This makes moves around a final newline safe.
+            var lines = text.Split('\n');
+            int firstLine = LineNumberAt(text, start);
+            int lastLine = LineNumberAt(text, lastRelevant);
+
+            if ((moveDown && lastLine == lines.Length) || (!moveDown && firstLine == 1))
+                return new CodeEditorLineMoveEdit(text, cursor, selection,
+                    firstLine, lastLine, moveDown, false);
+
+            int shift;
+            if (moveDown)
+            {
+                // The following line moves above the block.
+                int after = lastLine; // zero-based index
+                shift = lines[after].Length + 1;
+                string neighbor = lines[after];
+                for (int i = after; i > firstLine - 1; i--)
+                    lines[i] = lines[i - 1];
+                lines[firstLine - 1] = neighbor;
+            }
+            else
+            {
+                // The preceding line moves below the block.
+                int before = firstLine - 2; // zero-based index
+                shift = -(lines[before].Length + 1);
+                string neighbor = lines[before];
+                for (int i = before; i < lastLine - 1; i++)
+                    lines[i] = lines[i + 1];
+                lines[lastLine - 1] = neighbor;
+            }
+
+            string updated = string.Join("\n", lines);
+            // Both endpoints travel with the moved block. Clamping matters
+            // when that block moves past an EOF line without a trailing LF.
+            return new CodeEditorLineMoveEdit(updated,
+                Clamp(cursor + shift, updated.Length),
+                Clamp(selection + shift, updated.Length),
+                firstLine, lastLine, moveDown, true);
+        }
+
+        private static int LineNumberAt(string text, int index)
+        {
+            int line = 1;
+            for (int i = 0; i < index; i++)
+                if (text[i] == '\n') line++;
+            return line;
+        }
+
         /// <summary>
         /// Replace the selection with a line break followed by the current line's
         /// indentation. A colon before the caret adds one more indentation level.

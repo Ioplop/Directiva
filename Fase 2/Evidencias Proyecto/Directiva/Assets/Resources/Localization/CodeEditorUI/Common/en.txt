@@ -13,6 +13,8 @@
 [cancel]: Cancel
 [close]: Close
 [saved]: Saved: {{1}}
+[saved_all]: Saved {{1}} scripts.
+[nothing_to_save]: No scripts have unsaved changes.
 [operation_failed]: The operation failed: {{1}}
 [analysis_exception]: Code analysis failed: {{1}}
 [options_not_implemented]: General options are not implemented yet.

@@ -17,6 +17,9 @@ namespace Directiva.CodeUI
         private readonly VisualElement _content;
         private readonly VisualElement _actions;
 
+        /// <summary>Keyboard editor shortcuts should not intercept modal input.</summary>
+        public bool IsOpen => _overlay.style.display.value == DisplayStyle.Flex;
+
         public ModalLayer(LocalizationService locale)
         {
             _locale = locale;

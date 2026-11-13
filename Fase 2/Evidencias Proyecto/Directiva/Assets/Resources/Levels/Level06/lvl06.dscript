@@ -1,0 +1,38 @@
+# Level created by Nandy Troncoso during closed play testing 2026-11-12
+shared recolectar = True
+shared objetivo_recoleccion_por_unidad = {}
+
+def ganemos():
+    build(unidad)
+    
+def unidad():
+    if self.attack_range >= self.distance_to(closest_enemy()) or count_allies() >11 or count_enemies() > 5:
+        if self.cargo > (self.cargo_capacity) * 0.5 :
+            if self.distance_to(self.nexus) > distance_to(closest_enemy()):
+                drop_cargo() 
+        move(closest_enemy())
+        attack(closest_enemy())
+    elif self.is_cargo_full :
+        move(self.nexus)
+    else:
+        encontrar_recurso()
+        recursito = objetivo_recoleccion_por_unidad[self]
+        if recursito:
+            move(recursito)
+            gather(recursito)
+        else:
+            move(closest_enemy())
+            attack(closest_enemy())
+        
+# Encontrar recurso que no este tomado
+def encontrar_recurso():
+    if self in objetivo_recoleccion_por_unidad:
+        if objetivo_recoleccion_por_unidad[self].alive:
+            return
+    lista_recursos = resource_nodes()
+    for recurso in lista_recursos:
+        if recurso.is_available_to_gather :
+            objetivo_recoleccion_por_unidad[self] = recurso
+            return
+    objetivo_recoleccion_por_unidad[self] = closest_resource()
+    

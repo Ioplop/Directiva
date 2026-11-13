@@ -32,3 +32,6 @@
 [resolution_preview_expired]: [Directiva Settings] Resolution confirmation expired or the display mode became unavailable.
 [level_missing_scene]: [Directiva] Level '{{1}}' has no destination scene.
 [level_scene_unavailable]: [Directiva] Scene '{{1}}' is not included in Build Profiles.
+[star_victory]: Win the level.
+[star_untouched]: Win without the Nexus losing health. Shield damage is allowed.
+[star_fast]: Win in fewer than {{1}} simulated seconds.

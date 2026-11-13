@@ -597,11 +597,14 @@ namespace Directiva.EditorTests.CodeUITests
                 var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
                 storage.WriteBackup("b.dscript", working["b"]);
                 var workspace = new ScriptWorkspace(storage);
+                int persistedChanges = 0;
+                workspace.SavedScriptsChanged += () => persistedChanges++;
                 workspace.Open("a.dscript");
                 if (!Prepare(t, working, saved, "a", "score", "total", out var work, out var disk)) return;
                 bool ok = Apply(workspace, work, disk, out string error);
                 t.Check(ok, "commit: " + error);
                 if (!ok) return;
+                t.Equal(1, persistedChanges, "multi-file refactor sends one persisted-source notification");
                 t.Equal("shared total = 1\n", storage.ReadSaved("a.dscript"), "clean declaration saved");
                 t.Equal("shared total\ndef get():\n    return total\n", storage.ReadSaved("b.dscript"),
                     "dirty declaration renamed without extra print");
@@ -644,6 +647,8 @@ namespace Directiva.EditorTests.CodeUITests
                 var storage = new MemoryStorage(saved.ToDictionary(e => e.Key + ".dscript", e => e.Value));
                 storage.WriteBackup("lib.dscript", working["lib"]);
                 var workspace = new ScriptWorkspace(storage);
+                int persistedChanges = 0;
+                workspace.SavedScriptsChanged += () => persistedChanges++;
                 workspace.Open("main.dscript");
                 workspace.UpdateActiveWorkingContent(working["main"]);
                 bool planned = DScriptSymbolRename.TryRename("main",
@@ -657,6 +662,7 @@ namespace Directiva.EditorTests.CodeUITests
                 bool ok = Apply(workspace, work, null, out error);
                 t.Check(ok, "fallback commit: " + error);
                 if (!ok) return;
+                t.Equal(0, persistedChanges, "working-only refactor does not reload saved programs");
                 t.Equal(saved["lib"], storage.ReadSaved("lib.dscript"),
                     "saved library left unchanged in fallback");
                 t.Equal("def run():\n    return 1\n", storage.ReadBackup("lib.dscript"),

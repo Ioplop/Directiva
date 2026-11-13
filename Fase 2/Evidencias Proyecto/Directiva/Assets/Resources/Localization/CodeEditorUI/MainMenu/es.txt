@@ -32,3 +32,6 @@
 [resolution_preview_expired]: [Directiva Settings] La confirmación de resolución expiró o dejó de estar disponible.
 [level_missing_scene]: [Directiva] El nivel '{{1}}' no tiene escena de destino.
 [level_scene_unavailable]: [Directiva] La escena '{{1}}' no está incluida en los perfiles de compilación.
+[star_victory]: Ganar el nivel.
+[star_untouched]: Ganar sin perder vida en el nexo. El daño a los escudos está permitido.
+[star_fast]: Ganar en menos de {{1}} segundos simulados.

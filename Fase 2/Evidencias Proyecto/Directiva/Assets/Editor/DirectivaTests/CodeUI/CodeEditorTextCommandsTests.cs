@@ -153,6 +153,108 @@ namespace Directiva.EditorTests.CodeUITests
                 t.Equal("alpha", next.Text, "successive deletes");
                 t.Equal(5, next.Caret, "final caret");
             });
+
+            Add("MoveSingleUp", "Alt+Up swaps a complete line and keeps the caret column", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("uno\ndos\ntres", 5, 5, false);
+                t.Check(edit.Changed, "line moved");
+                t.Equal("dos\nuno\ntres", edit.Text, "line order");
+                t.Equal(1, edit.Cursor, "caret stays inside moved line");
+                t.Equal(1, edit.Selection, "selection stays collapsed");
+                t.Equal(1, edit.MapLine(2), "breakpoint on moved line follows it");
+                t.Equal(2, edit.MapLine(1), "breakpoint on neighbor follows it");
+                t.Equal(3, edit.MapLine(3), "unrelated breakpoint stays");
+            });
+
+            Add("MoveSingleDown", "Alt+Down moves a whole line while preserving its caret", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("uno\ndos\ntres", 5, 5, true);
+                t.Equal("uno\ntres\ndos", edit.Text, "line order");
+                t.Equal(10, edit.Cursor, "caret follows dos");
+                t.Equal(3, edit.MapLine(2), "moved breakpoint");
+                t.Equal(2, edit.MapLine(3), "following breakpoint");
+            });
+
+            Add("MoveSelectedBlockUp", "Alt+Up moves all selected rows as a block", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("a\nbb\nccc\nd", 2, 9, false);
+                t.Equal("bb\nccc\na\nd", edit.Text, "whole selected block moved");
+                t.Equal(0, edit.Cursor, "selection start follows block");
+                t.Equal(7, edit.Selection, "exclusive end excludes line a");
+                t.Equal(2, edit.FirstLine, "original first line");
+                t.Equal(3, edit.LastLine, "original last line");
+                t.Equal(1, edit.MapLine(2), "first block breakpoint");
+                t.Equal(2, edit.MapLine(3), "second block breakpoint");
+                t.Equal(3, edit.MapLine(1), "preceding breakpoint relocated");
+            });
+
+            Add("MoveSelectedBlockDown", "Alt+Down moves selection to EOF without adding a newline", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("a\nbb\nccc\nd", 2, 9, true);
+                t.Equal("a\nd\nbb\nccc", edit.Text, "block moved down");
+                t.Equal(4, edit.Cursor, "selection moved to new block start");
+                t.Equal(10, edit.Selection, "selection ends at EOF");
+                t.Equal(3, edit.MapLine(2), "first block breakpoint follows block");
+                t.Equal(4, edit.MapLine(3), "second block breakpoint follows block");
+                t.Equal(2, edit.MapLine(4), "adjacent breakpoint moves up");
+            });
+
+            Add("MoveReversedSelection", "Moving lines preserves backward selection orientation", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("a\nbb\nccc\nd", 9, 2, false);
+                t.Equal("bb\nccc\na\nd", edit.Text, "text moved");
+                t.Equal(7, edit.Cursor, "cursor remains the higher endpoint");
+                t.Equal(0, edit.Selection, "selection anchor remains lower endpoint");
+            });
+
+            Add("MoveSelectionEndsAtLineStart", "A selection ending at the next row start excludes that row", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("a\nb\nc", 2, 4, true);
+                t.Equal("a\nc\nb", edit.Text, "only b moved, not c");
+                t.Equal(4, edit.Cursor, "selection start follows b");
+                t.Equal(5, edit.Selection, "selection end clamped to EOF");
+                t.Equal(2, edit.LastLine, "exclusive selection ends on b");
+            });
+
+            Add("MovePreservesWhitespace", "Moving lines never changes indentation or trailing spaces", t =>
+            {
+                const string source = "if ok:\n    one()  \n\tsecond()\npass";
+                var edit = CodeEditorTextCommands.MoveSelectedLines(source, 19, 19, false);
+                t.Equal("if ok:\n\tsecond()\n    one()  \npass", edit.Text,
+                    "unchanged tab, spaces and source contents");
+            });
+
+            Add("MoveAtBoundaries", "Moving first up or last down is a no-op", t =>
+            {
+                var up = CodeEditorTextCommands.MoveSelectedLines("a\nb", 0, 0, false);
+                var down = CodeEditorTextCommands.MoveSelectedLines("a\nb", 3, 3, true);
+                t.Check(!up.Changed && !down.Changed, "no text mutation at boundaries");
+                t.Equal("a\nb", up.Text, "up no-op source");
+                t.Equal("a\nb", down.Text, "down no-op source");
+                t.Equal(0, up.Cursor, "up no-op cursor");
+                t.Equal(3, down.Cursor, "down no-op cursor");
+            });
+
+            Add("MoveTrailingEmptyLine", "A trailing empty row can be moved without losing characters", t =>
+            {
+                var edit = CodeEditorTextCommands.MoveSelectedLines("a\n", 2, 2, false);
+                t.Equal("\na", edit.Text, "empty line moved up");
+                t.Equal(0, edit.Cursor, "caret follows empty line");
+                var again = CodeEditorTextCommands.MoveSelectedLines(edit.Text, edit.Cursor, edit.Selection, true);
+                t.Equal("a\n", again.Text, "inverse move returns original");
+                t.Equal(2, again.Cursor, "inverse caret");
+            });
+
+            Add("MoveMultipleAndUndoEquivalent", "Moving the same block back restores text and selection", t =>
+            {
+                const string source = "a\nbb\nccc\nd";
+                var first = CodeEditorTextCommands.MoveSelectedLines(source, 3, 7, true);
+                var again = CodeEditorTextCommands.MoveSelectedLines(
+                    first.Text, first.Cursor, first.Selection, false);
+                t.Equal(source, again.Text, "inverse restores text");
+                t.Equal(3, again.Cursor, "inverse restores caret");
+                t.Equal(7, again.Selection, "inverse restores selection");
+            });
         }
     }
 }

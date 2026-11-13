@@ -404,6 +404,69 @@ namespace Directiva.EditorTests.DScript
                     t.Check(provider.TryReadModule("TestCase", out _), "exact case found");
                     t.Check(!provider.TryReadModule("testcase", out _), "incorrect case rejected");
                 }));
+
+            Add("SaveAllIncludesClosedScripts", "Save all writes the active buffer and closed backups in folders", t =>
+                WithWorkspace((root, storage, workspace) =>
+                {
+                    storage.CreateScript("", "main", "shared value = 1\n");
+                    storage.CreateFolder("", "utils");
+                    storage.CreateScript("utils", "helper", "shared helper = 1\n");
+                    storage.CreateScript("utils", "clean", "shared untouched = 1\n");
+                    workspace.Open("utils/helper.dscript");
+                    workspace.UpdateActiveWorkingContent("shared helper = 2\n");
+                    workspace.Open("main.dscript"); // flushes the closed helper's .back
+                    workspace.UpdateActiveWorkingContent("shared value = 3\n");
+
+                    int notifications = 0;
+                    workspace.SavedScriptsChanged += () => notifications++;
+                    var saved = workspace.SaveAllDirtyScripts();
+                    t.Equal(2, saved.Count, "both dirty scripts saved");
+                    t.Check(saved.Contains("main.dscript"), "active script included");
+                    t.Check(saved.Contains("utils/helper.dscript"), "closed helper included");
+                    t.Equal("shared value = 3\n", storage.ReadSaved("main.dscript"), "active saved");
+                    t.Equal("shared helper = 2\n", storage.ReadSaved("utils/helper.dscript"), "helper saved");
+                    t.Equal("shared untouched = 1\n", storage.ReadSaved("utils/clean.dscript"),
+                        "unmodified script unchanged");
+                    t.Check(!storage.BackupExists("utils/helper.dscript"), "closed backup removed");
+                    t.Check(!workspace.Active.IsDirty, "active buffer is clean");
+                    t.Equal(1, notifications, "one notification for entire save-all batch");
+
+                    t.Equal(0, workspace.SaveAllDirtyScripts().Count, "second save-all has no work");
+                    t.Equal(1, notifications, "no redundant recompilation notification");
+                }));
+
+            Add("SingleSaveLeavesClosedDrafts", "Ctrl+S saves only the active script", t =>
+                WithWorkspace((root, storage, workspace) =>
+                {
+                    storage.CreateScript("", "main", "a = 1\n");
+                    storage.CreateScript("", "other", "b = 1\n");
+                    workspace.Open("other.dscript");
+                    workspace.UpdateActiveWorkingContent("b = 2\n");
+                    workspace.Open("main.dscript");
+                    workspace.UpdateActiveWorkingContent("a = 2\n");
+                    int notifications = 0;
+                    workspace.SavedScriptsChanged += () => notifications++;
+                    workspace.Save(workspace.Active.RelativePath);
+                    t.Equal("a = 2\n", storage.ReadSaved("main.dscript"), "active saved");
+                    t.Equal("b = 1\n", storage.ReadSaved("other.dscript"), "closed saved source untouched");
+                    t.Equal("b = 2\n", storage.ReadBackup("other.dscript"), "closed draft preserved");
+                    t.Equal(1, notifications, "single-save notification");
+                }));
+
+            Add("SaveAllNestedWithoutActive", "Save all finds deep backups even with no open document", t =>
+                WithWorkspace((root, storage, workspace) =>
+                {
+                    storage.CreateFolder("", "pkg");
+                    storage.CreateFolder("pkg", "inner");
+                    storage.CreateScript("pkg/inner", "calc", "shared x = 1\n");
+                    storage.WriteBackup("pkg/inner/calc.dscript", "shared x = 5\n");
+                    t.Check(workspace.Active == null, "no open document");
+                    var saved = workspace.SaveAllDirtyScripts();
+                    t.Equal(1, saved.Count, "nested backup found");
+                    t.Equal("pkg/inner/calc.dscript", saved[0], "correct nested path");
+                    t.Equal("shared x = 5\n", storage.ReadSaved(saved[0]), "nested source saved");
+                    t.Check(!storage.BackupExists(saved[0]), "nested backup removed");
+                }));
         }
     }
 }

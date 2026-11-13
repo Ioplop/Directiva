@@ -42,6 +42,10 @@ namespace DSimulation
         public Fixed Shields { get; protected set; }
         public Fixed ShieldRegen { get; protected set; }
         public Fixed LastDamage {  get; protected set; }
+        /// <summary>Latched for this entity's lifetime: includes damage absorbed by shields.</summary>
+        public bool HasTakenDamage { get; private set; }
+        /// <summary>True once this entity has actually lost health; shield-only hits do not count.</summary>
+        public bool HasTakenHealthDamage { get; private set; }
 
         public SBEntity(SBSide side)
         {
@@ -199,6 +203,8 @@ namespace DSimulation
                 Heal(-dmg);
                 return;
             }
+            // Do not infer this from current health/shields: shields can regenerate.
+            HasTakenDamage = true;
             // TODO: Some sort of event thing that tells the front end to apply a damage animation?
             if (Shields >= dmg)
             {
@@ -212,7 +218,10 @@ namespace DSimulation
                     Shields = 0;
                     NotifyShields();
                 }
+                Fixed previousHealth = Health;
                 Health = (Health - dmg).Clamp( 0, MaxHealth);
+                if (Health < previousHealth)
+                    HasTakenHealthDamage = true;
                 NotifyHealth();
                 if (Health <= 0) Die();
             }

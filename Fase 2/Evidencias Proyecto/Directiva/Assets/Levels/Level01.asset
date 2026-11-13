@@ -15,6 +15,8 @@ MonoBehaviour:
   levelName: Directive #1
   levelNumber: 1
   requiredStars: 0
+  maxMatchDurationSeconds: 300
+  fastVictorySeconds: 200
   scenePath: Assets/Scenes/BaseSimulation.unity
   codeFolder: Level01
   entryModule: lvl01

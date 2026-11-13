@@ -46,6 +46,12 @@ namespace Directiva.CodeUI
         public event Action<ActiveDocument> ActiveChanged;
         public event Action<string> ScriptStateChanged;
         public event Action<string, string> PathChanged;
+        /// <summary>
+        /// Fired after one or more .dscript files have actually been persisted.
+        /// Unlike backup/state notifications, this invalidates programs compiled
+        /// from saved sources (including programs importing those files).
+        /// </summary>
+        public event Action SavedScriptsChanged;
 
         public ScriptWorkspace(IScriptStorage storage)
         {
@@ -321,7 +327,10 @@ namespace Directiva.CodeUI
             foreach (var update in updates)
                 ScriptStateChanged?.Invoke(update.Path);
             if (updates.Any(u => !string.Equals(u.OldSaved, u.NewSaved, StringComparison.Ordinal)))
+            {
+                SavedScriptsChanged?.Invoke();
                 TreeChanged?.Invoke();
+            }
             return true;
         }
 
@@ -331,6 +340,57 @@ namespace Directiva.CodeUI
         public void Save(string relativeScriptPath)
         {
             relativeScriptPath = Normalize(relativeScriptPath);
+            SaveWithoutBatchNotification(relativeScriptPath);
+            SavedScriptsChanged?.Invoke();
+            TreeChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Save every dirty player script, including closed documents represented
+        /// by .dscript.back files in nested directories. Notify compilation hosts
+        /// only once, after the whole batch, instead of between individual writes.
+        /// </summary>
+        public IReadOnlyList<string> SaveAllDirtyScripts()
+        {
+            var savedPaths = new List<string>();
+            try
+            {
+                foreach (string path in EnumerateAllScripts(string.Empty))
+                {
+                    if (!IsDirty(path))
+                        continue;
+
+                    SaveWithoutBatchNotification(path);
+                    savedPaths.Add(path);
+                }
+            }
+            finally
+            {
+                // Even if a later write throws, previously saved sources must
+                // invalidate compiled programs. Never claim that all succeeded.
+                if (savedPaths.Count > 0)
+                {
+                    SavedScriptsChanged?.Invoke();
+                    TreeChanged?.Invoke();
+                }
+            }
+            return savedPaths;
+        }
+
+        private IEnumerable<string> EnumerateAllScripts(string folder)
+        {
+            foreach (string script in _storage.EnumerateScripts(folder)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+                yield return script;
+
+            foreach (string subfolder in _storage.EnumerateDirectories(folder)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+                foreach (string script in EnumerateAllScripts(subfolder))
+                    yield return script;
+        }
+
+        private void SaveWithoutBatchNotification(string relativeScriptPath)
+        {
             var content = GetWorkingContent(relativeScriptPath);
 
             _storage.WriteSaved(relativeScriptPath, content);
@@ -347,7 +407,6 @@ namespace Directiva.CodeUI
             }
 
             ScriptStateChanged?.Invoke(relativeScriptPath);
-            TreeChanged?.Invoke();
         }
 
         public void Revert(string relativeScriptPath)

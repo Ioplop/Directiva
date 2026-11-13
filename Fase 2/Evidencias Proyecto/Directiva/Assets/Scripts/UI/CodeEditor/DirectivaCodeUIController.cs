@@ -81,6 +81,12 @@ namespace Directiva.CodeUI
         public DirectivaCode Codebase { get; private set; }
 
         /// <summary>
+        /// Notifies simulation hosts when an editable player script is saved to
+        /// disk. Backups and unsaved text changes never fire this event.
+        /// </summary>
+        public event Action SavedScriptsChanged;
+
+        /// <summary>
         /// True when any player script has unsaved working changes (including a
         /// closed script with a .dscript.back backup). The simulation picker uses
         /// this only for its warning; it always compiles saved files on disk.
@@ -191,6 +197,7 @@ namespace Directiva.CodeUI
             {
                 BackupIntervalSeconds = backupIntervalSeconds
             };
+            _workspace.SavedScriptsChanged += OnWorkspaceSavedScriptsChanged;
 
             Codebase = new DirectivaCode(_storage);
             Analyzer = new NoOpCodeAnalyzer();
@@ -260,7 +267,11 @@ namespace Directiva.CodeUI
         private void OnDestroy()
         {
             DirectivaLocalization.LanguageChanged -= OnGlobalLanguageChanged;
+            if (_workspace != null)
+                _workspace.SavedScriptsChanged -= OnWorkspaceSavedScriptsChanged;
         }
+
+        private void OnWorkspaceSavedScriptsChanged() => SavedScriptsChanged?.Invoke();
 
         private void OnGlobalLanguageChanged(string locale)
         {
@@ -473,6 +484,9 @@ namespace Directiva.CodeUI
         {
             // Clear only the container we own; never clear the simulation UI root.
             root.Clear();
+            // Capture save shortcuts from any focused part of this editor (including
+            // the explorer). The simulation view outside this root is unaffected.
+            root.RegisterCallback<KeyDownEvent>(OnSaveShortcut, TrickleDown.TrickleDown);
             root.AddToClassList("directiva-code-ui-root");
             root.style.flexGrow = 1f;
             root.style.minHeight = 0f;
@@ -861,6 +875,31 @@ namespace Directiva.CodeUI
                 RefreshCodebase();
                 Output.Write(Localization.Get("Common", "saved", path));
             });
+        }
+
+        private void OnSaveShortcut(KeyDownEvent evt)
+        {
+            if (evt.keyCode != KeyCode.S || !(evt.ctrlKey || evt.commandKey) || evt.altKey ||
+                (_modal != null && _modal.IsOpen))
+                return;
+
+            // Consume the shortcut before the focused TextField (or Unity's
+            // default text editing commands) can interpret the same key press.
+            evt.StopImmediatePropagation();
+            if (evt.shiftKey)
+            {
+                SafeAction(() =>
+                {
+                    var saved = _workspace.SaveAllDirtyScripts();
+                    Output.Write(saved.Count > 0
+                        ? Localization.Get("Common", "saved_all", saved.Count)
+                        : Localization.Get("Common", "nothing_to_save"));
+                });
+            }
+            else if (_workspace.Active != null)
+            {
+                Events.RaiseSaveRequested(_workspace.Active.RelativePath);
+            }
         }
 
         private void ShowRevertConfirmation(string path)

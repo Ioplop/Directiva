@@ -61,6 +61,62 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 });
             });
 
+            Add("SaveReplacesSelectedProgramSources",
+                "Saving an edited entry file notifies the match and makes its new code available on disk", t =>
+            {
+                InRoots(1, roots =>
+                {
+                    const string original = "def main():\n    return 1\n";
+                    const string modified = "def main():\n    return 2\n";
+                    Write(roots[0], "main.dscript", original);
+                    var storage = new FileSystemScriptStorage(roots[0]);
+                    var workspace = new ScriptWorkspace(storage);
+                    int saves = 0;
+                    workspace.SavedScriptsChanged += () => saves++;
+                    var first = PlayerNexusScriptCatalog.Compile(roots[0], "main.dscript", "main");
+
+                    workspace.Open("main.dscript");
+                    workspace.UpdateActiveWorkingContent(modified);
+                    workspace.FlushActiveBackup();
+                    t.Equal(0, saves, "editing/auto-backup never triggers a program reload");
+                    t.Equal(original, storage.ReadSaved("main.dscript"), "only the backup changed");
+
+                    workspace.Save("main.dscript");
+                    t.Equal(1, saves, "explicit save emits a single persisted-source notification");
+                    t.Equal(modified, storage.ReadSaved("main.dscript"), "new code is saved");
+                    t.Check(!workspace.Active.IsDirty, "document is clean after save");
+                    var second = PlayerNexusScriptCatalog.Compile(roots[0], "main.dscript", "main");
+                    t.Check(first.DILModules["main"] != second.DILModules["main"],
+                        "next compilation uses the edited program instead of the old snapshot");
+                });
+            });
+
+            Add("SaveImportedScriptInvalidatesProgram",
+                "Saving a dependency must notify the match even when the Nexus entry file is untouched", t =>
+            {
+                InRoots(1, roots =>
+                {
+                    Write(roots[0], "main.dscript",
+                        "import utils\ndef main():\n    return utils.answer()\n");
+                    Write(roots[0], "utils.dscript", "def answer():\n    return 1\n");
+                    var first = PlayerNexusScriptCatalog.Compile(roots[0], "main.dscript", "main");
+
+                    var workspace = new ScriptWorkspace(new FileSystemScriptStorage(roots[0]));
+                    int saves = 0;
+                    workspace.SavedScriptsChanged += () => saves++;
+                    workspace.Open("utils.dscript");
+                    workspace.UpdateActiveWorkingContent("def answer():\n    return 42\n");
+                    workspace.Save("utils.dscript");
+
+                    t.Equal(1, saves, "saving the dependency emits a source-change notification");
+                    var second = PlayerNexusScriptCatalog.Compile(roots[0], "main.dscript", "main");
+                    t.Check(first.DILModules["utils"] != second.DILModules["utils"],
+                        "new compilation reads the updated imported module");
+                    t.Equal(first.DILModules["main"], second.DILModules["main"],
+                        "the unchanged entry file need not be saved again");
+                });
+            });
+
             Add("ParserFailureKeepsClickableLocation",
                 "A script rejected by the Nexus selector keeps the exact editable file and line", t =>
             {

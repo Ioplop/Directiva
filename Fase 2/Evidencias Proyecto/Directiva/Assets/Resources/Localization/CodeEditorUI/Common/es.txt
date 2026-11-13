@@ -13,6 +13,8 @@
 [cancel]: Cancelar
 [close]: Cerrar
 [saved]: Guardado: {{1}}
+[saved_all]: Guardados {{1}} scripts.
+[nothing_to_save]: No hay scripts pendientes de guardar.
 [operation_failed]: La operación falló: {{1}}
 [analysis_exception]: El análisis de código falló: {{1}}
 [options_not_implemented]: Las opciones generales todavía no están implementadas.

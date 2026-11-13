@@ -23,6 +23,8 @@ namespace Directiva.Editor.Levels
         private SerializedProperty levelName;
         private SerializedProperty levelNumber;
         private SerializedProperty requiredStars;
+        private SerializedProperty maxMatchDurationSeconds;
+        private SerializedProperty fastVictorySeconds;
         private SerializedProperty scenePath;
         private SerializedProperty codeFolder;
         private SerializedProperty entryModule;
@@ -40,6 +42,8 @@ namespace Directiva.Editor.Levels
             levelName = serializedObject.FindProperty("levelName");
             levelNumber = serializedObject.FindProperty("levelNumber");
             requiredStars = serializedObject.FindProperty("requiredStars");
+            maxMatchDurationSeconds = serializedObject.FindProperty("maxMatchDurationSeconds");
+            fastVictorySeconds = serializedObject.FindProperty("fastVictorySeconds");
             scenePath = serializedObject.FindProperty("scenePath");
             codeFolder = serializedObject.FindProperty("codeFolder");
             entryModule = serializedObject.FindProperty("entryModule");
@@ -53,9 +57,25 @@ namespace Directiva.Editor.Levels
             EditorGUILayout.LabelField("Nivel", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(levelName, new GUIContent("Nombre"));
             EditorGUILayout.PropertyField(levelNumber, new GUIContent("Número de nivel"));
+            if (levelNumber.intValue <= 0)
+                EditorGUILayout.HelpBox("El número de nivel debe ser positivo para guardar estrellas.",
+                    MessageType.Error);
             EditorGUILayout.PropertyField(requiredStars, new GUIContent("Estrellas requeridas"));
             if (requiredStars.intValue < 0) requiredStars.intValue = 0;
             DrawScenePicker();
+
+            EditorGUILayout.Space(12);
+            EditorGUILayout.LabelField("Objetivos de la partida", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(maxMatchDurationSeconds,
+                new GUIContent("Duración máxima (segundos)"));
+            EditorGUILayout.PropertyField(fastVictorySeconds,
+                new GUIContent("Estrella rápida: menos de (segundos)"));
+            maxMatchDurationSeconds.intValue = Mathf.Max(1, maxMatchDurationSeconds.intValue);
+            fastVictorySeconds.intValue = Mathf.Max(1, fastVictorySeconds.intValue);
+            if (fastVictorySeconds.intValue >= maxMatchDurationSeconds.intValue)
+                EditorGUILayout.HelpBox(
+                    "El tiempo para la estrella rápida debe ser menor que el límite de la partida " +
+                    "para que el objetivo sea distinto de ganar.", MessageType.Warning);
 
             EditorGUILayout.Space(12);
             EditorGUILayout.LabelField("Programa del enemigo", EditorStyles.boldLabel);

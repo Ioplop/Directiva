@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
   levelName: Directive #4
   levelNumber: 4
-  requiredStars: 0
+  requiredStars: 6
+  maxMatchDurationSeconds: 300
+  fastVictorySeconds: 200
   scenePath: Assets/Scenes/BaseSimulation.unity
   codeFolder: Level04
   entryModule: lvl04

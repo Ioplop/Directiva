@@ -1596,6 +1596,17 @@ namespace Directiva.CodeUI
 
         private void OnEditorLineShortcut(KeyDownEvent evt)
         {
+            // Capture Alt+Up/Down before the native TextField moves its caret.
+            // Shift is deliberately excluded (VS Code uses Alt+Shift to duplicate).
+            if (evt.altKey && !evt.ctrlKey && !evt.commandKey && !evt.shiftKey &&
+                (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow))
+            {
+                evt.StopImmediatePropagation();
+                if (!_isReadOnly)
+                    MoveEditorLines(evt.keyCode == KeyCode.DownArrow);
+                return;
+            }
+
             bool returnKey = evt.keyCode == KeyCode.Return ||
                              evt.keyCode == KeyCode.KeypadEnter;
             bool returnCharacter = evt.character == '\n' || evt.character == '\r';
@@ -1661,6 +1672,43 @@ namespace Directiva.CodeUI
             var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
             var edit = CodeEditorTextCommands.InsertLineBreak(text, cursor, select, TabSize);
             ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+        }
+
+        private void MoveEditorLines(bool down)
+        {
+            string source = NormalizeLineEndings(_textField.value);
+            int cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, source.Length);
+            int selection = Mathf.Clamp(_textField.textSelection.selectIndex, 0, source.Length);
+            var edit = CodeEditorTextCommands.MoveSelectedLines(source, cursor, selection, down);
+            if (!edit.Changed)
+                return;
+
+            // The original selection is the undo snapshot; the moved selection
+            // will be restored after UI Toolkit finishes updating the TextField.
+            CaptureActiveHistorySelection();
+            ApplyEdit(edit.Text, edit.Cursor, edit.Selection);
+            RemapBreakpointsAfterLineMove(edit);
+        }
+
+        private void RemapBreakpointsAfterLineMove(CodeEditorLineMoveEdit edit)
+        {
+            if (_breakpoints.Count == 0)
+                return;
+
+            var relocated = new HashSet<int>(_breakpoints.Select(edit.MapLine));
+            var removed = _breakpoints.Except(relocated).ToArray();
+            var added = relocated.Except(_breakpoints).ToArray();
+            foreach (int line in removed)
+            {
+                _breakpoints.Remove(line);
+                BreakpointChanged?.Invoke(line, false);
+            }
+            foreach (int line in added)
+            {
+                _breakpoints.Add(line);
+                BreakpointChanged?.Invoke(line, true);
+            }
+            RebuildGutter();
         }
 
         private void OnKeyDown(KeyDownEvent evt)

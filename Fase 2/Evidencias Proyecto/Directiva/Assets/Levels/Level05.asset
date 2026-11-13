@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
   levelName: Directive #5
   levelNumber: 5
-  requiredStars: 0
+  requiredStars: 9
+  maxMatchDurationSeconds: 600
+  fastVictorySeconds: 400
   scenePath: Assets/Scenes/BaseSimulation.unity
   codeFolder: Level05
-  entryModule: main
+  entryModule: lvl05
   entryFunction: nexo
