@@ -149,6 +149,11 @@ namespace Directiva.MainMenu
         private Label starTotal;
         private Button fullScreenButton;
         private Button simulateInactiveButton;
+        private Button editorCompletionButton;
+        private Button editorErrorsButton;
+        private Button editorSuggestionsButton;
+        private Slider editorDelaySlider;
+        private Label editorDelayValue;
         private DropdownField languageDropdown;
         private DropdownField mouseCaptureDropdown;
         private DropdownField resolutionDropdown;
@@ -479,6 +484,25 @@ namespace Directiva.MainMenu
                 MouseCaptureLabel(values.controls.mouseCapture),
                 label => SettingsManager.SetMouseCapture(MouseCaptureValue(label)));
 
+            var editorSection = AddOptionsSection(T("editor_options"));
+            editorCompletionButton = AddBooleanButton(editorSection, T("editor_completion"), null,
+                () => SettingsManager.SetEditorCompletion(!SettingsManager.Current.editor.showCompletion));
+            editorErrorsButton = AddBooleanButton(editorSection, T("editor_errors"), null,
+                () => SettingsManager.SetEditorLiveErrors(!SettingsManager.Current.editor.showLiveErrors));
+            editorSuggestionsButton = AddBooleanButton(editorSection, T("editor_error_suggestions"), null,
+                () => SettingsManager.SetEditorErrorSuggestions(!SettingsManager.Current.editor.showErrorSuggestions));
+            var editorDelayRow = Container("dm-volume-row");
+            editorDelayRow.Add(Label(T("editor_delay"), "dm-volume-name"));
+            editorDelayValue = Label("", "dm-value");
+            editorDelayRow.Add(editorDelayValue);
+            editorDelaySlider = new Slider(0.1f, 3f);
+            editorDelaySlider.AddToClassList("dm-slider");
+            editorDelaySlider.SetValueWithoutNotify(values.editor.liveErrorDelaySeconds);
+            editorDelaySlider.RegisterValueChangedCallback(evt =>
+                SettingsManager.SetEditorErrorDelay(Mathf.Round(evt.newValue * 10f) / 10f));
+            editorDelayRow.Add(editorDelaySlider);
+            editorSection.Add(editorDelayRow);
+
             BuildResolutionConfirmation();
             RefreshResolutionChoices();
             RefreshOptionValues();
@@ -606,6 +630,19 @@ namespace Directiva.MainMenu
             SetBooleanButton(simulateInactiveButton, buttons?.simulateWhenInactive, "Simular en ventana inactiva",
                 values.general.simulateWhenInactive);
 
+            SetPreference(editorCompletionButton, values.editor.showCompletion);
+            SetPreference(editorErrorsButton, values.editor.showLiveErrors);
+            SetPreference(editorSuggestionsButton, values.editor.showErrorSuggestions);
+            editorSuggestionsButton?.SetEnabled(values.editor.showLiveErrors);
+            if (editorDelaySlider != null)
+            {
+                editorDelaySlider.SetEnabled(values.editor.showLiveErrors);
+                editorDelaySlider.SetValueWithoutNotify(values.editor.liveErrorDelaySeconds);
+            }
+            if (editorDelayValue != null)
+                editorDelayValue.text = values.editor.liveErrorDelaySeconds.ToString("0.0",
+                    System.Globalization.CultureInfo.InvariantCulture) + " s";
+
             SetVolume("master", values.audio.masterVolume);
             SetVolume("music", values.audio.musicVolume);
             SetVolume("ui", values.audio.uiVolume);
@@ -616,6 +653,14 @@ namespace Directiva.MainMenu
                 resolutionDropdown?.SetValueWithoutNotify(ResolutionLabel(
                     new Vector2Int(values.graphics.resolutionWidth, values.graphics.resolutionHeight)));
             }
+        }
+
+        private void SetPreference(Button button, bool enabled)
+        {
+            if (button == null) return;
+            button.text = enabled ? T("yes") : T("no");
+            button.EnableInClassList("dm-active", enabled);
+            SetButtonColor(button, ButtonVisualState.Normal);
         }
 
         private void SetVolume(string key, int value)

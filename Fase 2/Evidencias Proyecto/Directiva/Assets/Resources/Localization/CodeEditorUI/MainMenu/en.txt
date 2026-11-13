@@ -35,3 +35,8 @@
 [star_victory]: Win the level.
 [star_untouched]: Win without the Nexus losing health. Shield damage is allowed.
 [star_fast]: Win in fewer than {{1}} simulated seconds.
+[editor_options]: Code editor
+[editor_completion]: Autocomplete suggestions
+[editor_errors]: Highlight errors while typing
+[editor_error_suggestions]: Suggestions for highlighted errors
+[editor_delay]: Delay before highlighting errors

@@ -35,3 +35,8 @@
 [star_victory]: Ganar el nivel.
 [star_untouched]: Ganar sin perder vida en el nexo. El daño a los escudos está permitido.
 [star_fast]: Ganar en menos de {{1}} segundos simulados.
+[editor_options]: Editor de código
+[editor_completion]: Sugerencias de autocompletado
+[editor_errors]: Destacado de errores
+[editor_error_suggestions]: Sugerencias al destacar errores
+[editor_delay]: Espera antes de destacar errores

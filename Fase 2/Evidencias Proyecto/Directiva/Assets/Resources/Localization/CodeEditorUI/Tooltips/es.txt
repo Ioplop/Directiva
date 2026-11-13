@@ -17,3 +17,5 @@
 [clear_output]: Limpiar Output
 [entry_function]: Nombre de la función DScript sin parámetros. Si se deja vacío, se ejecuta la primera función del archivo.
 [execution_metrics]: Pasos lógicos consumidos por el programa y tiempo real transcurrido, incluidas las pausas.
+
+[error_did_you_mean]: ¿Quisiste escribir «{{1}}»?

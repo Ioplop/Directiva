@@ -5,6 +5,8 @@ using UnityEngine;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
 using Directiva.UI;
+using Directiva.Localization;
+using DSCompilation.DScript;
 
 namespace Directiva.CodeUI
 {
@@ -57,6 +59,17 @@ namespace Directiva.CodeUI
         private readonly VisualElement _executionLineHighlight;
         private readonly VisualElement _indentGuideLayer;
         private readonly VisualElement _syntaxOverlay;
+        private readonly VisualElement _diagnosticLayer;
+        private readonly List<VisualElement> _diagnosticMarks = new List<VisualElement>();
+        private IReadOnlyList<DScriptDiagnostic> _liveIssues = Array.Empty<DScriptDiagnostic>();
+        private int[] _diagnosticLineStarts = { 0 };
+        private Func<DScriptDiagnostic, string> _diagnosticSuggestionProvider;
+        private bool _liveErrorsEnabled = true;
+        private bool _errorSuggestionsEnabled;
+        private VisualElement _diagnosticTooltip;
+        private Label _diagnosticTooltipLabel;
+        private DScriptDiagnostic _hoverIssue;
+        private IVisualElementScheduledItem _diagnosticHoverTask;
         private readonly List<Label> _syntaxLabels = new List<Label>();
         private readonly Dictionary<DScriptSyntaxKind, string> _syntaxColorHex =
             new Dictionary<DScriptSyntaxKind, string>();
@@ -85,11 +98,24 @@ namespace Directiva.CodeUI
         private readonly List<Button> _completionRows = new List<Button>();
         private DScriptCompletionResult _completionResult;
         private IVisualElementScheduledItem _completionTask;
+        private Func<string, int, DScriptCallSignatureResult> _signatureProvider;
+        private VisualElement _signaturePopup;
+        private VisualElement _signatureParameters;
+        private Label _signatureName;
+        private Label _signatureChoices;
+        private Label _signatureReturn;
+        private IVisualElementScheduledItem _signatureTask;
         private int _completionSelected = NoCompletionSelection;
         private bool _completionSuppressNextChange;
         private bool _completionDismissed;
         private bool _completionOpen;
         private bool _completionSpaceHandled;
+        private bool _completionEnabled = true;
+        // Tab previews one suggestion at a time; Escape restores the original text.
+        private bool _completionCycling;
+        private bool _completionCycleApplying;
+        private string _completionCycleSource;
+        private int _completionCycleCaret;
 
         private EditorUndoHistory _activeUndoHistory;
 
@@ -109,11 +135,13 @@ namespace Directiva.CodeUI
         public string DocumentPath { get; private set; } = string.Empty;
 
         public event Action<string> TextChanged;
+        public event Action CaretMoved;
         public event Action<int> RenameSymbolRequested;
         public event Action<int, bool> BreakpointChanged;
         public event Action<float> FontSizeChanged;
 
         public string Text => _textField.value ?? string.Empty;
+        public int CaretIndex => Mathf.Clamp(_textField.textSelection.cursorIndex, 0, Text.Length);
         public bool IsReadOnly => _isReadOnly;
 
         /// <summary>Keep selection, copying, scrolling and breakpoints available.</summary>
@@ -124,7 +152,8 @@ namespace Directiva.CodeUI
             _textField.isReadOnly = readOnly;
             EnableInClassList("execution-locked", readOnly);
             _textField.tooltip = readOnly ? reason ?? string.Empty : string.Empty;
-            if (readOnly) HideCompletion();
+            if (readOnly) { HideCompletion(); HideSignatureHelp(); }
+            else ScheduleSignatureRefresh();
         }
 
         public CodeEditorView(
@@ -200,6 +229,19 @@ namespace Directiva.CodeUI
             _syntaxOverlay.style.display = DisplayStyle.None;
             CacheSyntaxColors();
 
+            _diagnosticLayer = new VisualElement();
+            _diagnosticLayer.pickingMode = PickingMode.Ignore;
+            _diagnosticLayer.style.position = Position.Absolute;
+            _diagnosticLayer.style.left = 0f;
+            _diagnosticLayer.style.top = 0f;
+            _diagnosticLayer.style.bottom = 0f;
+            _diagnosticLayer.style.overflow = Overflow.Hidden;
+
+            _editorStack.RegisterCallback<PointerMoveEvent>(OnDiagnosticPointerMove,
+                TrickleDown.TrickleDown);
+            _editorStack.RegisterCallback<PointerLeaveEvent>(_ => HideDiagnosticTooltip(),
+                TrickleDown.TrickleDown);
+
             // Invisible zero-padding label used only as a fallback when direct
             // FontAsset metrics cannot be read (for example, a missing space glyph).
             _metricsProbe = new Label();
@@ -233,6 +275,7 @@ namespace Directiva.CodeUI
             _editorStack.Add(_executionHighlightLayer);
             _editorStack.Add(_indentGuideLayer);
             _editorStack.Add(_syntaxOverlay);
+            _editorStack.Add(_diagnosticLayer);
             _editorStack.Add(_metricsProbe);
 
             Add(_gutterViewport);
@@ -298,7 +341,12 @@ namespace Directiva.CodeUI
                 ValidateExecutionLine();
                 UpdateExecutionHighlightPosition();
                 TextChanged?.Invoke(normalized);
-                if (_completionSuppressNextChange)
+                ScheduleSignatureRefresh();
+                if (_completionCycleApplying)
+                {
+                    // Preview remains in place while Tab is cycling its candidates.
+                }
+                else if (_completionSuppressNextChange)
                 {
                     _completionSuppressNextChange = false;
                     HideCompletion();
@@ -306,9 +354,11 @@ namespace Directiva.CodeUI
                 else
                 {
                     _completionDismissed = false;
-                    // A typed edit invalidates any explicit keyboard choice
-                    // immediately, even before the debounced suggestions update.
-                    if (_completionOpen)
+                    // A typed edit accepts a Tab preview and invalidates its
+                    // original replacement range. Never overwrite newly typed text.
+                    if (_completionCycling)
+                        HideCompletion();
+                    else if (_completionOpen)
                     {
                         _completionSelected = NoCompletionSelection;
                         HighlightCompletionSelection();
@@ -343,6 +393,8 @@ namespace Directiva.CodeUI
                 _zoomAnchorPending = false;
                 _zoomLayoutSyncTask?.Pause();
                 HideCompletion();
+                HideSignatureHelp();
+                HideDiagnosticTooltip();
             });
 
             SetEnabled(false);
@@ -354,12 +406,49 @@ namespace Directiva.CodeUI
         /// layer; the TextField retains focus so keyboard navigation stays predictable.
         /// </summary>
         public void SetCompletionProvider(Func<string, int, DScriptCompletionResult> provider,
-            VisualElement popupLayer)
+            VisualElement popupLayer,
+            Func<string, int, DScriptCallSignatureResult> signatureProvider = null)
         {
             HideCompletion();
+            HideSignatureHelp();
             _completionPopup?.RemoveFromHierarchy();
+            _signaturePopup?.RemoveFromHierarchy();
+            _signaturePopup = null;
+            _signatureProvider = signatureProvider;
             _completionProvider = provider;
             _completionLayer = popupLayer;
+            _diagnosticTooltip?.RemoveFromHierarchy();
+            _diagnosticTooltip = null;
+            if (popupLayer != null)
+            {
+                _diagnosticTooltip = new VisualElement();
+                _diagnosticTooltip.pickingMode = PickingMode.Ignore;
+                _diagnosticTooltip.style.position = Position.Absolute;
+                _diagnosticTooltip.style.maxWidth = 420f;
+                _diagnosticTooltip.style.backgroundColor = new Color(0.12f, 0.16f, 0.23f, 0.99f);
+                _diagnosticTooltip.style.borderTopWidth = 1f;
+                _diagnosticTooltip.style.borderBottomWidth = 1f;
+                _diagnosticTooltip.style.borderLeftWidth = 1f;
+                _diagnosticTooltip.style.borderRightWidth = 1f;
+                var red = new Color(0.89f, 0.37f, 0.39f);
+                _diagnosticTooltip.style.borderTopColor = red;
+                _diagnosticTooltip.style.borderBottomColor = red;
+                _diagnosticTooltip.style.borderLeftColor = red;
+                _diagnosticTooltip.style.borderRightColor = red;
+                _diagnosticTooltip.style.paddingLeft = 9f;
+                _diagnosticTooltip.style.paddingRight = 9f;
+                _diagnosticTooltip.style.paddingTop = 7f;
+                _diagnosticTooltip.style.paddingBottom = 7f;
+                _diagnosticTooltip.style.display = DisplayStyle.None;
+                _diagnosticTooltipLabel = new Label();
+                _diagnosticTooltipLabel.enableRichText = false; // Errors can contain player-written text.
+                _diagnosticTooltipLabel.style.whiteSpace = WhiteSpace.Normal;
+                _diagnosticTooltipLabel.style.color = new Color(0.95f, 0.96f, 0.99f);
+                _diagnosticTooltip.Add(_diagnosticTooltipLabel);
+                popupLayer.Add(_diagnosticTooltip);
+            }
+            if (popupLayer != null && signatureProvider != null)
+                BuildSignaturePopup(popupLayer);
             if (provider == null || popupLayer == null) return;
             _completionPopup = new VisualElement();
             _completionPopup.name = "dscript-completion-popup";
@@ -400,10 +489,160 @@ namespace Directiva.CodeUI
             popupLayer.Add(_completionPopup);
         }
 
+        private void BuildSignaturePopup(VisualElement popupLayer)
+        {
+            _signaturePopup = new VisualElement();
+            _signaturePopup.name = "dscript-call-signature";
+            _signaturePopup.pickingMode = PickingMode.Ignore;
+            _signaturePopup.style.position = Position.Absolute;
+            _signaturePopup.style.minWidth = 140f;
+            _signaturePopup.style.maxWidth = 440f;
+            _signaturePopup.style.backgroundColor = new Color(0.10f, 0.13f, 0.19f, 0.98f);
+            _signaturePopup.style.borderTopWidth = 1f;
+            _signaturePopup.style.borderBottomWidth = 1f;
+            _signaturePopup.style.borderLeftWidth = 1f;
+            _signaturePopup.style.borderRightWidth = 1f;
+            var border = new Color(0.32f, 0.42f, 0.56f, 0.98f);
+            _signaturePopup.style.borderTopColor = border;
+            _signaturePopup.style.borderBottomColor = border;
+            _signaturePopup.style.borderLeftColor = border;
+            _signaturePopup.style.borderRightColor = border;
+            _signaturePopup.style.borderTopLeftRadius = 5f;
+            _signaturePopup.style.borderTopRightRadius = 5f;
+            _signaturePopup.style.borderBottomLeftRadius = 5f;
+            _signaturePopup.style.borderBottomRightRadius = 5f;
+            _signaturePopup.style.paddingLeft = 9f;
+            _signaturePopup.style.paddingRight = 9f;
+            _signaturePopup.style.paddingTop = 6f;
+            _signaturePopup.style.paddingBottom = 6f;
+            _signaturePopup.style.display = DisplayStyle.None;
+            _signatureName = new Label();
+            _signatureName.style.color = new Color(0.88f, 0.94f, 1f);
+            _signatureName.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _signatureName.pickingMode = PickingMode.Ignore;
+            _signaturePopup.Add(_signatureName);
+            _signatureParameters = new VisualElement();
+            _signatureParameters.pickingMode = PickingMode.Ignore;
+            _signatureParameters.style.flexDirection = FlexDirection.Row;
+            _signatureParameters.style.flexWrap = Wrap.Wrap;
+            _signatureParameters.style.marginTop = 3f;
+            _signaturePopup.Add(_signatureParameters);
+            _signatureChoices = new Label();
+            _signatureChoices.pickingMode = PickingMode.Ignore;
+            _signatureChoices.enableRichText = false;
+            _signatureChoices.style.fontSize = 11f;
+            _signatureChoices.style.whiteSpace = WhiteSpace.Normal;
+            _signatureChoices.style.color = new Color(0.65f, 0.77f, 0.91f);
+            _signatureChoices.style.marginTop = 3f;
+            _signaturePopup.Add(_signatureChoices);
+            _signatureReturn = new Label();
+            _signatureReturn.pickingMode = PickingMode.Ignore;
+            _signatureReturn.style.fontSize = 11f;
+            _signatureReturn.style.color = new Color(0.70f, 0.82f, 0.95f);
+            _signatureReturn.style.marginTop = 3f;
+            _signaturePopup.Add(_signatureReturn);
+            popupLayer.Add(_signaturePopup);
+        }
+
+        private void ScheduleSignatureRefresh()
+        {
+            _signatureTask?.Pause();
+            if (!_completionEnabled || _signatureProvider == null || _isReadOnly ||
+                panel == null || string.IsNullOrEmpty(DocumentPath))
+            { HideSignatureHelp(); return; }
+            if (_signatureTask == null) _signatureTask = schedule.Execute(RefreshSignatureHelp);
+            _signatureTask.ExecuteLater(75);
+        }
+
+        private void RefreshSignatureHelp()
+        {
+            if (!_completionEnabled || _signatureProvider == null || _isReadOnly ||
+                _completionLayer == null || panel == null || _completionOpen ||
+                string.IsNullOrEmpty(DocumentPath))
+            { HideSignatureHelp(); return; }
+            string source = Text;
+            int caret = CaretIndex;
+            if (caret != _textField.textSelection.selectIndex)
+            { HideSignatureHelp(); return; }
+            DScriptCallSignatureResult info;
+            try { info = _signatureProvider(source, caret); }
+            catch (Exception) { HideSignatureHelp(); return; }
+            if (info == null) { HideSignatureHelp(); return; }
+            _signatureName.text = info.Name;
+            _signatureParameters.Clear();
+            AddSignatureText("(", false);
+            for (int i = 0; i < info.Parameters.Count; i++)
+            {
+                if (i > 0) AddSignatureText(", ", false);
+                AddSignatureText(info.Parameters[i], i == info.ActiveParameter);
+            }
+            AddSignatureText(")", false);
+            _signatureChoices.text = info.ActiveArgumentChoices;
+            _signatureChoices.style.display = string.IsNullOrEmpty(info.ActiveArgumentChoices)
+                ? DisplayStyle.None : DisplayStyle.Flex;
+            _signatureReturn.text = string.IsNullOrEmpty(info.ReturnType)
+                ? string.Empty : "→ " + info.ReturnType;
+            _signatureReturn.style.display = string.IsNullOrEmpty(info.ReturnType)
+                ? DisplayStyle.None : DisplayStyle.Flex;
+
+            int lineStart = FindLineStart(source, caret);
+            int line = DScriptEditorSyntaxContext.CountLines(source, caret);
+            int column = caret - lineStart;
+            var scroll = _internalScroll != null ? _internalScroll.scrollOffset : Vector2.zero;
+            Vector2 world = _editorStack.LocalToWorld(new Vector2(
+                _textOriginX + column * _characterWidth - scroll.x,
+                _textOriginY + line * _lineHeight - scroll.y));
+            Vector2 point = _completionLayer.WorldToLocal(world);
+
+            // Size the popup for its own signature, rather than always reserving
+            // 440 px. Long enum alternatives can wrap without covering the line.
+            float panelWidth = _completionLayer.resolvedStyle.width;
+            float panelHeight = _completionLayer.resolvedStyle.height;
+            string parameterText = "(" + string.Join(", ", info.Parameters) + ")";
+            int longestLine = Math.Max(info.Name.Length,
+                Math.Max(parameterText.Length, info.ActiveArgumentChoices.Length));
+            float availableWidth = Mathf.Max(1f, panelWidth - 8f);
+            float popupWidth = Mathf.Min(availableWidth, Mathf.Clamp(
+                longestLine * 7f + 24f, 160f, 440f));
+            _signaturePopup.style.width = popupWidth;
+            float estimatedHeight = 58f +
+                (string.IsNullOrEmpty(info.ReturnType) ? 0f : 17f) +
+                (string.IsNullOrEmpty(info.ActiveArgumentChoices) ? 0f : 19f);
+            if (longestLine * 7f + 24f > popupWidth)
+                estimatedHeight += 18f;
+
+            // Center directly BELOW the caret. Only fall back above when there is
+            // insufficient room below; never intentionally cover the current line.
+            Vector2 position = DScriptSignaturePopupPlacement.Resolve(point, _lineHeight,
+                new Vector2(popupWidth, estimatedHeight),
+                new Vector2(panelWidth, panelHeight));
+            _signaturePopup.style.left = position.x;
+            _signaturePopup.style.top = position.y;
+            _signaturePopup.style.display = DisplayStyle.Flex;
+        }
+
+        private void AddSignatureText(string value, bool selected)
+        {
+            var label = new Label(value);
+            label.pickingMode = PickingMode.Ignore;
+            label.style.fontSize = 12f;
+            label.style.color = selected ? new Color(1f, 0.86f, 0.42f)
+                : new Color(0.85f, 0.90f, 0.97f);
+            if (selected) label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _signatureParameters.Add(label);
+        }
+
+        private void HideSignatureHelp()
+        {
+            _signatureTask?.Pause();
+            if (_signaturePopup != null)
+                _signaturePopup.style.display = DisplayStyle.None;
+        }
+
         private void ScheduleCompletionRefresh()
         {
             _completionTask?.Pause();
-            if (_completionProvider == null || _isReadOnly ||
+            if (!_completionEnabled || _completionProvider == null || _isReadOnly ||
                 string.IsNullOrEmpty(DocumentPath) || panel == null)
             {
                 HideCompletion();
@@ -418,7 +657,7 @@ namespace Directiva.CodeUI
 
         private void RefreshCompletion()
         {
-            if (_completionProvider == null || _completionDismissed || _isReadOnly ||
+            if (!_completionEnabled || _completionProvider == null || _completionDismissed || _isReadOnly ||
                 string.IsNullOrEmpty(DocumentPath) || panel == null)
             {
                 HideCompletion();
@@ -475,6 +714,7 @@ namespace Directiva.CodeUI
                 _completionRows.Add(row);
             }
             _completionPopup.style.display = DisplayStyle.Flex;
+            HideSignatureHelp();
             _completionOpen = true;
             HighlightCompletionSelection();
             PositionCompletion(result.ReplaceStart);
@@ -532,15 +772,47 @@ namespace Directiva.CodeUI
         {
             if (!_completionOpen || _completionResult == null ||
                 index < 0 || index >= _completionResult.Items.Count || _isReadOnly) return;
-            string source = Text;
+            string source = _completionCycling ? _completionCycleSource : Text;
             int begin = _completionResult.ReplaceStart;
             int end = _completionResult.ReplaceEnd;
             if (begin < 0 || end < begin || end > source.Length) { HideCompletion(); return; }
-            string insertion = _completionResult.Items[index].Name + (insertSpace ? " " : "");
-            string updated = source.Substring(0, begin) + insertion + source.Substring(end);
+            var edit = CodeEditorCompletionText.Build(source, begin, end,
+                _completionResult.Items[index], insertSpace);
             HideCompletion();
-            _completionSuppressNextChange = !string.Equals(updated, source, StringComparison.Ordinal);
-            ApplyEdit(updated, begin + insertion.Length, begin + insertion.Length);
+            _completionSuppressNextChange = !string.Equals(edit.Text, Text, StringComparison.Ordinal);
+            ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+            ScheduleSignatureRefresh();
+        }
+
+        private void CycleCompletion(bool backwards)
+        {
+            if (!_completionOpen || _completionResult == null || _completionResult.Items.Count == 0)
+                return;
+            if (!_completionCycling)
+            {
+                _completionCycleSource = Text;
+                _completionCycleCaret = _completionResult.ReplaceEnd;
+                _completionCycling = true;
+            }
+            _completionSelected = StepCompletionSelection(_completionSelected,
+                _completionResult.Items.Count, !backwards);
+            var edit = CodeEditorCompletionText.Build(_completionCycleSource,
+                _completionResult.ReplaceStart, _completionResult.ReplaceEnd,
+                _completionResult.Items[_completionSelected], false);
+            _completionCycleApplying = true;
+            try { ApplyEdit(edit.Text, edit.Caret, edit.Caret); }
+            finally { _completionCycleApplying = false; }
+            HighlightCompletionSelection();
+        }
+
+        private void CancelCompletionCycle()
+        {
+            if (!_completionCycling) { HideCompletion(); return; }
+            string original = _completionCycleSource;
+            int caret = _completionCycleCaret;
+            HideCompletion();
+            _completionSuppressNextChange = !string.Equals(original, Text, StringComparison.Ordinal);
+            ApplyEdit(original, caret, caret);
         }
 
         private void HideCompletion()
@@ -549,9 +821,165 @@ namespace Directiva.CodeUI
             _completionOpen = false;
             _completionResult = null;
             _completionSelected = NoCompletionSelection;
+            _completionCycling = false;
+            _completionCycleSource = null;
             _completionRows.Clear();
             if (_completionDetail != null) _completionDetail.text = string.Empty;
             if (_completionPopup != null) _completionPopup.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>May be changed live when Settings > Editor is updated.</summary>
+        public void SetCompletionEnabled(bool enabled)
+        {
+            if (_completionEnabled == enabled) return;
+            _completionEnabled = enabled;
+            if (enabled) { _completionDismissed = false; ScheduleCompletionRefresh(); ScheduleSignatureRefresh(); }
+            else { HideCompletion(); HideSignatureHelp(); }
+        }
+
+        public void SetLiveErrorsEnabled(bool enabled)
+        {
+            _liveErrorsEnabled = enabled;
+            if (!enabled) HideDiagnosticTooltip();
+            RefreshVisibleDiagnosticMarks();
+        }
+
+        public void SetErrorSuggestionsEnabled(bool enabled)
+        {
+            _errorSuggestionsEnabled = enabled;
+            HideDiagnosticTooltip();
+        }
+
+        public void SetLiveDiagnostics(IReadOnlyList<DScriptDiagnostic> diagnostics,
+            Func<DScriptDiagnostic, string> suggestionProvider = null)
+        {
+            _liveIssues = diagnostics ?? Array.Empty<DScriptDiagnostic>();
+            // Build once when the debounced analysis completes, not every frame or hover.
+            var starts = new List<int> { 0 };
+            string source = Text;
+            for (int i = 0; i < source.Length; i++)
+                if (source[i] == '\n') starts.Add(i + 1);
+            _diagnosticLineStarts = starts.ToArray();
+            _diagnosticSuggestionProvider = suggestionProvider;
+            HideDiagnosticTooltip();
+            RefreshVisibleDiagnosticMarks();
+        }
+
+        private void RefreshVisibleDiagnosticMarks()
+        {
+            foreach (var mark in _diagnosticMarks) mark.style.display = DisplayStyle.None;
+            if (!_liveErrorsEnabled || _liveIssues.Count == 0 || _internalScroll == null || panel == null ||
+                _lineHeight <= 0f || _characterWidth <= 0f) return;
+            var viewport = _internalScroll.contentViewport;
+            if (viewport == null || viewport.resolvedStyle.height <= 0f ||
+                viewport.resolvedStyle.width <= 0f) return;
+            var offset = _internalScroll.scrollOffset;
+            float width = Mathf.Max(0f, viewport.worldBound.xMax - _editorStack.worldBound.xMin);
+            _diagnosticLayer.style.width = width;
+            string source = Text;
+            int used = 0;
+            foreach (var issue in _liveIssues)
+            {
+                int start = issue.Span.Start;
+                int end = Math.Min(source.Length, issue.Span.End);
+                while (start < end && used < 200)
+                {
+                    int line = Array.BinarySearch(_diagnosticLineStarts, start);
+                    if (line < 0) line = ~line - 1;
+                    int lineStart = _diagnosticLineStarts[Mathf.Max(0, line)];
+                    int lineEnd = line + 1 < _diagnosticLineStarts.Length
+                        ? _diagnosticLineStarts[line + 1] - 1 : source.Length;
+                    int partEnd = Math.Min(end, lineEnd);
+                    float y = _textOriginY + line * _lineHeight - offset.y + _lineHeight - 3f;
+                    float x = _textOriginX + (start - lineStart) * _characterWidth - offset.x;
+                    if (partEnd > start && y >= 0f && y < viewport.resolvedStyle.height &&
+                        x < width && x + (partEnd - start) * _characterWidth > 0f)
+                    {
+                        while (_diagnosticMarks.Count <= used)
+                        {
+                            var mark = new VisualElement();
+                            mark.pickingMode = PickingMode.Ignore;
+                            mark.style.position = Position.Absolute;
+                            mark.style.height = 2f;
+                            mark.style.backgroundColor = new Color(1f, 0.35f, 0.39f, 0.95f);
+                            _diagnosticLayer.Add(mark);
+                            _diagnosticMarks.Add(mark);
+                        }
+                        var underline = _diagnosticMarks[used++];
+                        underline.style.left = x;
+                        underline.style.top = y;
+                        underline.style.width = (partEnd - start) * _characterWidth;
+                        underline.style.display = DisplayStyle.Flex;
+                    }
+                    start = partEnd < end && partEnd == lineEnd ? partEnd + 1 : end;
+                }
+            }
+        }
+
+        private void OnDiagnosticPointerMove(PointerMoveEvent evt)
+        {
+            if (!_liveErrorsEnabled || _liveIssues.Count == 0 || _completionOpen ||
+                _diagnosticTooltip == null) { HideDiagnosticTooltip(); return; }
+            Vector2 local = _editorStack.WorldToLocal(evt.position);
+            var offset = _internalScroll != null ? _internalScroll.scrollOffset : Vector2.zero;
+            float x = local.x - _textOriginX + offset.x;
+            float y = local.y - _textOriginY + offset.y;
+            if (x < 0f || y < 0f) { HideDiagnosticTooltip(); return; }
+            int line = Mathf.FloorToInt(y / Mathf.Max(1f, _lineHeight));
+            int column = Mathf.FloorToInt(x / Mathf.Max(1f, _characterWidth));
+            string source = Text;
+            if (line >= _diagnosticLineStarts.Length)
+            { HideDiagnosticTooltip(); return; }
+            int lineStart = _diagnosticLineStarts[line];
+            int lineEnd = line + 1 < _diagnosticLineStarts.Length
+                ? _diagnosticLineStarts[line + 1] - 1 : source.Length;
+            if (column >= lineEnd - lineStart) { HideDiagnosticTooltip(); return; }
+            int position = lineStart + column;
+            var match = _liveIssues.FirstOrDefault(issue => position >= issue.Span.Start &&
+                position < issue.Span.End);
+            if (ReferenceEquals(match, _hoverIssue)) return;
+            HideDiagnosticTooltip();
+            if (match == null) return;
+            _hoverIssue = match;
+            Vector2 pointer = evt.position;
+            _diagnosticHoverTask = schedule.Execute(() => ShowDiagnosticTooltip(match, pointer));
+            _diagnosticHoverTask.ExecuteLater(400);
+        }
+
+        private void ShowDiagnosticTooltip(DScriptDiagnostic issue, Vector2 pointer)
+        {
+            if (!ReferenceEquals(issue, _hoverIssue) || _diagnosticTooltip == null ||
+                _completionOpen || !_liveErrorsEnabled || _completionLayer == null) return;
+            string explanation = string.IsNullOrWhiteSpace(issue.LocalizationKey)
+                ? issue.Message
+                : DirectivaLocalization.Get("DScriptErrors", issue.LocalizationKey, issue.LocalizationArguments);
+            string message = issue.Code + ": " + explanation;
+            if (_errorSuggestionsEnabled && _diagnosticSuggestionProvider != null)
+            {
+                string suggestion = _diagnosticSuggestionProvider(issue);
+                if (!string.IsNullOrEmpty(suggestion))
+                    message += "\n" + DirectivaLocalization.Get("Tooltips", "error_did_you_mean", suggestion);
+            }
+            _diagnosticTooltipLabel.text = message;
+            _diagnosticTooltip.style.maxWidth = Mathf.Max(160f,
+                Mathf.Min(420f, _completionLayer.resolvedStyle.width - 16f));
+            Vector2 local = _completionLayer.WorldToLocal(pointer);
+            float x = Mathf.Clamp(local.x + 12f, 4f,
+                Mathf.Max(4f, _completionLayer.resolvedStyle.width - 424f));
+            float y = Mathf.Clamp(local.y + 18f, 4f,
+                Mathf.Max(4f, _completionLayer.resolvedStyle.height - 110f));
+            _diagnosticTooltip.style.left = x;
+            _diagnosticTooltip.style.top = y;
+            _diagnosticTooltip.style.display = DisplayStyle.Flex;
+        }
+
+        private void HideDiagnosticTooltip()
+        {
+            _diagnosticHoverTask?.Pause();
+            _diagnosticHoverTask = null;
+            _hoverIssue = null;
+            if (_diagnosticTooltip != null)
+                _diagnosticTooltip.style.display = DisplayStyle.None;
         }
 
         public void OpenDocument(
@@ -577,6 +1005,8 @@ namespace Directiva.CodeUI
             _zoomLayoutSyncTask?.Pause();
             _returnKeyHandled = false;
             HideCompletion();
+            HideSignatureHelp();
+            SetLiveDiagnostics(null);
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -623,6 +1053,8 @@ namespace Directiva.CodeUI
         public void ClearDocument()
         {
             HideCompletion();
+            HideSignatureHelp();
+            SetLiveDiagnostics(null);
             CaptureActiveHistorySelection();
             _zoomAnchorPending = false;
             _zoomLayoutSyncPassesRemaining = 0;
@@ -1005,8 +1437,19 @@ namespace Directiva.CodeUI
                     _ => _isReadOnly || string.IsNullOrEmpty(DocumentPath)
                         ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
             }));
-            input.RegisterCallback<KeyUpEvent>(_ => CaptureActiveHistorySelection());
-            input.RegisterCallback<PointerUpEvent>(_ => CaptureActiveHistorySelection());
+            input.RegisterCallback<FocusOutEvent>(_ => HideSignatureHelp());
+            input.RegisterCallback<KeyUpEvent>(_ =>
+            {
+                CaptureActiveHistorySelection();
+                ScheduleSignatureRefresh();
+                CaretMoved?.Invoke();
+            });
+            input.RegisterCallback<PointerUpEvent>(_ =>
+            {
+                CaptureActiveHistorySelection();
+                ScheduleSignatureRefresh();
+                CaretMoved?.Invoke();
+            });
             _textInputKeyHooked = true;
         }
 
@@ -1231,6 +1674,7 @@ namespace Directiva.CodeUI
 
         private void RefreshVisibleSyntaxLines()
         {
+            RefreshVisibleDiagnosticMarks();
             // During zoom the TextField/ScrollView may still contain pre-layout
             // glyph and scroll geometry. Draw native uncolored text until both
             // post-layout samples have completed; never show stale colored text
@@ -1650,6 +2094,7 @@ namespace Directiva.CodeUI
                 _internalScroll.verticalScroller.valueChanged += value =>
                 {
                     _gutterContent.style.translate = new Translate(0f, -value);
+                    HideSignatureHelp(); // Do not leave a stale popup over scrolled code.
                     UpdateIndentGuideTranslation();
                     UpdateExecutionHighlightPosition();
                     RefreshVisibleSyntaxLines();
@@ -1657,6 +2102,7 @@ namespace Directiva.CodeUI
 
                 _internalScroll.horizontalScroller.valueChanged += _ =>
                 {
+                    HideSignatureHelp();
                     UpdateIndentGuideTranslation();
                     RefreshVisibleSyntaxLines();
                 };
@@ -1850,19 +2296,32 @@ namespace Directiva.CodeUI
             }
             if (_completionOpen && !_isReadOnly && !evt.ctrlKey && !evt.commandKey && !evt.altKey)
             {
+                // Only while the popup is visible do Tab/Shift+Tab cycle suggestions.
+                // Otherwise both keys continue using the ordinary Python indentation.
+                if (evt.keyCode == KeyCode.Tab)
+                {
+                    evt.StopImmediatePropagation();
+                    CycleCompletion(evt.shiftKey);
+                    return;
+                }
                 if (evt.keyCode == KeyCode.Escape)
                 {
                     evt.StopImmediatePropagation();
                     _completionDismissed = true;
-                    HideCompletion();
+                    CancelCompletionCycle();
                     return;
                 }
                 if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow)
                 {
                     evt.StopImmediatePropagation();
-                    _completionSelected = StepCompletionSelection(_completionSelected,
-                        _completionRows.Count, evt.keyCode == KeyCode.DownArrow);
-                    HighlightCompletionSelection();
+                    if (_completionCycling)
+                        CycleCompletion(evt.keyCode == KeyCode.UpArrow);
+                    else
+                    {
+                        _completionSelected = StepCompletionSelection(_completionSelected,
+                            _completionRows.Count, evt.keyCode == KeyCode.DownArrow);
+                        HighlightCompletionSelection();
+                    }
                     return;
                 }
                 bool enter = evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter ||
@@ -1880,6 +2339,12 @@ namespace Directiva.CodeUI
                     }
                     // With no explicit selection, let Enter follow the editor's
                     // regular line-break/indentation path, and Space type normally.
+                    HideCompletion();
+                }
+                else if (_completionCycling && evt.keyCode != KeyCode.None)
+                {
+                    // Any ordinary editing or navigation ends the Tab preview;
+                    // the actual key is still delivered to the native editor.
                     HideCompletion();
                 }
             }

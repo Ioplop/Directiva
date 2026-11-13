@@ -24,6 +24,7 @@ namespace Directiva.Settings
         public AudioSettings audio = new AudioSettings();
         public GraphicsSettings graphics = new GraphicsSettings();
         public ControlSettings controls = new ControlSettings();
+        public EditorSettings editor = new EditorSettings();
 
         public static GameSettings CreateDefaults(int screenWidth, int screenHeight)
         {
@@ -60,6 +61,13 @@ namespace Directiva.Settings
                 controls = new ControlSettings
                 {
                     mouseCapture = controls.mouseCapture
+                },
+                editor = new EditorSettings
+                {
+                    showCompletion = editor.showCompletion,
+                    showLiveErrors = editor.showLiveErrors,
+                    showErrorSuggestions = editor.showErrorSuggestions,
+                    liveErrorDelaySeconds = editor.liveErrorDelaySeconds
                 }
             };
         }
@@ -88,6 +96,17 @@ namespace Directiva.Settings
         public bool fullscreen = true;
         public int resolutionWidth = 1920;
         public int resolutionHeight = 1080;
+    }
+
+    /// <summary>Editor assistance is optional and never changes compilation or execution.</summary>
+    [Serializable]
+    public sealed class EditorSettings
+    {
+        public bool showCompletion = true;
+        public bool showLiveErrors = true;
+        // Suggestions are displayed only while hovering an error; opt-in by default.
+        public bool showErrorSuggestions = false;
+        public float liveErrorDelaySeconds = 0.5f;
     }
 
     [Serializable]

@@ -168,6 +168,11 @@ namespace Directiva.Settings
         public static void SetSimulationVolume(int value) => Change(next => next.audio.simulationVolume = value);
         public static void SetFullscreen(bool value) => Change(next => next.graphics.fullscreen = value);
         public static void SetMouseCapture(string mode) => Change(next => next.controls.mouseCapture = mode);
+        public static void SetEditorCompletion(bool value) => Change(next => next.editor.showCompletion = value);
+        public static void SetEditorLiveErrors(bool value) => Change(next => next.editor.showLiveErrors = value);
+        public static void SetEditorErrorSuggestions(bool value) => Change(next => next.editor.showErrorSuggestions = value);
+        public static void SetEditorErrorDelay(float seconds) =>
+            Change(next => next.editor.liveErrorDelaySeconds = seconds);
 
         /// <summary>
         /// Commit a previously confirmed resolution. UI is responsible for its countdown.
@@ -216,6 +221,10 @@ namespace Directiva.Settings
             if (data.audio == null) data.audio = defaults.audio;
             if (data.graphics == null) data.graphics = defaults.graphics;
             if (data.controls == null) data.controls = defaults.controls;
+            if (data.editor == null) data.editor = defaults.editor;
+            if (float.IsNaN(data.editor.liveErrorDelaySeconds) || float.IsInfinity(data.editor.liveErrorDelaySeconds))
+                data.editor.liveErrorDelaySeconds = 0.5f;
+            data.editor.liveErrorDelaySeconds = Mathf.Clamp(data.editor.liveErrorDelaySeconds, 0.1f, 3f);
 
             data.version = GameSettings.CurrentVersion;
             if (string.Equals(data.general.language, "en", StringComparison.OrdinalIgnoreCase))

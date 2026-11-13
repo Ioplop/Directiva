@@ -16,6 +16,7 @@ using UnityEngine.UIElements;
 using UnityEngine.SceneManagement;
 using Directiva.UI;
 using Directiva.Localization;
+using Directiva.Settings;
 
 namespace Directiva.CodeUI
 {
@@ -142,6 +143,8 @@ namespace Directiva.CodeUI
 
         private bool _analysisPending;
         private float _analysisAt;
+        private bool _liveDiagnosticsPending;
+        private float _liveDiagnosticsAt;
 
         private string _activeMetadataPath;
         private bool _editorMetadataDirty;
@@ -190,6 +193,7 @@ namespace Directiva.CodeUI
             Localization = new LocalizationService(defaultLocale);
             Localization.SetLocale(DirectivaLocalization.CurrentLocale);
             DirectivaLocalization.LanguageChanged += OnGlobalLanguageChanged;
+            SettingsManager.SettingsChanged += OnEditorSettingsChanged;
             // OnValidate is not guaranteed to run in a player build, so enforce
             // the console budget here as well for scenes serialized before this patch.
             Output = new OutputService(Mathf.Clamp(outputCapacity, 1, OutputService.DefaultCapacity));
@@ -252,6 +256,11 @@ namespace Directiva.CodeUI
                 _analysisPending = false;
                 AnalyzeActiveDocument();
             }
+            if (_liveDiagnosticsPending && Time.unscaledTime >= _liveDiagnosticsAt)
+            {
+                _liveDiagnosticsPending = false;
+                AnalyzeLiveDocument();
+            }
         }
 
         private void OnDisable()
@@ -273,6 +282,7 @@ namespace Directiva.CodeUI
         private void OnDestroy()
         {
             DirectivaLocalization.LanguageChanged -= OnGlobalLanguageChanged;
+            SettingsManager.SettingsChanged -= OnEditorSettingsChanged;
             if (_workspace != null)
                 _workspace.SavedScriptsChanged -= OnWorkspaceSavedScriptsChanged;
         }
@@ -286,6 +296,7 @@ namespace Directiva.CodeUI
                 _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
             SetExplorerCollapsed(_explorerCollapsed);
             if (_lastCompilation != null) PublishCompilationDiagnostics(_lastCompilation);
+            ScheduleLiveDiagnostics();
             if (_document != null)
             {
                 var menuButton = _document.rootVisualElement.Q<Button>("standalone-main-menu-button");
@@ -552,7 +563,9 @@ namespace Directiva.CodeUI
             // runtime copy so a future user Options menu can override each color.
             _editor.SetSyntaxColors(_theme?.codeSyntaxColors);
             _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
-            _editor.SetCompletionProvider(CompleteActiveBuffer, _popupLayer);
+            _editor.SetCompletionProvider(CompleteActiveBuffer, _popupLayer, SignatureOfActiveBuffer);
+            _editor.CaretMoved += ScheduleLiveDiagnostics;
+            ApplyEditorPreferences(SettingsManager.Current.editor);
 
             right.Add(_topBar);
             right.Add(_editor);
@@ -589,6 +602,16 @@ namespace Directiva.CodeUI
             RegisterSymbolTooltips();
         }
 
+        private DScriptCallSignatureResult SignatureOfActiveBuffer(string source, int caret)
+        {
+            var active = _workspace?.Active;
+            if (active == null || _storage == null || Codebase == null ||
+                !TryGetModuleName(active.RelativePath, out string module, out _))
+                return null;
+            var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+            return DScriptCallSignatureHelp.Get(module, source, caret, provider);
+        }
+
         private DScriptCompletionResult CompleteActiveBuffer(string source, int caret)
         {
             var active = _workspace?.Active;
@@ -614,7 +637,7 @@ namespace Directiva.CodeUI
                     "module" => "módulo", "constant" => "constante",
                     "keyword" => "palabra clave", "shared" => "compartida",
                     "enum" => "enumeración", "type" => "tipo", _ => item.Kind
-                }, item.Detail, item.Type)).ToArray();
+                }, item.Detail, item.Type, item.IsCallable, item.TakesArguments)).ToArray();
             return new DScriptCompletionResult(suggestions.ReplaceStart, suggestions.ReplaceEnd, items);
         }
 
@@ -645,6 +668,8 @@ namespace Directiva.CodeUI
                 MarkActiveEditorMetadataDirty();
                 RefreshTopBar();
                 ScheduleAnalysis();
+                _editor.SetLiveDiagnostics(null);  // Never underline stale offsets after an edit.
+                ScheduleLiveDiagnostics();
             };
 
             _editor.FontSizeChanged += size =>
@@ -745,6 +770,7 @@ namespace Directiva.CodeUI
 
             if (doc == null)
             {
+                _liveDiagnosticsPending = false;
                 _activeMetadataPath = null;
                 _editor.ClearDocument();
                 _editor.SetReadOnly(false);
@@ -778,6 +804,7 @@ namespace Directiva.CodeUI
 
             RefreshTopBar();
             ScheduleAnalysis();
+            ScheduleLiveDiagnostics();
             RefreshDScriptDebugHighlight();
         }
 
@@ -1681,6 +1708,62 @@ namespace Directiva.CodeUI
             }
 
             return true;
+        }
+
+        private void OnEditorSettingsChanged(GameSettings settings)
+        {
+            ApplyEditorPreferences(settings?.editor);
+        }
+
+        private void ApplyEditorPreferences(EditorSettings preferences)
+        {
+            if (_editor == null || preferences == null) return;
+            _editor.SetCompletionEnabled(preferences.showCompletion);
+            _editor.SetLiveErrorsEnabled(preferences.showLiveErrors);
+            _editor.SetErrorSuggestionsEnabled(preferences.showErrorSuggestions &&
+                preferences.showLiveErrors);
+            if (preferences.showLiveErrors) ScheduleLiveDiagnostics();
+            else
+            {
+                _liveDiagnosticsPending = false;
+                _editor.SetLiveDiagnostics(null);
+            }
+        }
+
+        private void ScheduleLiveDiagnostics()
+        {
+            if (_editor == null || _workspace?.Active == null ||
+                !SettingsManager.Current.editor.showLiveErrors)
+            {
+                _liveDiagnosticsPending = false;
+                _editor?.SetLiveDiagnostics(null);
+                return;
+            }
+            _liveDiagnosticsPending = true;
+            _liveDiagnosticsAt = Time.unscaledTime +
+                SettingsManager.Current.editor.liveErrorDelaySeconds;
+        }
+
+        private void AnalyzeLiveDocument()
+        {
+            var active = _workspace?.Active;
+            if (active == null || _storage == null || Codebase == null || _editor == null ||
+                !SettingsManager.Current.editor.showLiveErrors ||
+                !TryGetModuleName(active.RelativePath, out string module, out _))
+            {
+                _editor?.SetLiveDiagnostics(null);
+                return;
+            }
+            var source = _editor.Text;
+            var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+            var issues = DScriptLiveDiagnostics.Analyze(module, source, provider, _editor.CaretIndex);
+            _editor.SetLiveDiagnostics(issues, issue =>
+            {
+                if (!SettingsManager.Current.editor.showErrorSuggestions ||
+                    _workspace?.Active?.RelativePath != active.RelativePath || _editor.Text != source)
+                    return null;
+                return DScriptLiveDiagnostics.Suggest(module, source, issue, provider);
+            });
         }
 
         private void ScheduleAnalysis()

@@ -22,8 +22,14 @@ namespace Directiva.CodeUI
         public string Kind { get; }
         public string Detail { get; }
         public string Type { get; }
-        public DScriptCompletionItem(string name, string kind, string detail = null, string type = null)
-        { Name = name; Kind = kind; Detail = detail ?? string.Empty; Type = type ?? string.Empty; }
+        public bool IsCallable { get; }
+        public bool TakesArguments { get; }
+        public DScriptCompletionItem(string name, string kind, string detail = null, string type = null,
+            bool isCallable = false, bool takesArguments = false)
+        {
+            Name = name; Kind = kind; Detail = detail ?? string.Empty; Type = type ?? string.Empty;
+            IsCallable = isCallable; TakesArguments = takesArguments;
+        }
     }
 
     public sealed class DScriptCompletionResult
@@ -103,7 +109,16 @@ namespace Directiva.CodeUI
             {
                 if (!string.IsNullOrEmpty(name) && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
                     !candidates.ContainsKey(name))
-                    candidates.Add(name, new DScriptCompletionItem(name, kind, detail, type));
+                {
+                    bool callable = kind == "function" || kind == "method";
+                    string signature = detail ?? string.Empty;
+                    bool hasArguments = callable && signature.StartsWith("(", StringComparison.Ordinal) &&
+                        !signature.StartsWith("()", StringComparison.Ordinal) &&
+                        !signature.StartsWith("(0 arguments", StringComparison.Ordinal) &&
+                        !signature.StartsWith("(0-", StringComparison.Ordinal);
+                    candidates.Add(name, new DScriptCompletionItem(name, kind, detail, type,
+                        callable, hasArguments));
+                }
             }
             try
             {
@@ -156,8 +171,7 @@ namespace Directiva.CodeUI
                             foreach (var declaration in parsed.Statements)
                             {
                                 if (declaration is FunctionStatement method)
-                                    Add(method.Name, "function", "(" + string.Join(", ", method.Parameters) + ")" +
-                                        (method.ReturnType == null ? "" : " -> " + method.ReturnType), method.ReturnType);
+                                    Add(method.Name, "function", DescribeUserFunction(method), method.ReturnType);
                                 else if (declaration is SharedStatement shared)
                                     Add(shared.Name, "shared");
                             }
@@ -329,11 +343,16 @@ namespace Directiva.CodeUI
             if (symbol.Kind == SymbolKind.Function)
             {
                 var function = FindFunction(analysis, symbol.QualifiedName);
-                if (function != null) return "(" + string.Join(", ", function.Parameters) + ")" +
-                    (function.ReturnType == null ? "" : " -> " + function.ReturnType);
+                if (function != null) return DescribeUserFunction(function);
             }
             return symbol.Kind.ToString();
         }
+        private static string DescribeUserFunction(FunctionStatement function) =>
+            "(" + string.Join(", ", function.Parameters.Select(name =>
+                function.ParameterTypes.TryGetValue(name, out string type) && !string.IsNullOrEmpty(type)
+                    ? name + ": " + type : name)) + ")" +
+            (string.IsNullOrEmpty(function.ReturnType) ? "" : " -> " + function.ReturnType);
+
         private static string DescribeNative(NativeFunctionSignature native) =>
             "(" + (native.Parameters.Count > 0 ? string.Join(", ", native.Parameters) :
                 native.MinArguments == native.MaxArguments ? native.MinArguments + " arguments" :
@@ -380,7 +399,8 @@ namespace Directiva.CodeUI
             if (clr == typeof(int) || clr == typeof(long)) return "Int";
             if (clr == typeof(DMath.Fixed)) return "Decimal";
             if (clr == typeof(DMath.FixedVector2)) return "Tuple";
-            return clr.IsEnum ? "Int" : null;
+            // Values from observation enums remain script enums, not integers.
+            return DScriptSimulationEnumDisplay.ModuleName(clr);
         }
 
         private static string DescribeSimulation(SimulationApiOperation op)

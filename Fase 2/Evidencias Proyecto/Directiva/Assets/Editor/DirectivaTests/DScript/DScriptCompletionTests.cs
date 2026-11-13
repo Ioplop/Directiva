@@ -231,6 +231,212 @@ namespace Directiva.EditorTests.DScript
                 t.Check(!Selected(3, 3), "out-of-range selection cannot be accepted");
             });
 
+            Add("LiveUndefinedName", "Live analysis highlights undefined names in the current unsaved buffer", t =>
+            {
+                const string src = "def run():\n    atack(10)\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = "def run():\n    pass\n" });
+                var issues = DScriptLiveDiagnostics.Analyze("test", src, provider);
+                var missing = issues.FirstOrDefault(d => d.Code == "DS4016");
+                t.Check(missing != null, "undefined name detected without saving the buffer");
+                t.Equal("atack", src.Substring(missing.Span.Start, missing.Span.Length),
+                    "only the bad identifier is underlined");
+                t.Equal("attack", DScriptLiveDiagnostics.Suggest("test", src, missing, provider),
+                    "optional hint comes from visible native methods");
+            });
+
+            Add("LiveKnownNames", "Known local names are not marked as undefined", t =>
+            {
+                const string src = "def run():\n    number = 10\n    print(number)\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = src });
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", src, provider)
+                    .Any(d => d.Code == "DS4016"), "existing names are valid");
+            });
+
+            Add("LiveImportedErrorsStayInTheirModules", "The current editor only draws diagnostics from its own file", t =>
+            {
+                const string main = "import helper\ndef run():\n    pass\n";
+                const string broken = "def run():\n    missing_name()\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = main, ["helper"] = broken });
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", main, provider)
+                    .Any(d => d.Code == "DS4016"), "import errors do not decorate the wrong file");
+            });
+
+            Add("RealCallableMetadata", "Native and user functions expose call insertion metadata", t =>
+            {
+                var move = Complete("def run():\n    mo").Items.FirstOrDefault(i => i.Name == "move");
+                t.Check(move != null && move.IsCallable && move.TakesArguments,
+                    "movement order expects arguments");
+                var none = Complete("def run():\n    resource_no").Items.FirstOrDefault(i =>
+                    i.Name == "resource_nodes");
+                t.Check(none != null && none.IsCallable && !none.TakesArguments,
+                    "parameterless native call places caret after parentheses");
+                var own = Complete("def custom(value):\n    return value\ndef run():\n    cus")
+                    .Items.FirstOrDefault(i => i.Name == "custom");
+                t.Check(own != null && own.IsCallable && own.TakesArguments,
+                    "user-defined parameters are available to completion");
+            });
+
+            Add("CompletionCallParentheses", "Callable suggestions insert parentheses and place the caret correctly", t =>
+            {
+                var withArgs = new DScriptCompletionItem("move", "method", "(x, y)", "Bool", true, true);
+                var noArgs = new DScriptCompletionItem("resource_nodes", "function", "()", "List", true, false);
+                var a = CodeEditorCompletionText.Build("mo", 0, 2, withArgs, false);
+                t.Equal("move()", a.Text, "method call");
+                t.Equal(5, a.Caret, "cursor inside argument list");
+                var b = CodeEditorCompletionText.Build("resource_no", 0, 11, noArgs, false);
+                t.Equal("resource_nodes()", b.Text, "parameterless call");
+                t.Equal(b.Text.Length, b.Caret, "cursor past final parenthesis");
+                var c = CodeEditorCompletionText.Build("mo(10,20)", 0, 2, withArgs, false);
+                t.Equal("move(10,20)", c.Text, "no duplicate opening or closing parentheses");
+                var d = CodeEditorCompletionText.Build("mo", 0, 2, withArgs, true);
+                t.Equal("move( )", d.Text, "Space accepts and inserts inside the call");
+                t.Equal(6, d.Caret, "cursor after inserted space");
+            });
+
+            Add("EditorSettingsAreIndependent", "Preferences survive defensive copies without modifying DScript", t =>
+            {
+                var settings = Directiva.Settings.GameSettings.CreateDefaults(1280, 720);
+                t.Check(settings.editor.showCompletion && settings.editor.showLiveErrors,
+                    "completion and errors enabled initially");
+                t.Equal(0.5f, settings.editor.liveErrorDelaySeconds, "diagnostic delay default");
+                settings.editor.showErrorSuggestions = true;
+                var copy = settings.Copy();
+                copy.editor.showCompletion = false;
+                t.Check(settings.editor.showCompletion && copy.editor.showErrorSuggestions,
+                    "editor settings have their own copy");
+            });
+
+            Add("SignatureParametersFromSimulation", "A call displays script-facing parameter names and types", t =>
+            {
+                const string src = "def run():\n    move(";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = src });
+                var info = DScriptCallSignatureHelp.Get("test", src, src.Length, provider);
+                t.Check(info != null, "implicit self method shows a signature despite an open call");
+                t.Equal("move", info.Name, "order name");
+                t.Equal(2, info.Parameters.Count, "position overload has two parameters");
+                t.Equal("x: Decimal", info.Parameters[0], "first parameter uses DScript type");
+                t.Equal("y: Decimal", info.Parameters[1], "second parameter uses DScript type");
+                t.Equal(0, info.ActiveParameter, "first argument is active");
+
+                const string member = "def run():\n    self.move(10, ";
+                var next = DScriptCallSignatureHelp.Get("test", member, member.Length, provider);
+                t.Check(next != null, "explicit self call is recognized");
+                t.Equal(1, next.ActiveParameter, "comma advances active argument");
+                t.Equal("y: Decimal", next.Parameters[1], "second parameter label");
+            });
+
+            Add("SignatureSimulationEnums", "Signature help uses actual DScript enum namespaces, not CLR integers", t =>
+            {
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = "def run():\n    pass\n" });
+                const string allies = "def run():\n    allies(";
+                var a = DScriptCallSignatureHelp.Get("test", allies, allies.Length, provider);
+                t.Check(a != null, "allies signature is visible");
+                t.Equal("entityType: Type?", a.Parameters[0], "entity filter uses script Type enum");
+                t.Check(a.ActiveArgumentChoices.Contains("Type.Unit") &&
+                    a.ActiveArgumentChoices.Contains("Type.Nexus") &&
+                    a.ActiveArgumentChoices.Contains("Type.Resource"),
+                    "the hint shows the real script-qualified alternatives");
+                t.Check(!a.ActiveArgumentChoices.Contains("SimulationEntityType"),
+                    "CLR names are not leaked to the player");
+
+                const string side = "def run():\n    entities(";
+                var b = DScriptCallSignatureHelp.Get("test", side, side.Length, provider);
+                t.Check(b != null, "entities overload is recognized");
+                t.Equal("side: Side", b.Parameters[0], "side filter uses Side enum");
+                t.Check(b.ActiveArgumentChoices.Contains("Side.Enemy") &&
+                    b.ActiveArgumentChoices.Contains("Side.Ally"),
+                    "side values use their native DScript names");
+                const string explicitType = "def run():\n    entities(Type.Unit";
+                var typeOverload = DScriptCallSignatureHelp.Get("test", explicitType,
+                    explicitType.Length, provider);
+                t.Check(typeOverload != null && typeOverload.Parameters.Count == 1,
+                    "explicit Type.Unit selects the one-argument overload");
+                t.Equal("entityType: Type?", typeOverload.Parameters[0],
+                    "explicit enum syntax chooses the correct overload");
+
+                var returned = DScriptCompletionEngine.Complete("test",
+                    "def run():\n    self.move_mo", "def run():\n    self.move_mo".Length, provider);
+                t.Check(returned.Items.Any(i => i.Name == "move_mode" && i.Type == "MoveMode"),
+                    "enum-valued observations are not mislabeled Int");
+            });
+
+            Add("SignaturePopupBelowCaret", "Signature help appears below the caret when space allows", t =>
+            {
+                var caret = new UnityEngine.Vector2(240f, 90f);
+                var size = new UnityEngine.Vector2(280f, 90f);
+                var panel = new UnityEngine.Vector2(800f, 600f);
+                var pos = DScriptSignaturePopupPlacement.Resolve(caret, 20f, size, panel);
+                t.Equal(100f, pos.x, "popup is centered below the caret, not right-aligned");
+                t.Equal(116f, pos.y, "popup is below the current line");
+                var bottom = DScriptSignaturePopupPlacement.Resolve(
+                    new UnityEngine.Vector2(240f, 550f), 20f, size, panel);
+                t.Check(bottom.y < 550f, "fallback above only near the panel bottom");
+                var right = DScriptSignaturePopupPlacement.Resolve(
+                    new UnityEngine.Vector2(790f, 90f), 20f, size, panel);
+                t.Check(right.x + size.x <= panel.x - 3f, "popup stays inside the right edge");
+            });
+
+            Add("SignatureUserAndImports", "Optional type hints and imported native signatures are visible", t =>
+            {
+                const string src = "def custom(value: Int, ready: Bool) -> Bool:\n    return ready\ndef run():\n    custom(4, ";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = src });
+                var info = DScriptCallSignatureHelp.Get("test", src, src.Length, provider);
+                t.Check(info != null, "user function discovered from recoverable source");
+                t.Equal("value: Int", info.Parameters[0], "explicit first parameter hint");
+                t.Equal("ready: Bool", info.Parameters[1], "explicit second parameter hint");
+                t.Equal("Bool", info.ReturnType, "return hint");
+
+                const string imported = "import math\ndef run():\n    math.atan2(1, ";
+                var native = DScriptCallSignatureHelp.Get("test", imported, imported.Length, provider);
+                t.Check(native != null, "imported math function signature found");
+                t.Equal("atan2", native.Name, "native name");
+                t.Equal(1, native.ActiveParameter, "native argument index");
+                t.Equal("x", native.Parameters[1], "parameter name from reflection");
+            });
+
+            Add("SignatureNestedAndLiterals", "Nested calls track their own comma depth and ignore strings", t =>
+            {
+                const string nested = "def run():\n    move(math.atan2(10, 20), ";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = nested });
+                var result = DScriptCallSignatureHelp.Get("test", nested, nested.Length, provider);
+                t.Check(result != null && result.Name == "move", "outer call survives nested commas");
+                t.Equal(1, result.ActiveParameter, "outer call uses the comma after nested call");
+                const string stringCall = "def run():\n    move(\"hello, world\", ";
+                result = DScriptCallSignatureHelp.Get("test", stringCall, stringCall.Length, provider);
+                t.Check(result != null, "string literal does not confuse delimiter scan");
+                t.Equal(1, result.ActiveParameter, "comma inside string does not count");
+                t.Check(DScriptCallSignatureHelp.Get("test", "def user(", 9, provider) == null,
+                    "function definition is not a call");
+            });
+
+            Add("CaretAwareIncompleteCall", "Unclosed calls are marked only after the player leaves them", t =>
+            {
+                const string src = "def run():\n    move(\n\n    print('hello')\n\n    # farther down\n";
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = src });
+                int paren = src.IndexOf("move(", StringComparison.Ordinal) + 4;
+                var near = DScriptLiveDiagnostics.Analyze("test", src, provider, paren + 1);
+                t.Check(!near.Any(i => i.Code == "DS1006" && i.Span.Start == paren),
+                    "typing the arguments does not cause a speculative underline");
+                var far = DScriptLiveDiagnostics.Analyze("test", src, provider, src.Length);
+                t.Check(far.Any(i => i.Code == "DS1006" && i.Span.Start == paren && i.Span.Length == 1),
+                    "abandoned opening parenthesis is highlighted, not just end-of-file");
+                const string continued = "def run():\n    move(\n        10,\n        20";
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", continued, provider, continued.Length)
+                    .Any(i => i.Code == "DS1006" && i.Span.Length == 1),
+                    "in-progress multiline call is not flagged");
+                const string closed = "def run():\n    move(\n        10,\n        20)\n    print('ok')\n";
+                t.Check(!DScriptLiveDiagnostics.Analyze("test", closed, provider, closed.Length)
+                    .Any(i => i.Code == "DS1006"), "completed multiline call remains valid");
+            });
+
             Add("NativeMetadata", "Native signatures are script-facing, not unhelpful CLR NativeResult", t =>
             {
                 t.Check(NativeLibrary.TryGetFunctionSignature("math.sin", out var sin), "math.sin exists");
