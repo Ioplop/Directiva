@@ -64,6 +64,7 @@ namespace Directiva.SimulationFrontend
         private bool programSelectionLocked;
         private Orchestrator orchestrator;
         private SimulationWorldPointerController pointer;
+        private CameraController cameraController;
         private DirectivaCodeUIController connectedEditor;
         private int selectedDebugEntityId;
         private readonly List<VMOutputMessage> pendingEditorMessages = new List<VMOutputMessage>();
@@ -460,6 +461,7 @@ namespace Directiva.SimulationFrontend
             world.Start(); // Idempotent if a partially built Orchestrator already started it.
             view.Attach(world, worldWidth, worldHeight,
                 ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
+            ConfigureCamera();
             pendingPlayerProgram = false;
             ApplyPlaybackState();
         }
@@ -526,7 +528,34 @@ namespace Directiva.SimulationFrontend
             running = false;
             view.Attach(orchestrator.Simulation, worldWidth, worldHeight,
                 ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
+            ConfigureCamera();
             ApplyPlaybackState();
+        }
+
+        /// <summary>
+        /// Configure the local camera for this world's projection, even while
+        /// stopped. Existing hand-made rigs take precedence; the default Main
+        /// Camera gains a controller and a runtime pivot rig only if necessary.
+        /// </summary>
+        private void ConfigureCamera()
+        {
+            if (cameraController == null)
+            {
+                cameraController = CameraController.Instance;
+                if (cameraController == null)
+                {
+                    Camera sceneCamera = pointer != null ? pointer.WorldCamera : Camera.main;
+                    if (sceneCamera != null)
+                    {
+                        cameraController = sceneCamera.GetComponent<CameraController>();
+                        if (cameraController == null)
+                            cameraController = sceneCamera.gameObject.AddComponent<CameraController>();
+                    }
+                }
+            }
+            if (cameraController == null) return;
+            cameraController.SetUI(ui);
+            cameraController.SetBounds(view.WorldBounds);
         }
 
         private void DetachOrchestrator()

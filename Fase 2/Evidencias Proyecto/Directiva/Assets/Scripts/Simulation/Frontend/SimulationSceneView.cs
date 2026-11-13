@@ -60,6 +60,16 @@ namespace Directiva.SimulationFrontend
             internal GatherAligner Effect;
         }
 
+        /// <summary>
+        /// The same centered X/Z rectangle used by ToUnity for all entity positions.
+        /// Camera focus is clamped here; no simulation coordinates are modified.
+        /// </summary>
+        public Rect WorldBounds => CalculateWorldBounds(
+            worldCenter != null ? worldCenter.position : Vector3.zero, worldWidth, worldHeight);
+
+        public static Rect CalculateWorldBounds(Vector3 center, int width, int height) =>
+            new Rect(center.x - width * 0.5f, center.z - height * 0.5f, width, height);
+
         public Simulation CurrentWorld => simulation;
         public int VisualEntityCount => entities.Count;
         public int ActiveGatherCount => activeGather.Count;

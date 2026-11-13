@@ -19,6 +19,21 @@ namespace Directiva.EditorTests.SimulationFrontendTests
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
                 tests.Add(new DirectivaTestCase("Simulation", "Frontend", name, description, action));
 
+            Add("CameraBoundsMatchSimulationProjection",
+                "Camera focus uses the same centered X/Z rectangle as the simulated world", t =>
+            {
+                Rect bounds = SimulationSceneView.CalculateWorldBounds(
+                    new Vector3(13f, 8f, -7f), 50, 30);
+                t.Equal(-12f, bounds.xMin, "X origin uses world center and half width");
+                t.Equal(38f, bounds.xMax, "X end uses the full width");
+                t.Equal(-22f, bounds.yMin, "Rect Y represents Unity's world Z");
+                t.Equal(8f, bounds.yMax, "Z end uses the full height");
+                Vector2 clamped = CameraController.ClampToBounds(new Vector2(200f, -30f), bounds);
+                t.Equal(new Vector2(38f, -22f), clamped, "focus cannot leave the world");
+                t.Equal(new Vector2(0f, 0f), CameraController.ClampToBounds(Vector2.zero, bounds),
+                    "a point within the world is unchanged");
+            });
+
             Add("PlayRequiresValidSavedPlayerProgram",
                 "Unavailable Play explains missing Nexus code, compilation errors and setup failures", t =>
             {
