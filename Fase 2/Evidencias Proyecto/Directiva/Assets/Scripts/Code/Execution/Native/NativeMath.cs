@@ -46,26 +46,26 @@ namespace DSExecution.Native
             return DecimalResult(operation(x));
         }
 
-        [DScriptNativeFunction("math", "sin", 1, 1)]
+        [DScriptNativeFunction("math", "sin", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Sin(NativeCallContext c) => Unary(c, Math.Sin);
-        [DScriptNativeFunction("math", "cos", 1, 1)]
+        [DScriptNativeFunction("math", "cos", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Cos(NativeCallContext c) => Unary(c, Math.Cos);
-        [DScriptNativeFunction("math", "tan", 1, 1)]
+        [DScriptNativeFunction("math", "tan", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Tan(NativeCallContext c) => Unary(c, Math.Tan);
-        [DScriptNativeFunction("math", "asin", 1, 1)]
+        [DScriptNativeFunction("math", "asin", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Asin(NativeCallContext c) => Unary(c, Math.Asin);
-        [DScriptNativeFunction("math", "acos", 1, 1)]
+        [DScriptNativeFunction("math", "acos", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Acos(NativeCallContext c) => Unary(c, Math.Acos);
-        [DScriptNativeFunction("math", "atan", 1, 1)]
+        [DScriptNativeFunction("math", "atan", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Atan(NativeCallContext c) => Unary(c, Math.Atan);
-        [DScriptNativeFunction("math", "sqrt", 1, 1)]
+        [DScriptNativeFunction("math", "sqrt", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Sqrt(NativeCallContext c) => Unary(c, Math.Sqrt);
-        [DScriptNativeFunction("math", "degrees", 1, 1)]
+        [DScriptNativeFunction("math", "degrees", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Degrees(NativeCallContext c) => Unary(c, x => x * (180.0 / Math.PI));
-        [DScriptNativeFunction("math", "radians", 1, 1)]
+        [DScriptNativeFunction("math", "radians", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Radians(NativeCallContext c) => Unary(c, x => x * (Math.PI / 180.0));
 
-        [DScriptNativeFunction("math", "atan2", 2, 2)]
+        [DScriptNativeFunction("math", "atan2", 2, 2, ReturnType = "Decimal", Parameters = new string[] { "y", "x" })]
         public static NativeResult Atan2(NativeCallContext c)
         {
             if (!Numeric(c[0], out double y) || !Numeric(c[1], out double x))
@@ -73,7 +73,7 @@ namespace DSExecution.Native
             return DecimalResult(Math.Atan2(y, x));
         }
 
-        [DScriptNativeFunction("math", "hypot", 2, 2)]
+        [DScriptNativeFunction("math", "hypot", 2, 2, ReturnType = "Decimal", Parameters = new string[] { "x", "y" })]
         public static NativeResult Hypot(NativeCallContext c)
         {
             if (!Numeric(c[0], out double x) || !Numeric(c[1], out double y))
@@ -84,9 +84,9 @@ namespace DSExecution.Native
                 DecimalResult(magnitude * Math.Sqrt((x / magnitude) * (x / magnitude) + (y / magnitude) * (y / magnitude)));
         }
 
-        [DScriptNativeFunction("math", "floor", 1, 1)]
+        [DScriptNativeFunction("math", "floor", 1, 1, ReturnType = "Int", Parameters = new string[] { "value" })]
         public static NativeResult Floor(NativeCallContext c) => IntegerRound(c, false);
-        [DScriptNativeFunction("math", "ceil", 1, 1)]
+        [DScriptNativeFunction("math", "ceil", 1, 1, ReturnType = "Int", Parameters = new string[] { "value" })]
         public static NativeResult Ceil(NativeCallContext c) => IntegerRound(c, true);
 
         private static NativeResult IntegerRound(NativeCallContext c, bool ceiling)

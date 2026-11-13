@@ -15,19 +15,19 @@ namespace DSExecution.DataTypes
         IOpReferenceEquality, IOpDictionary
     {
         private const int ItemsPerStep = 16;
-        [DScriptGetter("length")]
+        [DScriptGetter("length", ReturnType = "Int")]
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
-        [DScriptMethod("keys", 0)]
+        [DScriptMethod("keys", 0, ReturnType = "List")]
         public OperationResult KeysMember(OperationCall call) => Operate(OperationId.DictKeys, call);
 
-        [DScriptMethod("values", 0)]
+        [DScriptMethod("values", 0, ReturnType = "List")]
         public OperationResult ValuesMember(OperationCall call) => Operate(OperationId.DictValues, call);
 
-        [DScriptMethod("items", 0)]
+        [DScriptMethod("items", 0, ReturnType = "List")]
         public OperationResult ItemsMember(OperationCall call) => Operate(OperationId.DictItems, call);
 
-        [DScriptMethod("contains", 1)]
+        [DScriptMethod("contains", 1, ReturnType = "Bool")]
         public OperationResult ContainsMember(OperationCall call) => Operate(OperationId.Contains, call);
 
         // Dictionary.pop(key) removes a key and returns its value using native Pop.

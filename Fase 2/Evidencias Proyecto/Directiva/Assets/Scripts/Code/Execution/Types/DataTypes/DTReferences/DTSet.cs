@@ -14,19 +14,19 @@ namespace DSExecution.DataTypes
         IOpContainer, IOpReferenceEquality
     {
         private const int ItemsPerStep = 16;
-        [DScriptGetter("length")]
+        [DScriptGetter("length", ReturnType = "Int")]
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
-        [DScriptMethod("add", 1)]
+        [DScriptMethod("add", 1, ReturnType = "None")]
         public OperationResult AddMember(OperationCall call) => Operate(OperationId.SetAdd, call);
 
-        [DScriptMethod("discard", 1)]
+        [DScriptMethod("discard", 1, ReturnType = "None")]
         public OperationResult DiscardMember(OperationCall call) => Operate(OperationId.SetDiscard, call);
 
-        [DScriptMethod("remove", 1)]
+        [DScriptMethod("remove", 1, ReturnType = "None")]
         public OperationResult RemoveMember(OperationCall call) => Operate(OperationId.SetRemove, call);
 
-        [DScriptMethod("contains", 1)]
+        [DScriptMethod("contains", 1, ReturnType = "Bool")]
         public OperationResult ContainsMember(OperationCall call) => Operate(OperationId.Contains, call);
 
         // The public method name is the same as List.pop, but dispatches to SetPop.

@@ -186,6 +186,7 @@ namespace DSCompilation.DScript.Lexing
                 else if (Match(at, end, "//=", out width)) tokenKind = TokenKind.DoubleSlashEqual;
                 else if (Match(at, end, "**", out width)) tokenKind = TokenKind.DoubleStar;
                 else if (Match(at, end, "//", out width)) tokenKind = TokenKind.DoubleSlash;
+                else if (Match(at, end, "->", out width)) tokenKind = TokenKind.Arrow;
                 else if (Match(at, end, "==", out width)) tokenKind = TokenKind.EqualEqual;
                 else if (Match(at, end, "!=", out width)) tokenKind = TokenKind.NotEqual;
                 else if (Match(at, end, "<=", out width)) tokenKind = TokenKind.LessEqual;

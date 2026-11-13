@@ -19,6 +19,8 @@ namespace DSExecution.DataTypes
         public int ArgumentCount { get; }
         public int MinimumArgumentCount { get; }
         public int MaximumArgumentCount { get; } // -1 means no maximum.
+        public string ReturnType { get; set; }
+        public string[] Parameters { get; set; }
 
         public DScriptMethodAttribute(string name, int argumentCount = -1)
         {
@@ -42,6 +44,7 @@ namespace DSExecution.DataTypes
     public sealed class DScriptGetterAttribute : Attribute
     {
         public string Name { get; }
+        public string ReturnType { get; set; }
         public DScriptGetterAttribute(string name) { Name = name; }
     }
 

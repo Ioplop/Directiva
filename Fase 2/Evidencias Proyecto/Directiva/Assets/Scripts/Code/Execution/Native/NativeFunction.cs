@@ -20,6 +20,10 @@ namespace DSExecution.Native
         public string Name { get; }
         public int MinArguments { get; }
         public int MaxArguments { get; }
+        /// <summary>Optional editor-only DScript return type (unknown when omitted).</summary>
+        public string ReturnType { get; set; } = string.Empty;
+        /// <summary>Optional editor-only display names for script parameters.</summary>
+        public string[] Parameters { get; set; } = Array.Empty<string>();
 
         public DScriptNativeFunctionAttribute(string module, string name, int minArguments, int maxArguments)
         {
@@ -146,6 +150,24 @@ namespace DSExecution.Native
         public bool Accepts(int count) => count >= MinArguments && count <= MaxArguments;
     }
 
+    /// <summary>Immutable, VM-independent signature consumed by editor assistance.</summary>
+    public sealed class NativeFunctionSignature
+    {
+        public string QualifiedName { get; }
+        public int MinArguments { get; }
+        public int MaxArguments { get; }
+        public string ReturnType { get; }
+        public IReadOnlyList<string> Parameters { get; }
+        internal NativeFunctionSignature(NativeFunctionDescription description)
+        {
+            QualifiedName = description.QualifiedName;
+            MinArguments = description.MinArguments;
+            MaxArguments = description.MaxArguments;
+            ReturnType = description.ReturnType;
+            Parameters = description.Parameters;
+        }
+    }
+
     internal sealed class NativeFunctionDescription
     {
         public string Module { get; }
@@ -153,6 +175,8 @@ namespace DSExecution.Native
         public int MinArguments { get; }
         public int MaxArguments { get; }
         public Func<NativeCallContext, NativeResult> Implementation { get; }
+        public string ReturnType { get; }
+        public IReadOnlyList<string> Parameters { get; }
 
         public NativeFunctionDescription(DScriptNativeFunctionAttribute attribute, Func<NativeCallContext, NativeResult> implementation)
         {
@@ -161,6 +185,8 @@ namespace DSExecution.Native
             MinArguments = attribute.MinArguments;
             MaxArguments = attribute.MaxArguments;
             Implementation = implementation;
+            ReturnType = attribute.ReturnType;
+            Parameters = Array.AsReadOnly(attribute.Parameters ?? Array.Empty<string>());
         }
     }
 
@@ -202,6 +228,24 @@ namespace DSExecution.Native
         /// <summary>Exposes metadata for DScript symbol resolution without VM internals.</summary>
         public static IReadOnlyList<string> GetFunctionNames(string module)
             => Descriptions.Where(d => d.Module == module).Select(d => d.QualifiedName).ToArray();
+
+        /// <summary>Native signatures are discovered once; completion never invokes a VM.</summary>
+        public static IReadOnlyList<NativeFunctionSignature> GetFunctionSignatures(string module)
+            => Descriptions.Where(d => d.Module == module)
+                .Select(d => new NativeFunctionSignature(d)).ToArray();
+
+        public static bool TryGetFunctionSignature(string qualifiedName, out NativeFunctionSignature signature)
+        {
+            var entry = Descriptions.FirstOrDefault(d => d.QualifiedName == qualifiedName);
+            if (entry == null)
+            {
+                // Try-pattern: callers only use the out value when this returns true.
+                signature = null!;
+                return false;
+            }
+            signature = new NativeFunctionSignature(entry);
+            return true;
+        }
 
         public static IReadOnlyList<string> GetConstantNames(string module)
             => Constants.Keys.Where(k => k.StartsWith(module + ".", StringComparison.Ordinal))

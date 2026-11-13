@@ -74,6 +74,23 @@ namespace Directiva.CodeUI
         private readonly Dictionary<string, EditorUndoHistory> _undoHistories =
             new Dictionary<string, EditorUndoHistory>(StringComparer.OrdinalIgnoreCase);
 
+        // Suggestions are drawn on the shared popup layer, above the syntax overlay,
+        // but keyboard focus remains on the actual TextField.
+        private Func<string, int, DScriptCompletionResult> _completionProvider;
+        private VisualElement _completionLayer;
+        private VisualElement _completionPopup;
+        private ScrollView _completionScroll;
+        private Label _completionDetail;
+        private const int NoCompletionSelection = -1;
+        private readonly List<Button> _completionRows = new List<Button>();
+        private DScriptCompletionResult _completionResult;
+        private IVisualElementScheduledItem _completionTask;
+        private int _completionSelected = NoCompletionSelection;
+        private bool _completionSuppressNextChange;
+        private bool _completionDismissed;
+        private bool _completionOpen;
+        private bool _completionSpaceHandled;
+
         private EditorUndoHistory _activeUndoHistory;
 
         private ScrollView _internalScroll;
@@ -107,6 +124,7 @@ namespace Directiva.CodeUI
             _textField.isReadOnly = readOnly;
             EnableInClassList("execution-locked", readOnly);
             _textField.tooltip = readOnly ? reason ?? string.Empty : string.Empty;
+            if (readOnly) HideCompletion();
         }
 
         public CodeEditorView(
@@ -280,6 +298,23 @@ namespace Directiva.CodeUI
                 ValidateExecutionLine();
                 UpdateExecutionHighlightPosition();
                 TextChanged?.Invoke(normalized);
+                if (_completionSuppressNextChange)
+                {
+                    _completionSuppressNextChange = false;
+                    HideCompletion();
+                }
+                else
+                {
+                    _completionDismissed = false;
+                    // A typed edit invalidates any explicit keyboard choice
+                    // immediately, even before the debounced suggestions update.
+                    if (_completionOpen)
+                    {
+                        _completionSelected = NoCompletionSelection;
+                        HighlightCompletionSelection();
+                    }
+                    ScheduleCompletionRefresh();
+                }
             });
 
             HookTextInputKeyHandling();
@@ -307,10 +342,216 @@ namespace Directiva.CodeUI
                 _zoomLayoutSyncPassesRemaining = 0;
                 _zoomAnchorPending = false;
                 _zoomLayoutSyncTask?.Pause();
+                HideCompletion();
             });
 
             SetEnabled(false);
             SetTextWithoutNotify(string.Empty);
+        }
+
+        /// <summary>
+        /// Runtime editor completion. The overlay belongs to the controller's popup
+        /// layer; the TextField retains focus so keyboard navigation stays predictable.
+        /// </summary>
+        public void SetCompletionProvider(Func<string, int, DScriptCompletionResult> provider,
+            VisualElement popupLayer)
+        {
+            HideCompletion();
+            _completionPopup?.RemoveFromHierarchy();
+            _completionProvider = provider;
+            _completionLayer = popupLayer;
+            if (provider == null || popupLayer == null) return;
+            _completionPopup = new VisualElement();
+            _completionPopup.name = "dscript-completion-popup";
+            _completionPopup.style.position = Position.Absolute;
+            _completionPopup.style.width = 344f;
+            _completionPopup.style.maxHeight = 260f;
+            _completionPopup.style.backgroundColor = new Color(0.10f, 0.13f, 0.19f, 0.98f);
+            _completionPopup.style.borderTopWidth = 1f;
+            _completionPopup.style.borderBottomWidth = 1f;
+            _completionPopup.style.borderLeftWidth = 1f;
+            _completionPopup.style.borderRightWidth = 1f;
+            var border = new Color(0.32f, 0.42f, 0.56f, 0.98f);
+            _completionPopup.style.borderTopColor = border;
+            _completionPopup.style.borderBottomColor = border;
+            _completionPopup.style.borderLeftColor = border;
+            _completionPopup.style.borderRightColor = border;
+            _completionPopup.style.borderTopLeftRadius = 5f;
+            _completionPopup.style.borderTopRightRadius = 5f;
+            _completionPopup.style.borderBottomLeftRadius = 5f;
+            _completionPopup.style.borderBottomRightRadius = 5f;
+            _completionPopup.style.display = DisplayStyle.None;
+            _completionScroll = new ScrollView(ScrollViewMode.Vertical);
+            _completionScroll.style.maxHeight = 225f;
+            _completionScroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            _completionScroll.verticalScrollerVisibility = ScrollerVisibility.Auto;
+            _completionPopup.Add(_completionScroll);
+            _completionDetail = new Label();
+            _completionDetail.style.minHeight = 29f;
+            _completionDetail.style.maxHeight = 48f;
+            _completionDetail.style.paddingLeft = 8f;
+            _completionDetail.style.paddingRight = 8f;
+            _completionDetail.style.paddingTop = 5f;
+            _completionDetail.style.paddingBottom = 5f;
+            _completionDetail.style.whiteSpace = WhiteSpace.Normal;
+            _completionDetail.style.color = new Color(0.71f, 0.81f, 0.96f);
+            _completionDetail.style.fontSize = 11f;
+            _completionPopup.Add(_completionDetail);
+            popupLayer.Add(_completionPopup);
+        }
+
+        private void ScheduleCompletionRefresh()
+        {
+            _completionTask?.Pause();
+            if (_completionProvider == null || _isReadOnly ||
+                string.IsNullOrEmpty(DocumentPath) || panel == null)
+            {
+                HideCompletion();
+                return;
+            }
+            // ExecuteLater returns void; retain the scheduled item so future
+            // edits can cancel and reschedule the same completion refresh.
+            if (_completionTask == null)
+                _completionTask = schedule.Execute(RefreshCompletion);
+            _completionTask.ExecuteLater(110);
+        }
+
+        private void RefreshCompletion()
+        {
+            if (_completionProvider == null || _completionDismissed || _isReadOnly ||
+                string.IsNullOrEmpty(DocumentPath) || panel == null)
+            {
+                HideCompletion();
+                return;
+            }
+            string source = Text;
+            int caret = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, source.Length);
+            if (caret != Mathf.Clamp(_textField.textSelection.selectIndex, 0, source.Length))
+            {
+                HideCompletion();
+                return;
+            }
+            DScriptCompletionResult result;
+            try { result = _completionProvider(source, caret); }
+            catch (Exception) { HideCompletion(); return; }
+            if (result == null || result.Items.Count == 0)
+            {
+                HideCompletion();
+                return;
+            }
+            _completionResult = result;
+            // Suggestions are offered, not chosen: typing Enter or Space must not
+            // silently replace the player's code unless they navigate explicitly.
+            _completionSelected = NoCompletionSelection;
+            _completionScroll.Clear();
+            _completionRows.Clear();
+            for (int i = 0; i < result.Items.Count; i++)
+            {
+                int index = i;
+                DScriptCompletionItem item = result.Items[i];
+                var row = new Button(() => CommitCompletion(index, false));
+                row.focusable = false;
+                row.style.height = 27f;
+                row.style.minHeight = 27f;
+                row.style.marginTop = 0;
+                row.style.marginBottom = 0;
+                row.style.marginLeft = 1;
+                row.style.marginRight = 1;
+                row.style.borderTopWidth = 0;
+                row.style.borderBottomWidth = 0;
+                row.style.borderLeftWidth = 0;
+                row.style.borderRightWidth = 0;
+                row.style.paddingLeft = 7;
+                row.style.paddingRight = 5;
+                row.style.unityTextAlign = TextAnchor.MiddleLeft;
+                row.style.color = new Color(0.92f, 0.95f, 1f);
+                row.style.fontSize = Mathf.Clamp(_fontSize, 11f, 16f);
+                if (_normalFont != null)
+                    row.style.unityFontDefinition = new StyleFontDefinition(_normalFont);
+                row.text = item.Name + "   " + item.Kind +
+                    (string.IsNullOrEmpty(item.Type) ? "" : "  → " + item.Type);
+                row.tooltip = item.Detail;
+                _completionScroll.Add(row);
+                _completionRows.Add(row);
+            }
+            _completionPopup.style.display = DisplayStyle.Flex;
+            _completionOpen = true;
+            HighlightCompletionSelection();
+            PositionCompletion(result.ReplaceStart);
+        }
+
+        private void HighlightCompletionSelection()
+        {
+            for (int i = 0; i < _completionRows.Count; i++)
+                _completionRows[i].style.backgroundColor = i == _completionSelected
+                    ? new Color(0.20f, 0.33f, 0.52f, 0.98f)
+                    : new Color(0, 0, 0, 0);
+
+            // No active choice also means no stale description from the previous
+            // list of suggestions.
+            if (_completionDetail != null)
+                _completionDetail.text = HasCompletionSelection(_completionSelected, _completionRows.Count)
+                    ? _completionResult.Items[_completionSelected].Detail
+                    : string.Empty;
+            if (HasCompletionSelection(_completionSelected, _completionRows.Count))
+                _completionScroll.ScrollTo(_completionRows[_completionSelected]);
+        }
+
+        private static bool HasCompletionSelection(int selected, int count) =>
+            selected >= 0 && selected < count;
+
+        private static int StepCompletionSelection(int selected, int count, bool down)
+        {
+            if (count <= 0) return NoCompletionSelection;
+            // The first Down selects the first item; the first Up selects the last.
+            if (!HasCompletionSelection(selected, count)) return down ? 0 : count - 1;
+            return (selected + (down ? 1 : count - 1)) % count;
+        }
+
+        private void PositionCompletion(int replaceStart)
+        {
+            if (_completionLayer == null || panel == null) return;
+            int start = FindLineStart(Text, replaceStart);
+            int line = 0;
+            for (int i = 0; i < start; i++) if (Text[i] == '\n') line++;
+            int column = replaceStart - start;
+            var scroll = _internalScroll != null ? _internalScroll.scrollOffset : Vector2.zero;
+            Vector2 world = _editorStack.LocalToWorld(new Vector2(
+                _textOriginX + column * _characterWidth - scroll.x,
+                _textOriginY + (line + 1) * _lineHeight - scroll.y));
+            Vector2 point = _completionLayer.WorldToLocal(world);
+            float panelWidth = _completionLayer.resolvedStyle.width;
+            float panelHeight = _completionLayer.resolvedStyle.height;
+            float height = Mathf.Min(225f, _completionRows.Count * 27f + 4f) + 33f;
+            float top = point.y + height > panelHeight - 8f ? point.y - _lineHeight - height : point.y;
+            _completionPopup.style.left = Mathf.Clamp(point.x, 4f, Mathf.Max(4f, panelWidth - 348f));
+            _completionPopup.style.top = Mathf.Clamp(top, 4f, Mathf.Max(4f, panelHeight - height - 4f));
+        }
+
+        private void CommitCompletion(int index, bool insertSpace)
+        {
+            if (!_completionOpen || _completionResult == null ||
+                index < 0 || index >= _completionResult.Items.Count || _isReadOnly) return;
+            string source = Text;
+            int begin = _completionResult.ReplaceStart;
+            int end = _completionResult.ReplaceEnd;
+            if (begin < 0 || end < begin || end > source.Length) { HideCompletion(); return; }
+            string insertion = _completionResult.Items[index].Name + (insertSpace ? " " : "");
+            string updated = source.Substring(0, begin) + insertion + source.Substring(end);
+            HideCompletion();
+            _completionSuppressNextChange = !string.Equals(updated, source, StringComparison.Ordinal);
+            ApplyEdit(updated, begin + insertion.Length, begin + insertion.Length);
+        }
+
+        private void HideCompletion()
+        {
+            _completionTask?.Pause();
+            _completionOpen = false;
+            _completionResult = null;
+            _completionSelected = NoCompletionSelection;
+            _completionRows.Clear();
+            if (_completionDetail != null) _completionDetail.text = string.Empty;
+            if (_completionPopup != null) _completionPopup.style.display = DisplayStyle.None;
         }
 
         public void OpenDocument(
@@ -335,6 +576,7 @@ namespace Directiva.CodeUI
             _zoomLayoutSyncPassesRemaining = 0;
             _zoomLayoutSyncTask?.Pause();
             _returnKeyHandled = false;
+            HideCompletion();
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -380,6 +622,7 @@ namespace Directiva.CodeUI
 
         public void ClearDocument()
         {
+            HideCompletion();
             CaptureActiveHistorySelection();
             _zoomAnchorPending = false;
             _zoomLayoutSyncPassesRemaining = 0;
@@ -777,6 +1020,8 @@ namespace Directiva.CodeUI
 
         private void OnCodePointerDown(PointerDownEvent evt)
         {
+            HideCompletion();
+            _completionDismissed = false;
             if (evt.button != 1) { _rightClickCaret = -1; return; }
             var world = new Vector2(evt.position.x, evt.position.y);
             var local = _editorStack.WorldToLocal(world);
@@ -1596,6 +1841,48 @@ namespace Directiva.CodeUI
 
         private void OnEditorLineShortcut(KeyDownEvent evt)
         {
+            // UI Toolkit may emit a KeyCode.Space followed by a character event.
+            // The completion already inserted one space; consume that second event.
+            if (_completionSpaceHandled && evt.character == ' ')
+            {
+                evt.StopImmediatePropagation();
+                return;
+            }
+            if (_completionOpen && !_isReadOnly && !evt.ctrlKey && !evt.commandKey && !evt.altKey)
+            {
+                if (evt.keyCode == KeyCode.Escape)
+                {
+                    evt.StopImmediatePropagation();
+                    _completionDismissed = true;
+                    HideCompletion();
+                    return;
+                }
+                if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow)
+                {
+                    evt.StopImmediatePropagation();
+                    _completionSelected = StepCompletionSelection(_completionSelected,
+                        _completionRows.Count, evt.keyCode == KeyCode.DownArrow);
+                    HighlightCompletionSelection();
+                    return;
+                }
+                bool enter = evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter ||
+                    evt.character == '\n' || evt.character == '\r';
+                bool space = evt.keyCode == KeyCode.Space || evt.character == ' ';
+                if (enter || space)
+                {
+                    if (HasCompletionSelection(_completionSelected, _completionRows.Count))
+                    {
+                        evt.StopImmediatePropagation();
+                        _returnKeyHandled = enter;
+                        _completionSpaceHandled = space;
+                        CommitCompletion(_completionSelected, space);
+                        return;
+                    }
+                    // With no explicit selection, let Enter follow the editor's
+                    // regular line-break/indentation path, and Space type normally.
+                    HideCompletion();
+                }
+            }
             // Capture Alt+Up/Down before the native TextField moves its caret.
             // Shift is deliberately excluded (VS Code uses Alt+Shift to duplicate).
             if (evt.altKey && !evt.ctrlKey && !evt.commandKey && !evt.shiftKey &&
@@ -1654,6 +1941,7 @@ namespace Directiva.CodeUI
 
         private void OnEditorLineShortcutReleased(KeyUpEvent evt)
         {
+            if (evt.keyCode == KeyCode.Space) _completionSpaceHandled = false;
             if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
                 evt.character != '\n' && evt.character != '\r')
                 return;

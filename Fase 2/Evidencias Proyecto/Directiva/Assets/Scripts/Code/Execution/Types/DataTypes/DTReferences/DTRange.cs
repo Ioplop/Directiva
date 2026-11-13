@@ -13,7 +13,7 @@ namespace DSExecution.DataTypes
         public static DTRange Instance { get; } = new DTRange();
         private DTRange() { }
 
-        [DScriptGetter("length")]
+        [DScriptGetter("length", ReturnType = "Int")]
         public OperationResult GetLengthMember(OperationCall call) => Length(call);
 
         public OperationResult Length(OperationCall call)

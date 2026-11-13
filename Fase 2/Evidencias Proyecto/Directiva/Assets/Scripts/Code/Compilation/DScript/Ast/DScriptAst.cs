@@ -51,8 +51,19 @@ namespace DSCompilation.DScript.Ast
         public string Name { get; }
         public IReadOnlyList<string> Parameters { get; }
         public IReadOnlyList<Statement> Body { get; }
-        public FunctionStatement(string name, IReadOnlyList<string> parameters, IReadOnlyList<Statement> body, SourceSpan span)
-            : base(span) { Name = name; Parameters = parameters; Body = body; }
+        // Editor hints only. They never affect dynamic VM execution or DIL emission.
+        public IReadOnlyDictionary<string, string> ParameterTypes { get; }
+        public string ReturnType { get; }
+        public FunctionStatement(string name, IReadOnlyList<string> parameters, IReadOnlyList<Statement> body,
+            SourceSpan span) : this(name, parameters, body, span, null, null) { }
+        public FunctionStatement(string name, IReadOnlyList<string> parameters, IReadOnlyList<Statement> body,
+            SourceSpan span, IReadOnlyDictionary<string, string> parameterTypes, string returnType)
+            : base(span)
+        {
+            Name = name; Parameters = parameters; Body = body;
+            ParameterTypes = parameterTypes ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            ReturnType = returnType;
+        }
     }
 
     /// <summary>

@@ -138,6 +138,7 @@ namespace Directiva.EditorTests
             DScript.DScriptBackendTests.Register(tests);
             DScript.DScriptEditorIntegrationTests.Register(tests);
             DScript.DScriptSyntaxHighlightTests.Register(tests);
+            DScript.DScriptCompletionTests.Register(tests);
             SimulationTests.SimulationEntityTests.Register(tests);
             SimulationTests.SimulationWorldTests.Register(tests);
             SimulationTests.SimulationCollisionTests.Register(tests);

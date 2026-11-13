@@ -552,6 +552,7 @@ namespace Directiva.CodeUI
             // runtime copy so a future user Options menu can override each color.
             _editor.SetSyntaxColors(_theme?.codeSyntaxColors);
             _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
+            _editor.SetCompletionProvider(CompleteActiveBuffer, _popupLayer);
 
             right.Add(_topBar);
             right.Add(_editor);
@@ -586,6 +587,35 @@ namespace Directiva.CodeUI
             app.Add(_modal);
 
             RegisterSymbolTooltips();
+        }
+
+        private DScriptCompletionResult CompleteActiveBuffer(string source, int caret)
+        {
+            var active = _workspace?.Active;
+            if (active == null || _storage == null || Codebase == null ||
+                !TryGetModuleName(active.RelativePath, out string module, out _))
+                return new DScriptCompletionResult(caret, caret, Array.Empty<DScriptCompletionItem>());
+
+            var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+            var modules = Codebase.Scripts.Select(script => script.RelativePath)
+                .Where(path => path.EndsWith(FileSystemScriptStorage.ScriptExtension,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(path => path.Substring(0,
+                    path.Length - FileSystemScriptStorage.ScriptExtension.Length).Replace('/', '.'));
+            var suggestions = DScriptCompletionEngine.Complete(module, source, caret, provider, modules);
+            bool spanish = (Localization?.CurrentLocale ?? "es")
+                .StartsWith("es", StringComparison.OrdinalIgnoreCase);
+            if (!spanish) return suggestions;
+            var items = suggestions.Items.Select(item => new DScriptCompletionItem(
+                item.Name, item.Kind switch
+                {
+                    "function" => "función", "method" => "método",
+                    "variable" => "variable", "property" => "propiedad",
+                    "module" => "módulo", "constant" => "constante",
+                    "keyword" => "palabra clave", "shared" => "compartida",
+                    "enum" => "enumeración", "type" => "tipo", _ => item.Kind
+                }, item.Detail, item.Type)).ToArray();
+            return new DScriptCompletionResult(suggestions.ReplaceStart, suggestions.ReplaceEnd, items);
         }
 
         private void RegisterSymbolTooltips()

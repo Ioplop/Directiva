@@ -18,11 +18,11 @@ namespace DSExecution.Native
         private static ulong Sample(VMMemoryContext memory, ulong bound)
             => (ulong)(((BigInteger)memory.NextRandomUInt64() * bound) >> 64);
 
-        [DScriptNativeFunction("random", "random", 0, 0)]
+        [DScriptNativeFunction("random", "random", 0, 0, ReturnType = "Decimal")]
         public static NativeResult Random(NativeCallContext c)
             => NativeResult.Success(DataValue.FromDecimalRaw((long)Sample(c.Memory, (ulong)DTDecimal.Scale)));
 
-        [DScriptNativeFunction("random", "randint", 2, 2)]
+        [DScriptNativeFunction("random", "randint", 2, 2, ReturnType = "Int", Parameters = new string[] { "minimum", "maximum" })]
         public static NativeResult RandInt(NativeCallContext c)
         {
             if (!NativeBuiltins.TryInteger(c[0], out long low) ||
@@ -36,7 +36,7 @@ namespace DSExecution.Native
             return NativeResult.Success(DataValue.FromInt(unchecked((long)((ulong)low + offset))));
         }
 
-        [DScriptNativeFunction("random", "uniform", 2, 2)]
+        [DScriptNativeFunction("random", "uniform", 2, 2, ReturnType = "Decimal", Parameters = new string[] { "minimum", "maximum" })]
         public static NativeResult Uniform(NativeCallContext c)
         {
             if (!NativeBuiltins.TryNumericRaw(c[0], out BigInteger low) ||

@@ -13,10 +13,10 @@ namespace DSExecution.Native
     {
         // One call, one output event. The native bridge converts each argument using
         // the same runtime cast as str(value), without changing the compiler.
-        [DScriptNativeFunction("", "print", 0, 16)]
+        [DScriptNativeFunction("", "print", 0, 16, ReturnType = "None", Parameters = new string[] { "values" })]
         public static NativeResult Print(NativeCallContext c) => c.PrintArguments();
 
-        [DScriptNativeFunction("", "range", 1, 3)]
+        [DScriptNativeFunction("", "range", 1, 3, ReturnType = "Range", Parameters = new string[] { "start", "stop", "step" })]
         public static NativeResult Range(NativeCallContext c)
         {
             long start = 0, stop, step = 1;
@@ -40,7 +40,7 @@ namespace DSExecution.Native
         // Empty mutable collections are builtins, like range(). Each call creates its
         // own heap object, including when the result is stored in a shared variable.
         // Only zero-argument construction is supported; iterable conversions are not.
-        [DScriptNativeFunction("", "list", 0, 0)]
+        [DScriptNativeFunction("", "list", 0, 0, ReturnType = "List")]
         public static NativeResult EmptyList(NativeCallContext c)
         {
             if (!c.Memory.TryAllocHeap(new ListHeapObject(Array.Empty<DataValue>()), out uint id))
@@ -48,7 +48,7 @@ namespace DSExecution.Native
             return NativeResult.Success(DataValue.FromListReference(id));
         }
 
-        [DScriptNativeFunction("", "set", 0, 0)]
+        [DScriptNativeFunction("", "set", 0, 0, ReturnType = "Set")]
         public static NativeResult EmptySet(NativeCallContext c)
         {
             if (!c.Memory.TryAllocHeap(new SetHeapObject(), out uint id))
@@ -56,7 +56,7 @@ namespace DSExecution.Native
             return NativeResult.Success(DataValue.FromSetReference(id));
         }
 
-        [DScriptNativeFunction("", "dict", 0, 0)]
+        [DScriptNativeFunction("", "dict", 0, 0, ReturnType = "Dict")]
         public static NativeResult EmptyDict(NativeCallContext c)
         {
             if (!c.Memory.TryAllocHeap(new DictHeapObject(), out uint id))
@@ -64,10 +64,10 @@ namespace DSExecution.Native
             return NativeResult.Success(DataValue.FromDictReference(id));
         }
 
-        [DScriptNativeFunction("", "len", 1, 1)]
+        [DScriptNativeFunction("", "len", 1, 1, ReturnType = "Int", Parameters = new string[] { "value" })]
         public static NativeResult Length(NativeCallContext c) => c.Operate(OperationId.Length, c[0]);
 
-        [DScriptNativeFunction("", "abs", 1, 1)]
+        [DScriptNativeFunction("", "abs", 1, 1, Parameters = new string[] { "value" })]
         public static NativeResult Abs(NativeCallContext c)
         {
             DataValue x = c[0];
@@ -80,9 +80,9 @@ namespace DSExecution.Native
                 ? DataValue.FromDecimalRaw(magnitude) : DataValue.FromInt(magnitude));
         }
 
-        [DScriptNativeFunction("", "min", 2, 2)]
+        [DScriptNativeFunction("", "min", 2, 2, Parameters = new string[] { "left", "right" })]
         public static NativeResult Min(NativeCallContext c) => Extremum(c, true);
-        [DScriptNativeFunction("", "max", 2, 2)]
+        [DScriptNativeFunction("", "max", 2, 2, Parameters = new string[] { "left", "right" })]
         public static NativeResult Max(NativeCallContext c) => Extremum(c, false);
 
         private static NativeResult Extremum(NativeCallContext c, bool minimum)
@@ -94,20 +94,20 @@ namespace DSExecution.Native
             return NativeResult.Success((minimum ? compare <= 0 : compare >= 0) ? c[0] : c[1]);
         }
 
-        [DScriptNativeFunction("", "int", 1, 1)]
+        [DScriptNativeFunction("", "int", 1, 1, ReturnType = "Int", Parameters = new string[] { "value" })]
         public static NativeResult Int(NativeCallContext c) => c[0].dataType == DataTypeId.Bool
             ? NativeResult.Success(DataValue.FromInt(unchecked((long)c[0].value)))
             : c.Cast(c[0], DataTypeId.Int);
-        [DScriptNativeFunction("", "decimal", 1, 1)]
+        [DScriptNativeFunction("", "decimal", 1, 1, ReturnType = "Decimal", Parameters = new string[] { "value" })]
         public static NativeResult Decimal(NativeCallContext c) => c[0].dataType == DataTypeId.Bool
             ? NativeResult.Success(DataValue.FromDecimalRaw(unchecked((long)c[0].value) * DTDecimal.Scale))
             : c.Cast(c[0], DataTypeId.Decimal);
-        [DScriptNativeFunction("", "str", 1, 1)]
+        [DScriptNativeFunction("", "str", 1, 1, ReturnType = "String", Parameters = new string[] { "value" })]
         public static NativeResult Str(NativeCallContext c) => c.Cast(c[0], DataTypeId.String);
-        [DScriptNativeFunction("", "bool", 1, 1)]
+        [DScriptNativeFunction("", "bool", 1, 1, ReturnType = "Bool", Parameters = new string[] { "value" })]
         public static NativeResult Bool(NativeCallContext c) => c.Operate(OperationId.IsTruthy, c[0]);
 
-        [DScriptNativeFunction("", "clamp", 3, 3)]
+        [DScriptNativeFunction("", "clamp", 3, 3, Parameters = new string[] { "value", "minimum", "maximum" })]
         public static NativeResult Clamp(NativeCallContext c)
         {
             if (!TryNumericRaw(c[0], out BigInteger x) ||

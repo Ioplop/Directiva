@@ -109,16 +109,34 @@ namespace DSCompilation.DScript.Parsing
             var name = Expect(TokenKind.Identifier, "Expected function name.", "expected_function_name");
             Expect(TokenKind.LeftParen, "Expected '(' after function name.", "expected_function_left_paren");
             var parameters = new List<string>();
+            var parameterTypes = new Dictionary<string, string>(StringComparer.Ordinal);
             if (!Is(TokenKind.RightParen))
             {
                 do
                 {
-                    parameters.Add(Expect(TokenKind.Identifier, "Expected parameter name.", "expected_param_name").Text);
+                    string parameter = Expect(TokenKind.Identifier, "Expected parameter name.", "expected_param_name").Text;
+                    parameters.Add(parameter);
+                    if (Match(TokenKind.Colon))
+                        parameterTypes[parameter] = ReadTypeHint();
                 } while (Match(TokenKind.Comma) && !Is(TokenKind.RightParen));
             }
             Expect(TokenKind.RightParen, "Expected ')' after parameters.", "expected_params_right_paren");
+            string returnType = Match(TokenKind.Arrow) ? ReadTypeHint() : null;
             var body = ReadSuite();
-            return new FunctionStatement(name.Text, parameters, body, SourceSpan.Through(begin.Span, Previous.Span));
+            return new FunctionStatement(name.Text, parameters, body,
+                SourceSpan.Through(begin.Span, Previous.Span), parameterTypes, returnType);
+        }
+
+        // Optional, non-enforcing type hints are metadata for IDE assistance.
+        // They have no runtime cost and deliberately do not perform type checks.
+        private string ReadTypeHint()
+        {
+            string name;
+            if (Is(TokenKind.None)) name = Advance().Text;
+            else name = Expect(TokenKind.Identifier, "Expected type name.", "expected_type_name").Text;
+            while (Match(TokenKind.Dot))
+                name += "." + Expect(TokenKind.Identifier, "Expected type name segment.", "expected_type_name_segment").Text;
+            return name;
         }
 
         private Statement ReadImport()

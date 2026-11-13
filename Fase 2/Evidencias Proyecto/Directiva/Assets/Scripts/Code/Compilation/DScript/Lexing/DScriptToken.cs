@@ -6,7 +6,7 @@ namespace DSCompilation.DScript.Lexing
         Def, Return, If, Elif, Else, While, For, In, Break, Continue, Pass, Global, Shared,
         Import, From, As, And, Or, Not, True, False, None,
         LeftParen, RightParen, LeftBracket, RightBracket, LeftBrace, RightBrace,
-        Dot, Comma, Colon, Plus, Minus, Star, Slash, DoubleSlash, Percent, DoubleStar,
+        Dot, Comma, Colon, Arrow, Plus, Minus, Star, Slash, DoubleSlash, Percent, DoubleStar,
         Equals, EqualEqual, NotEqual, Less, LessEqual, Greater, GreaterEqual,
         PlusEqual, MinusEqual, StarEqual, SlashEqual, DoubleSlashEqual, PercentEqual, DoubleStarEqual
     }
