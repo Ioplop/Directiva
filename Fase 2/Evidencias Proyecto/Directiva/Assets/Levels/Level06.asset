@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Level06
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
   levelName: Directive #5
-  levelNumber: 5
+  levelNumber: 6
   requiredStars: 9
   maxMatchDurationSeconds: 600
   fastVictorySeconds: 400

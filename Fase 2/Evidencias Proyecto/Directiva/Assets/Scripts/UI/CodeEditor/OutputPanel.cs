@@ -41,6 +41,15 @@ namespace Directiva.CodeUI
         private float _resizeStartY;
         private float _resizeStartHeight;
 
+        // Keep a slot for every buffered message, including filtered-out entries.
+        // This lets us evict the correct visual row when OutputService drops the
+        // oldest message, without rebuilding the entire panel for every print().
+        private readonly Queue<Label> _renderedEntries = new Queue<Label>();
+        private readonly List<OutputEntry> _pendingEntries = new List<OutputEntry>();
+        private bool _refreshScheduled;
+        private bool _fullRebuildRequired;
+        private bool _scrollScheduled;
+
         public event Action<float> FontSizeChanged;
         public event Action<OutputSourceLocation> SourceRequested;
 
@@ -259,17 +268,73 @@ namespace Directiva.CodeUI
         {
             if (_collapsed)
             {
+                // One flashing sequence per severity increase, not one for every
+                // print(). Otherwise a hot loop creates unbounded UI timers.
                 if (!_pendingSeverity.HasValue || entry.Severity > _pendingSeverity.Value)
+                {
                     _pendingSeverity = entry.Severity;
-
-                FlashCollapsed(_pendingSeverity.Value);
+                    FlashCollapsed(_pendingSeverity.Value);
+                }
                 return;
             }
 
-            AddEntryIfVisible(entry);
-            schedule.Execute(() => _scroll.scrollOffset =
-                new UnityEngine.Vector2(_scroll.scrollOffset.x, _scroll.contentContainer.layout.height))
-                .ExecuteLater(1);
+            // Batch visual work: a single VM tick can produce many print() calls.
+            // Keep only the most recent entries if the batch itself exceeds capacity.
+            if (!_fullRebuildRequired)
+            {
+                if (_pendingEntries.Count >= _output.Capacity)
+                {
+                    _pendingEntries.Clear();
+                    _fullRebuildRequired = true;
+                }
+                else
+                    _pendingEntries.Add(entry);
+            }
+
+            if (_refreshScheduled) return;
+            _refreshScheduled = true;
+            schedule.Execute(FlushPendingEntries);
+        }
+
+        private void FlushPendingEntries()
+        {
+            _refreshScheduled = false;
+            if (_collapsed)
+            {
+                // Expanding the panel will rebuild from the bounded OutputService.
+                _pendingEntries.Clear();
+                _fullRebuildRequired = false;
+                return;
+            }
+
+            bool changed = _fullRebuildRequired || _pendingEntries.Count > 0;
+            if (!changed) return;
+
+            if (_fullRebuildRequired)
+                Rebuild();
+            else
+            {
+                foreach (OutputEntry entry in _pendingEntries)
+                {
+                    // One logical slot per buffered message; a hidden severity
+                    // uses a null label, so filters never break capacity tracking.
+                    if (_renderedEntries.Count >= _output.Capacity)
+                        _renderedEntries.Dequeue()?.RemoveFromHierarchy();
+                    _renderedEntries.Enqueue(AddEntryIfVisible(entry));
+                }
+                _pendingEntries.Clear();
+            }
+            _fullRebuildRequired = false;
+
+            if (_scrollScheduled) return;
+            _scrollScheduled = true;
+            schedule.Execute(() =>
+            {
+                _scrollScheduled = false;
+                if (!_collapsed)
+                    _scroll.scrollOffset = new Vector2(_scroll.scrollOffset.x,
+                        _scroll.contentContainer.layout.height);
+            }).ExecuteLater(1);
         }
 
         private void ToggleCollapsed()
@@ -337,15 +402,18 @@ namespace Directiva.CodeUI
 
         private void Rebuild()
         {
+            _pendingEntries.Clear();
+            _fullRebuildRequired = false;
+            _renderedEntries.Clear();
             _scroll.Clear();
             foreach (var entry in _output.Entries)
-                AddEntryIfVisible(entry);
+                _renderedEntries.Enqueue(AddEntryIfVisible(entry));
         }
 
-        private void AddEntryIfVisible(OutputEntry entry)
+        private Label AddEntryIfVisible(OutputEntry entry)
         {
             if (!IsVisible(entry.Severity))
-                return;
+                return null;
 
             var label = new Label(entry.Text);
             label.AddToClassList("output-entry");
@@ -387,6 +455,7 @@ namespace Directiva.CodeUI
             });
 
             _scroll.Add(label);
+            return label;
         }
 
         /// <summary>Copies the exact visible message, preserving its original text.</summary>

@@ -49,6 +49,10 @@ namespace Directiva.SimulationFrontend
         [SerializeField, Min(1)] private int matchDurationSeconds = 300;
         [SerializeField, Min(1)] private int maxTicksPerFrame = 250;
         [SerializeField] private bool mirrorVmMessagesToUnityConsole = true;
+        [Tooltip("Mirror regular DScript print() messages to Unity Debug.Log. " +
+            "Disabled by default to prevent large logs from stalling the Editor. " +
+            "Warnings and errors are still mirrored when mirroring is enabled.")]
+        [SerializeField] private bool mirrorPrintsToUnityConsole = false;
 
         // In-memory selection, retained for this scene's lifetime across Stop/Play.
         // This is deliberately NOT the code editor's working buffer.
@@ -747,7 +751,10 @@ namespace Directiva.SimulationFrontend
                 connectedEditor.PublishSimulationOutput(output);
             else
                 pendingEditorMessages.Add(output);
-            if (!mirrorVmMessagesToUnityConsole) return;
+            // Printing every VM message to Unity Console can saturate the Editor.
+            // Keep diagnostics, but make ordinary print mirroring explicitly opt-in.
+            if (!mirrorVmMessagesToUnityConsole ||
+                (output.Kind == VMOutputKind.Print && !mirrorPrintsToUnityConsole)) return;
             string line = "[Directiva Side " + output.SideId + " / Entity " +
                 (output.EntityId.HasValue ? output.EntityId.Value.ToString() : "shared") +
                 " / Tick " + output.Tick + "] " + output.Text;

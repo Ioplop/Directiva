@@ -2288,7 +2288,6 @@ MonoBehaviour:
   styleSheet: {fileID: 7433441132597879392, guid: 0e2d7cfafc694eba8961903876acfd67, type: 3}
   gameTitle: DIRECTIVA
   levelsTitle: Niveles
-  maxStars: 3
   earnedStarSprite: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
   unearnedStarSprite: {fileID: 21300000, guid: df410db4b09efa347af780203cd59318, type: 3}
   lockedLevelSprite: {fileID: 0}
@@ -2405,7 +2404,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: dfb782df6d1944a4b8ccaba71fb58282, type: 2}
   - {fileID: 11400000, guid: 8d45d7353b36f5249bcadf0a7584f867, type: 2}
   - {fileID: 11400000, guid: 3b87fc06200a4d24d85ca8702b506591, type: 2}
-  availableStars: 0
+  - {fileID: 11400000, guid: d4ca2f9bf67f154429d8f22a297111bc, type: 2}
   levels:
   - name: Funciones
     stars: 3

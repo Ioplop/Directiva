@@ -61,6 +61,22 @@ namespace Directiva.EditorTests.CodeUITests
                 t.Equal(0, output.Entries.Count(), "clear still works");
             });
 
+            Add("DefaultConsoleRetention", "Console keeps only the most recent 100 messages", t =>
+            {
+                var output = new OutputService();
+                t.Equal(100, output.Capacity, "default output capacity reduced tenfold");
+                int received = 0;
+                output.EntryAdded += _ => received++;
+                for (int i = 0; i < 250; i++)
+                    output.Write("Print " + i);
+
+                var retained = output.Entries.ToArray();
+                t.Equal(250, received, "event subscribers receive every message");
+                t.Equal(100, retained.Length, "bounded history retains 100 entries");
+                t.Equal("Print 150", retained[0].Text, "oldest retained entry");
+                t.Equal("Print 249", retained[99].Text, "newest retained entry");
+            });
+
             Add("CompilerModuleAndSpan", "DScript diagnostics map a module, line, column and span to an editable file", t =>
             {
                 var diagnostic = new DScriptDiagnostic("tools.helpers", "DS4016", "Missing", new SourceSpan(23, 7, 4, 6));

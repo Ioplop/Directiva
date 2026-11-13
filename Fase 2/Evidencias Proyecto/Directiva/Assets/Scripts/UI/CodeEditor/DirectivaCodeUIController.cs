@@ -67,7 +67,8 @@ namespace Directiva.CodeUI
         [SerializeField, Min(0.02f)] private float analysisDebounceSeconds = 0.15f;
 
         [Header("Output")]
-        [SerializeField, Min(1)] private int outputCapacity = 1000;
+        [SerializeField, Range(1, OutputService.DefaultCapacity)]
+        private int outputCapacity = OutputService.DefaultCapacity;
 
         [Header("Execution")]
         [SerializeField, Min(1)] private int executionStepsPerFrame = 2000;
@@ -152,6 +153,9 @@ namespace Directiva.CodeUI
             explorerFontSize = Mathf.Clamp(explorerFontSize, 6f, 48f);
             outputFontSize = Mathf.Clamp(outputFontSize, 6f, 48f);
             tooltipDelaySeconds = Mathf.Max(0f, tooltipDelaySeconds);
+            // Older scenes serialized 1000 entries. Migrate that value without
+            // overwriting the scene or other user-authored Inspector settings.
+            outputCapacity = Mathf.Clamp(outputCapacity, 1, OutputService.DefaultCapacity);
             executionStepsPerFrame = Mathf.Max(1, executionStepsPerFrame);
             editorInitializerStepBudget = Mathf.Max(1, editorInitializerStepBudget);
 
@@ -186,7 +190,9 @@ namespace Directiva.CodeUI
             Localization = new LocalizationService(defaultLocale);
             Localization.SetLocale(DirectivaLocalization.CurrentLocale);
             DirectivaLocalization.LanguageChanged += OnGlobalLanguageChanged;
-            Output = new OutputService(outputCapacity);
+            // OnValidate is not guaranteed to run in a player build, so enforce
+            // the console budget here as well for scenes serialized before this patch.
+            Output = new OutputService(Mathf.Clamp(outputCapacity, 1, OutputService.DefaultCapacity));
 
             var scriptsRoot = Path.Combine(Application.persistentDataPath, "DirectivaScripts");
             _storage = new FileSystemScriptStorage(scriptsRoot);

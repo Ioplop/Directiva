@@ -94,7 +94,9 @@ namespace Directiva.CodeUI
         public event Action<OutputEntry> EntryAdded;
         public event Action Cleared;
 
-        public OutputService(int capacity = 1000)
+        public const int DefaultCapacity = 100;
+
+        public OutputService(int capacity = DefaultCapacity)
         {
             Capacity = Math.Max(1, capacity);
         }
