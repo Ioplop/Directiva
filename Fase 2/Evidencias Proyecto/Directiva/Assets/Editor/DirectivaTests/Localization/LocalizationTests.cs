@@ -74,6 +74,24 @@ namespace Directiva.EditorTests.LocalizationTests
                     locale.Get("Console", "script_function_not_found", "foo", "main"), "English composite message");
             });
 
+            Add("PlayDisabledTooltipsLocalized", "Blocked Play has explanatory Spanish and English tooltips", t =>
+            {
+                var locale = new LocalizationService("es");
+                t.Contains("errores", locale.Get("Simulation", "play_code_errors"),
+                    "Spanish compilation-error explanation");
+                t.Contains("partida", locale.Get("Simulation", "nexus_select_before_play"),
+                    "Spanish missing-program explanation");
+                t.Contains("preparación", locale.Get("Simulation", "play_setup_error"),
+                    "Spanish setup-error explanation");
+                locale.SetLocale("en");
+                t.Contains("errors", locale.Get("Simulation", "play_code_errors"),
+                    "English compilation-error explanation");
+                t.Contains("Nexus", locale.Get("Simulation", "nexus_select_before_play"),
+                    "English missing-program explanation");
+                t.Contains("setup", locale.Get("Simulation", "play_setup_error"),
+                    "English setup-error explanation");
+            });
+
             Add("DiagnosticTemplatesInBothLanguages", "DIL, DScript and VM diagnostics translate in both languages", t =>
             {
                 var locale = new LocalizationService("es");

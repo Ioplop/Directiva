@@ -18,6 +18,27 @@ namespace Directiva.EditorTests.SimulationFrontendTests
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
                 tests.Add(new DirectivaTestCase("Simulation", "Frontend", name, description, action));
 
+            Add("PlayRequiresValidSavedPlayerProgram",
+                "Unavailable Play explains missing Nexus code, compilation errors and setup failures", t =>
+            {
+                var Policy = new Func<bool, bool, bool, bool, bool, string>(
+                    SimulationSceneSynchronizer.GetPlayBlockReasonKey);
+                t.Equal("nexus_select_before_play", Policy(false, false, true, false, false),
+                    "no player program blocks the match");
+                t.Equal("play_code_errors", Policy(false, false, true, true, false),
+                    "rejected invalid code is clearer than the missing-selection fallback");
+                t.Equal("play_code_errors", Policy(false, true, true, true, false),
+                    "invalid saved source blocks even an assigned program");
+                t.Equal("nexus_level_required", Policy(false, true, false, false, false),
+                    "level is still required");
+                t.Equal("play_setup_error", Policy(false, true, true, false, true),
+                    "failed match setup prevents a second invisible attempt");
+                t.Check(Policy(false, true, true, false, false) == null,
+                    "valid saved program and level permit starting");
+                t.Check(Policy(true, true, true, true, false) == null,
+                    "a paused match resumes its precompiled VM even after an invalid save");
+            });
+
             Add("PlayerProgramStartsUnassigned",
                 "A level starts without any hidden player program or locked controls", t =>
             {
@@ -27,6 +48,8 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                     var synchronizer = gameObject.AddComponent<SimulationSceneSynchronizer>();
                     t.Check(!synchronizer.HasSelectedPlayerProgram,
                         "player Nexus must not have a program assigned at scene creation");
+                    t.Equal("nexus_select_before_play", synchronizer.PlayBlockReasonKey,
+                        "unassigned program exposes a clear disabled-Play reason");
                     t.Check(string.IsNullOrEmpty(synchronizer.SelectedPlayerScript),
                         "no default player file");
                     t.Check(string.IsNullOrEmpty(synchronizer.SelectedPlayerFunction),
@@ -42,6 +65,12 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                         "Play never replaces the missing program with a demo");
                     t.Check(!synchronizer.IsProgramSelectionLocked,
                         "unsuccessful Play must not lock the empty selector");
+                    synchronizer.ReportPlayerProgramSelectionError();
+                    t.Equal("play_code_errors", synchronizer.PlayBlockReasonKey,
+                        "a failed attempted assignment reports compilation errors, not just missing code");
+                    synchronizer.Play();
+                    t.Check(!synchronizer.IsRunning,
+                        "the runtime itself refuses Play while code errors are known");
                 }
                 finally { UnityEngine.Object.DestroyImmediate(gameObject); }
             });

@@ -32,6 +32,8 @@
 [hud_errors]: Errores
 [hud_time_remaining]: Tiempo restante
 [nexus_select_before_play]: Selecciona un script y una función de entrada para el nexo antes de iniciar la partida.
+[play_code_errors]: No puedes iniciar la partida porque el código tiene errores. Revísalos en la consola del editor.
+[play_setup_error]: No se puede iniciar la partida por un error de preparación. Consulta la consola.
 [nexus_level_required]: Inicia la partida desde la selección de niveles. No hay un nivel cargado.
 
 [debug_output_prefix]: [Bando {{1}} / Entidad {{2}} / Tick {{3}}]

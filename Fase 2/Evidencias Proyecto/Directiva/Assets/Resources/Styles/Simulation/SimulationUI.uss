@@ -49,6 +49,21 @@
     -unity-text-align: middle-center;
     font-size: 13px;
 }
+.sim-play-slot {
+    position: relative;
+    flex-direction: row;
+    align-items: center;
+}
+.sim-play-disabled-hover {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+.sim-control-button:disabled {
+    opacity: 0.4;
+}
 .sim-control-button:hover, .sim-menu-button:hover, .sim-editor-header-button:hover,
 .sim-editor-tab:hover {
     background-color: rgb(67, 100, 142);

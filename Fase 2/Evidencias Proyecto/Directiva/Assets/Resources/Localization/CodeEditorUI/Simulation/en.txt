@@ -32,6 +32,8 @@
 [hud_errors]: Errors
 [hud_time_remaining]: Time left
 [nexus_select_before_play]: Choose a saved script and Nexus entry function before starting the match.
+[play_code_errors]: You cannot start the match because the code has errors. Check the editor console.
+[play_setup_error]: The match cannot start because setup failed. Check the console.
 [nexus_level_required]: Start the match from the level selection menu. No level is loaded.
 
 [debug_output_prefix]: [Side {{1}} / Entity {{2}} / Tick {{3}}]

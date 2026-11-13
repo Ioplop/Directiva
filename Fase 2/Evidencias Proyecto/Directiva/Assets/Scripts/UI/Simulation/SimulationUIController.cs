@@ -82,6 +82,11 @@ namespace Directiva.SimulationUI
         private int _playbackState = 1;
         private Button _activePlaybackButton;
         private Button _activeSpeedButton;
+        private Button _playButton;
+        // Disabled UI Toolkit buttons do not reliably receive hover events.
+        // The enabled transparent sibling keeps the explanatory tooltip usable.
+        private VisualElement _playDisabledHover;
+        private string _playBlockReasonKey = "nexus_select_before_play";
         private float _dockedWidth;
         private bool _initialWidthMeasured;
         private bool _editorMounted;
@@ -111,6 +116,7 @@ namespace Directiva.SimulationUI
             if (_mainMenuButton != null) _mainMenuButton.text = T("main_menu");
             foreach (var entry in _controlButtons)
                 entry.Value.tooltip = T(entry.Key);
+            RefreshPlayAvailability();
             SelectPlayback(_playbackState);
             _nexusPicker?.Relocalize();
             _matchStats?.Relocalize();
@@ -209,7 +215,23 @@ namespace Directiva.SimulationUI
             controls.AddToClassList("sim-controls");
             hud.Add(controls);
 
-            controls.Add(CreateControlButton(_theme?.icons?.play, "play", () => SelectPlayback(0), controlEvents.play, true));
+            // A hoverable slot is needed when Play is disabled: the disabled
+            // Button itself cannot be the reliable tooltip target.
+            var playSlot = new VisualElement { name = "simulation-play-slot" };
+            playSlot.AddToClassList("sim-play-slot");
+            _playButton = CreateControlButton(_theme?.icons?.play, "play",
+                () => SelectPlayback(0), controlEvents.play, true);
+            _playButton.name = "simulation-play-button";
+            playSlot.Add(_playButton);
+            _playDisabledHover = new VisualElement
+            {
+                name = "simulation-play-disabled-hover",
+                pickingMode = PickingMode.Position
+            };
+            _playDisabledHover.AddToClassList("sim-play-disabled-hover");
+            playSlot.Add(_playDisabledHover);
+            controls.Add(playSlot);
+            RefreshPlayAvailability();
             controls.Add(CreateControlButton(_theme?.icons?.stop, "stop", () => SelectPlayback(1), controlEvents.stop, true));
             controls.Add(CreateControlButton(_theme?.icons?.pause, "pause", () => SelectPlayback(2), controlEvents.pause, true));
 
@@ -349,6 +371,28 @@ namespace Directiva.SimulationUI
             UIIconView.SetButton(button, sprite, 17f);
             if (sprite == null && !string.IsNullOrEmpty(fallbackLabel)) button.text = fallbackLabel;
             return button;
+        }
+
+        /// <summary>
+        /// Null means runnable; otherwise this is a Simulation localization key.
+        /// The disabled button cannot be clicked, while its enabled overlay can
+        /// still be hovered to display the reason.
+        /// </summary>
+        public void SetPlayAvailability(string disabledReasonKey)
+        {
+            _playBlockReasonKey = disabledReasonKey;
+            RefreshPlayAvailability();
+        }
+
+        private void RefreshPlayAvailability()
+        {
+            if (_playButton == null || _playDisabledHover == null) return;
+            bool canPlay = string.IsNullOrEmpty(_playBlockReasonKey);
+            _playButton.SetEnabled(canPlay);
+            string tooltip = T(canPlay ? "play" : _playBlockReasonKey);
+            _playButton.tooltip = tooltip;
+            _playDisabledHover.tooltip = canPlay ? string.Empty : tooltip;
+            _playDisabledHover.style.display = canPlay ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private string _speed = "1×";

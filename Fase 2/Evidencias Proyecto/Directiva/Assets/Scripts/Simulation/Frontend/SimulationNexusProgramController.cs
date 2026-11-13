@@ -156,6 +156,7 @@ namespace Directiva.SimulationFrontend
                 if (functions.Count == 0)
                 {
                     picker.SetLocalizedStatus("nexus_no_functions", true);
+                    if (assign) synchronizer.ReportPlayerProgramSelectionError();
                     return;
                 }
                 picker.SetStatus(string.Empty);
@@ -197,6 +198,7 @@ namespace Directiva.SimulationFrontend
 
         private void ReportCompilationFailure(Exception exception)
         {
+            synchronizer?.ReportPlayerProgramSelectionError();
             if (exception is PlayerNexusCompilationException compilationError)
                 ui?.CodeEditor?.PublishPlayerCompilationFailure(
                     compilationError.Message, compilationError.Diagnostics);

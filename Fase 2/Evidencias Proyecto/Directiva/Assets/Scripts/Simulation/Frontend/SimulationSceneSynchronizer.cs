@@ -56,6 +56,10 @@ namespace Directiva.SimulationFrontend
         private string selectedPlayerFunction;
         // A selection made while stopped takes effect on the next Play.
         private bool pendingPlayerProgram;
+        // Validation applies to the SAVED program selected for the next match.
+        // An existing paused VM may still resume even if a later save is invalid.
+        private bool playerProgramHasErrors;
+        private bool matchPreparationFailed;
         // A paused/finished match remains locked until the player presses Stop.
         private bool programSelectionLocked;
         private Orchestrator orchestrator;
@@ -86,6 +90,36 @@ namespace Directiva.SimulationFrontend
         public bool HasSelectedPlayerProgram =>
             !string.IsNullOrWhiteSpace(selectedPlayerScript) &&
             !string.IsNullOrWhiteSpace(selectedPlayerFunction);
+
+        public string PlayBlockReasonKey => GetPlayBlockReasonKey(
+            programSelectionLocked && orchestrator != null && !orchestrator.IsFinished,
+            HasSelectedPlayerProgram, LevelLaunchContext.CurrentLevel != null,
+            playerProgramHasErrors, matchPreparationFailed);
+
+        /// <summary>
+        /// Priority matters: a failed compilation is more helpful than "no program"
+        /// when an invalid choice was rejected. An already started match may resume
+        /// its existing VMs even when newly saved source will not compile.
+        /// </summary>
+        public static string GetPlayBlockReasonKey(bool resumingMatch, bool hasProgram,
+            bool hasLevel, bool hasCodeErrors, bool hasSetupError)
+        {
+            if (resumingMatch) return null;
+            if (hasCodeErrors) return "play_code_errors";
+            if (!hasProgram) return "nexus_select_before_play";
+            if (!hasLevel) return "nexus_level_required";
+            return hasSetupError ? "play_setup_error" : null;
+        }
+
+        private void RefreshPlayAvailability() => ui?.SetPlayAvailability(PlayBlockReasonKey);
+
+        /// <summary>Prevents starting an older program after the picker rejected a new one.</summary>
+        public void ReportPlayerProgramSelectionError()
+        {
+            if (programSelectionLocked) return;
+            playerProgramHasErrors = true;
+            RefreshPlayAvailability();
+        }
 
         private void Awake()
         {
@@ -125,31 +159,31 @@ namespace Directiva.SimulationFrontend
 
             try
             {
-                if (string.Equals(selectedPlayerScript, relativeScript, StringComparison.Ordinal) &&
-                    string.Equals(selectedPlayerFunction, entryFunction, StringComparison.Ordinal))
-                {
-                    error = null;
-                    return true;
-                }
-
-                // Compile first: an invalid choice must not replace the current
-                // selection or alter the stopped world preview.
+                // Always validate, including when the same script/function is
+                // selected again after an invalid save. Compilation is read from disk.
                 PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot, relativeScript, entryFunction);
                 selectedPlayerScript = relativeScript;
                 selectedPlayerFunction = entryFunction;
                 pendingPlayerProgram = true;
+                playerProgramHasErrors = false;
+                matchPreparationFailed = false;
+                RefreshPlayAvailability();
 
                 error = null;
                 return true;
             }
             catch (PlayerNexusCompilationException exception)
             {
+                playerProgramHasErrors = true;
+                RefreshPlayAvailability();
                 error = exception.Message;
                 diagnostics = exception.Diagnostics;
                 return false;
             }
             catch (Exception exception)
             {
+                playerProgramHasErrors = true;
+                RefreshPlayAvailability();
                 error = exception.Message;
                 return false;
             }
@@ -220,8 +254,31 @@ namespace Directiva.SimulationFrontend
         /// </summary>
         private void OnPlayerScriptsSaved()
         {
-            if (HasSelectedPlayerProgram)
-                pendingPlayerProgram = true;
+            if (!HasSelectedPlayerProgram) return;
+            pendingPlayerProgram = true;
+            // Imports are part of the selected program. Validate all of them now,
+            // rather than letting a stale Nexus VM appear runnable after Save.
+            try
+            {
+                PlayerNexusScriptCatalog.Compile(PlayerScriptsRoot,
+                    selectedPlayerScript, selectedPlayerFunction);
+                playerProgramHasErrors = false;
+                matchPreparationFailed = false;
+                if (!programSelectionLocked)
+                    ui?.NexusPicker?.SetStatus(string.Empty);
+            }
+            catch (Exception exception)
+            {
+                playerProgramHasErrors = true;
+                if (!programSelectionLocked)
+                    ui?.NexusPicker?.SetLocalizedStatus("play_code_errors", true);
+                if (exception is PlayerNexusCompilationException compilationError)
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                        compilationError.Message, compilationError.Diagnostics);
+                else
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
+            }
+            RefreshPlayAvailability();
         }
 
         private void OnEntitySelectedForDebug(SimulationEntityIdentity identity)
@@ -328,6 +385,7 @@ namespace Directiva.SimulationFrontend
         public void ResetMatch()
         {
             DSimulation.Simulation world = null;
+            bool compilingPrograms = false;
             try
             {
                 world = BuildWorld();
@@ -342,9 +400,11 @@ namespace Directiva.SimulationFrontend
                 }
 
                 // Each side compiles from its own isolated source root.
+                compilingPrograms = true;
                 DScriptCompiledProgram player = PlayerNexusScriptCatalog.Compile(
                     PlayerScriptsRoot, selectedPlayerScript, selectedPlayerFunction);
                 DScriptCompiledProgram enemy = CompileLevelEnemy(level);
+                compilingPrograms = false;
                 var next = new Orchestrator(world, player, enemy,
                     stepsPerTick: vmStepsPerTick, maxDurationSeconds: level.MaxMatchDurationSeconds);
                 next.BindInitialEntity(world.GetSide(1).Nexus.id,
@@ -353,9 +413,14 @@ namespace Directiva.SimulationFrontend
                 next.BindInitialEntity(world.GetSide(2).Nexus.id, level.QualifiedEnemyEntry);
                 AttachOrchestrator(next);
                 pendingPlayerProgram = false;
+                playerProgramHasErrors = false;
+                matchPreparationFailed = false;
+                RefreshPlayAvailability();
             }
             catch (Exception exception)
             {
+                if (compilingPrograms) playerProgramHasErrors = true;
+                else matchPreparationFailed = true;
                 // A program can change on disk after it was selected. Make
                 // failures during Play/Stop visible in the editor too.
                 if (exception is PlayerNexusCompilationException compilationError)
@@ -480,14 +545,12 @@ namespace Directiva.SimulationFrontend
 
         public void Play()
         {
-            if (!HasSelectedPlayerProgram)
+            // Enforce the same policy at the runtime boundary. Disabling a UI
+            // button alone would not protect other Play callers.
+            string blockedReason = PlayBlockReasonKey;
+            if (blockedReason != null)
             {
-                WarnCannotPlay("nexus_select_before_play");
-                return;
-            }
-            if (LevelLaunchContext.CurrentLevel == null)
-            {
-                WarnCannotPlay("nexus_level_required");
+                WarnCannotPlay(blockedReason);
                 return;
             }
             // Saving while paused must NOT restart the ongoing match. Stop
@@ -556,6 +619,7 @@ namespace Directiva.SimulationFrontend
             Time.timeScale = rate;
             if (view != null) view.SetPlaybackSpeed(rate);
             ui?.SetPlaybackFromRuntime(State);
+            RefreshPlayAvailability();
         }
 
         private void Update()
