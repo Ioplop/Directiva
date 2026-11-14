@@ -1,0 +1,59 @@
+from unit_07 import main as unit_main
+
+# 0 Gather - 1 Defend - 2 Attack
+shared RELATIVE_SAFE_RESOURCE_FACTOR = 0.8
+shared ADVANTAGE_ATTACK_FACTOR = 1.5
+shared safe_resources : List = [] # Resources that we deem safe and want to gather
+shared enemy_resources : List = [] # Resources that belong to the enemy and we may try to destroy
+shared order : Int = 0
+
+def build_resource_list():
+    safe = []
+    # Find all the resources that are closer to us than to the enemy nexus, with a factor
+    for res in resource_nodes():
+        if distance_to(res) * RELATIVE_SAFE_RESOURCE_FACTOR < self.enemy_nexus().distance_to(res):
+            safe.append(res)
+        else:
+            enemy_resources.append(res)
+    # No safe resources found. We just select all resources as safe. This is unexpected behavior but better than nothing
+    if safe.length == 0:
+        safe_resources = resource_nodes() 
+        return
+    # Sort resources by distance
+    safe_resources.append(safe[0])
+    for s in range(1, safe.length):
+        sr = safe[s]
+        inserted = False
+        for i in range(safe_resources.length):
+            other = safe_resources[i]
+            if distance_squared_to(other) > distance_squared_to(sr):
+                safe_resources.insert(i, sr)
+                inserted = True
+                break
+        if not inserted:
+            safe_resources.append(sr)
+            
+
+def check_resource() -> Bool:
+    # Checks that there are still safe resources to mine from
+    for res in safe_resources:
+        if res.alive:
+            return True
+    return False
+
+def main():
+    # Make list of resources that we will gather...
+    build_resource_list()
+    
+    while True:
+        if count_allies() > 3 and count_allies() > (count_enemies() - 1) * ADVANTAGE_ATTACK_FACTOR:
+            # If we have number superiority, we attack the enemy
+            order = 2
+        elif not check_resource():
+            order = 2
+        else:
+            # We always just collect
+            order = 0
+        # TODO: Defend base if we are being attacked
+        build(unit_main)
+        

@@ -12,6 +12,29 @@ namespace Directiva.CodeUI
 {
     public sealed class CodeEditorView : VisualElement
     {
+        /// <summary>
+        /// Unity 6.3 TextInputBaseField handles BlurEvent by calling
+        /// UpdateScrollOffset(), which can jump a scrolled multiline TextField
+        /// back to its caret (often at the beginning of the document).
+        /// Do not run that *outer field* blur handler in the code editor.
+        /// The inner TextElement still receives its normal focus/blur events,
+        /// and this field is always immediate (isDelayed = false), with no
+        /// placeholder or mixed-value presentation to update on blur.
+        /// </summary>
+        internal sealed class ScrollPreservingTextField : TextField
+        {
+            internal static bool SuppressesNativeBlurScroll(long eventTypeId) =>
+                eventTypeId == BlurEvent.TypeId();
+
+            protected override void HandleEventBubbleUp(EventBase evt)
+            {
+                if (evt != null && SuppressesNativeBlurScroll(evt.eventTypeId))
+                    return;
+
+                base.HandleEventBubbleUp(evt);
+            }
+        }
+
         private const int TabSize = 4;
         private const int UndoHistoryCapacity = 200;
         private const float UndoMergeWindowSeconds = 0.75f;
@@ -138,6 +161,13 @@ namespace Directiva.CodeUI
         private EditorUndoHistory _activeUndoHistory;
 
         private ScrollView _internalScroll;
+        // Keep a viewport snapshot for focus transitions, including OS-level
+        // transitions that may not raise UI Toolkit focus events. The native
+        // blur jump is blocked by ScrollPreservingTextField, so no delayed
+        // post-render corrections (and hence no visible scroll flash) are needed.
+        private readonly EditorFocusScrollState _focusScroll = new EditorFocusScrollState();
+        private bool _codeInputHasFocus;
+        private bool _scrollbarDragging;
         private bool _textInputGeometryHooked;
         private bool _textInputKeyHooked;
         private bool _returnKeyHandled;
@@ -267,7 +297,7 @@ namespace Directiva.CodeUI
             _metricsProbe.AddToClassList("code-metrics-probe");
             _metricsProbe.pickingMode = PickingMode.Ignore;
 
-            _textField = new TextField
+            _textField = new ScrollPreservingTextField
             {
                 multiline = true,
                 isDelayed = false,
@@ -304,6 +334,10 @@ namespace Directiva.CodeUI
             {
                 if (_suppressChange)
                     return;
+
+                // Actual typing supersedes any pending restoration from a focus
+                // transition. Never jump back to an earlier viewport mid-edit.
+                _focusScroll.CancelForNavigation();
 
                 // A native edit, paste or Unity undo command must never mutate a
                 // compiled source while the execution still owns its debug spans.
@@ -1200,6 +1234,8 @@ namespace Directiva.CodeUI
             HideCompletion();
             HideSignatureHelp();
             SetLiveDiagnostics(null);
+            _focusScroll.ResetForDocument();
+            _scrollbarDragging = false;
             DocumentPath = path ?? string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -1256,6 +1292,8 @@ namespace Directiva.CodeUI
             _zoomLayoutSyncPassesRemaining = 0;
             _zoomLayoutSyncTask?.Pause();
             _activeUndoHistory = null;
+            _focusScroll.ResetForDocument();
+            _scrollbarDragging = false;
             DocumentPath = string.Empty;
             _breakpoints.Clear();
             ClearExecutionLine();
@@ -1380,6 +1418,7 @@ namespace Directiva.CodeUI
                 string text = Text;
                 int caret = ResolveSourceCaretIndex(text, oneBasedLine, oneBasedColumn, sourceOffset);
                 int selectionEnd = Math.Min(text.Length, caret + Math.Max(0, sourceLength));
+                _focusScroll.CancelForNavigation();
                 _textField.Focus();
                 _textField.textSelection.SelectRange(caret, selectionEnd);
                 ScrollSourceLineIntoView(oneBasedLine);
@@ -1419,6 +1458,9 @@ namespace Directiva.CodeUI
 
         private void ScrollSourceLineIntoView(int oneBasedLine)
         {
+            // Console navigation is intentional; it takes priority over a
+            // focus callback that may have been queued by the console click.
+            _focusScroll.CancelForNavigation();
             if (_internalScroll == null)
                 return;
             var viewport = _internalScroll.contentViewport;
@@ -1455,6 +1497,8 @@ namespace Directiva.CodeUI
 
         private void ScrollExecutionLineIntoView()
         {
+            // Stepping to a source line must not be undone by focus restoration.
+            _focusScroll.CancelForNavigation();
             if (_internalScroll == null || _executionLine <= 0)
                 return;
 
@@ -1525,6 +1569,7 @@ namespace Directiva.CodeUI
 
         private void ApplyHistorySnapshot(EditorUndoHistory.Snapshot snapshot)
         {
+            _focusScroll.CancelForNavigation();
             _forceHistoryBoundaryNextChange = false;
             _historyApplying = true;
             _textField.value = snapshot.Text;
@@ -1633,7 +1678,20 @@ namespace Directiva.CodeUI
                     _ => _isReadOnly || string.IsNullOrEmpty(DocumentPath)
                         ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
             }));
-            input.RegisterCallback<FocusOutEvent>(_ => HideSignatureHelp());
+            // Capture the viewport before a focus transition. Our custom
+            // TextField suppresses Unity's native blur-driven scroll reset.
+            input.RegisterCallback<FocusOutEvent>(_ =>
+            {
+                _codeInputHasFocus = false;
+                HideSignatureHelp();
+                PreserveScrollAcrossFocus(focusReturning: false);
+            }, TrickleDown.TrickleDown);
+            input.RegisterCallback<FocusInEvent>(_ =>
+            {
+                _codeInputHasFocus = true;
+                if (_focusScroll.HasSavedOffset)
+                    PreserveScrollAcrossFocus(focusReturning: true);
+            }, TrickleDown.TrickleDown);
             input.RegisterCallback<KeyUpEvent>(_ =>
             {
                 CaptureActiveHistorySelection();
@@ -1677,6 +1735,92 @@ namespace Directiva.CodeUI
         }
 
         public void FocusEditor() => _textField.Focus();
+
+        /// <summary>
+        /// Unity may not dispatch a UI Toolkit FocusOutEvent when the operating
+        /// system activates a different application. The host reports those
+        /// transitions so returning to Directiva also preserves the code view.
+        /// </summary>
+        public void OnHostApplicationFocusChanged(bool focused)
+        {
+            if (_internalScroll == null || string.IsNullOrEmpty(DocumentPath))
+                return;
+
+            if (focused)
+            {
+                if (_focusScroll.HasSavedOffset)
+                    PreserveScrollAcrossFocus(focusReturning: true);
+            }
+            else if (_codeInputHasFocus || !_focusScroll.HasSavedOffset)
+            {
+                // A prior FocusOut already captured the correct position; do
+                // not overwrite it if Unity subsequently reports 0,0.
+                PreserveScrollAcrossFocus(focusReturning: false);
+            }
+        }
+
+        private void PreserveScrollAcrossFocus(bool focusReturning)
+        {
+            if (_internalScroll == null || panel == null ||
+                string.IsNullOrEmpty(DocumentPath))
+                return;
+
+            int token = focusReturning
+                ? _focusScroll.BeginFocusReturn()
+                : _focusScroll.BeginFocusLoss(_internalScroll.scrollOffset);
+            if (token < 0)
+                return;
+            string source = DocumentPath;
+
+            // This must be synchronous: scheduling a restoration for a later
+            // frame lets Unity render the unwanted offset in between, causing
+            // the brief flash seen when clicking away from the code editor.
+            RestoreFocusScroll(source, token);
+        }
+
+        private void RestoreFocusScroll(string source, int token)
+        {
+            if (!string.Equals(source, DocumentPath, StringComparison.OrdinalIgnoreCase) ||
+                !_focusScroll.TryGetRestoration(token, out Vector2 saved) ||
+                _internalScroll == null)
+                return;
+
+            var viewport = _internalScroll.contentViewport;
+            if (viewport != null && viewport.resolvedStyle.height > 1f)
+            {
+                float documentHeight = _paddingTopPx +
+                    Math.Max(1, CountLines(Text)) * _lineHeight + _paddingBottomPx;
+                float availableY = Mathf.Max(0f, documentHeight - viewport.resolvedStyle.height);
+                var expected = new Vector2(Mathf.Max(0f, saved.x),
+                    Mathf.Clamp(saved.y, 0f, availableY));
+
+                if ((_internalScroll.scrollOffset - expected).sqrMagnitude > 0.01f)
+                {
+                    _internalScroll.scrollOffset = expected;
+                    RebuildGutter();
+                    RebuildIndentGuides();
+                    UpdateExecutionHighlightPosition();
+                    RefreshVisibleSyntaxLines();
+                }
+            }
+
+            _focusScroll.FinishRestoration(token);
+        }
+
+        private void OnScrollBarPointerDown(PointerDownEvent _)
+        {
+            _scrollbarDragging = true;
+            _focusScroll.CancelForNavigation();
+        }
+
+        private void OnScrollBarPointerReleased()
+        {
+            if (!_scrollbarDragging)
+                return;
+            _scrollbarDragging = false;
+            if (_internalScroll != null)
+                _focusScroll.NoteDeliberateScroll(_internalScroll.scrollOffset);
+        }
 
         public IReadOnlyCollection<int> GetBreakpoints() => _breakpoints;
 
@@ -1983,6 +2127,8 @@ namespace Directiva.CodeUI
 
         private void OnWheel(WheelEvent evt)
         {
+            // User scrolling/zooming always wins over a queued focus restore.
+            _focusScroll.CancelForNavigation();
             if (evt.ctrlKey)
             {
                 var direction = evt.delta.y < 0f ? 1f : -1f;
@@ -2021,6 +2167,7 @@ namespace Directiva.CodeUI
             _internalScroll.scrollOffset = new Vector2(
                 current.x,
                 Mathf.Max(0f, current.y + deltaPixels));
+            _focusScroll.NoteDeliberateScroll(_internalScroll.scrollOffset);
 
             evt.StopImmediatePropagation();
         }
@@ -2289,6 +2436,9 @@ namespace Directiva.CodeUI
 
                 _internalScroll.verticalScroller.valueChanged += value =>
                 {
+                    if (_scrollbarDragging)
+                        _focusScroll.NoteDeliberateScroll(
+                            new Vector2(_internalScroll.scrollOffset.x, value));
                     _gutterContent.style.translate = new Translate(0f, -value);
                     HideSignatureHelp(); // Do not leave a stale popup over scrolled code.
                     UpdateIndentGuideTranslation();
@@ -2296,12 +2446,27 @@ namespace Directiva.CodeUI
                     RefreshVisibleSyntaxLines();
                 };
 
-                _internalScroll.horizontalScroller.valueChanged += _ =>
+                _internalScroll.horizontalScroller.valueChanged += value =>
                 {
+                    if (_scrollbarDragging)
+                        _focusScroll.NoteDeliberateScroll(
+                            new Vector2(value, _internalScroll.scrollOffset.y));
                     HideSignatureHelp();
                     UpdateIndentGuideTranslation();
                     RefreshVisibleSyntaxLines();
                 };
+
+                // Scrollbar dragging is also intentional, even if it happens
+                // while the text input itself is not focused.
+                foreach (var scroller in new[] {
+                    _internalScroll.verticalScroller, _internalScroll.horizontalScroller })
+                {
+                    scroller.RegisterCallback<PointerDownEvent>(OnScrollBarPointerDown,
+                        TrickleDown.TrickleDown);
+                    scroller.RegisterCallback<PointerUpEvent>(_ => OnScrollBarPointerReleased(),
+                        TrickleDown.TrickleDown);
+                    scroller.RegisterCallback<PointerCaptureOutEvent>(_ => OnScrollBarPointerReleased());
+                }
 
                 if (_internalScroll.contentViewport != null)
                     _internalScroll.contentViewport.RegisterCallback<GeometryChangedEvent>(
@@ -2843,6 +3008,7 @@ namespace Directiva.CodeUI
         {
             if (_isReadOnly)
                 return;
+            _focusScroll.CancelForNavigation();
             _forceHistoryBoundaryNextChange = true;
             int revision = ++_pendingEditSelectionRevision;
             string document = DocumentPath;

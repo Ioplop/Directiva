@@ -1,0 +1,154 @@
+shared order : Int
+shared safe_resources : List
+shared enemy_resources : List
+shared RELATIVE_STALK_DISTANCE : Decimal = 0.75
+shared RELATIVE_SAFE_DISTANCE : Decimal = 2
+shared RELATIVE_HUNT_DISTANCE : Decimal = 5
+shared RELATIVE_JUST_DISTANCE : Decimal = 0.9
+shared TARGET_CLEAR_DISTANCE : Decimal = 1.1
+shared MAX_CARRY_CAPACITY : Decimal = 0.6
+shared main_target : SimulationObject = None
+global stalked : SimulationObject = None
+global resource : SimulationObject = None
+
+def main():
+    if stalk():
+        # We stalk anyone who we are already stalking!
+        return
+    
+    if check_enemies_hunting_us() > 2:
+        move(self.nexus)
+        attack(closest_enemy())
+        return
+    if defensive_aggression():
+        # We stalk anyone who enters our attack range, till death!
+        stalk()
+        return
+        
+    if order == 0:
+        if not resource or not resource.alive:
+            select_resource()
+        if resource:
+            collect_resources()
+        else:
+            # TODO: Protect the nexus!
+            move(self.nexus)
+            pass
+    # TODO: order == 1, meaning defend...
+    elif order == 2:
+        # This will simply pick an enemy as stalked
+        if main_target and main_target.alive:
+            stalked = main_target
+        else:
+            pick_enemy()
+
+def check_enemies_hunting_us() -> Int:
+    in_range = []
+    for e in enemies():
+        if distance_to(e) < e.attack_range * RELATIVE_HUNT_DISTANCE:
+            in_range.append(e)
+    attacking_us = []
+    for e in in_range:
+        if e.type == Type.Nexus:
+            continue
+        mt = e.move_target
+        if e.attack_target == self or (mt and mt == self):
+            attacking_us.append(e)
+    return attacking_us.length
+
+def pick_enemy():
+    stalked = closest_enemy(Type.Unit)
+    if not stalked:
+        stalked = closest_enemy()
+    main_target = stalked
+
+def select_resource():
+    # We always select the closest free to be gathered resource.
+    for r in safe_resources:
+        if r.is_available_to_gather:
+            resource = r
+            return
+    resource = None
+
+def collect_resources():
+    if self.cargo >= self.cargo_capacity * MAX_CARRY_CAPACITY:
+        # If we are full of cargo, return it to the nexus!
+        move(self.nexus)
+    else:
+        # Otherwise just keep gathering!
+        move(resource)
+        gather(resource)
+    
+def stalk() -> Bool:
+    # Stop stalking dead or nonexistent targets.
+    if not stalked or not stalked.alive:
+        return False
+    
+    if order != 2 and stalked.type == Type.Nexus:
+        stalked = None
+        return False
+    
+    # Allows for better distribution of gatherers after small skirmishes.
+    resource = None
+    
+    # Drop cargo if necessary to keep up with the target.
+    if stalked.type == Type.Unit:
+        if stalked.cargo > 0 and self.cargo > stalked.cargo:
+            drop_cargo()
+    
+    distance = distance_to(stalked)
+    if order != 2 and distance >= self.attack_range * TARGET_CLEAR_DISTANCE:
+        stalked = None
+        return False
+    
+    if distance <= self.attack_range:
+        attack(stalked)
+        
+        if stalked.attack_target == self:
+            if check_enemies_hunting_us() <= 1:
+                wanted_dist: Decimal = RELATIVE_STALK_DISTANCE * self.attack_range
+                if self.shields <= 0:
+                    wanted_dist = RELATIVE_SAFE_DISTANCE * stalked.attack_range
+                elif self.shields <= 0.5 * self.max_shields:
+                    wanted_dist = RELATIVE_JUST_DISTANCE * self.attack_range
+            else:
+                wanted_dist = stalked.attack_range * RELATIVE_SAFE_DISTANCE
+                
+            if distance < wanted_dist:
+                x = self.position[0]
+                y = self.position[1]
+                ex = stalked.position[0]
+                ey = stalked.position[1]
+                
+                tx = 2*x - ex
+                ty = 2*y - ey
+                
+                tx = clamp(tx, 0, self.world_size[0])
+                ty = clamp(ty, 0, self.world_size[1])
+                
+                move(tx, ty)
+            else:
+                move(self)
+            
+        return True
+    
+    # Outside attack range: chase the target.
+    move(stalked)
+    attack(stalked)
+    return True
+    
+def defensive_aggression() -> Bool:
+    # Checks if we are in range of someone. Does not count enemy nexus.
+    # If we are, we attack them. If they are attacking us, we run away while attacking.
+    # Returns True if fighting!
+    e = closest_enemy(Type.Unit)
+    if not e:
+        return False
+        
+    if distance_to(e) <= self.attack_range:
+        # We found a new enemy to stalk. So we just stalk until it dies!
+        stalked = e
+        return True
+    return False
+    
+    

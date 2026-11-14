@@ -263,6 +263,13 @@ namespace Directiva.CodeUI
             }
         }
 
+        private void OnApplicationFocus(bool focused)
+        {
+            // OS-level focus changes are not guaranteed to deliver a UI Toolkit
+            // FocusOutEvent to its multiline TextField. Preserve code viewport.
+            _editor?.OnHostApplicationFocusChanged(focused);
+        }
+
         private void OnDisable()
         {
             FlushActiveEditorMetadata();

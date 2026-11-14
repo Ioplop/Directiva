@@ -1,0 +1,101 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b76a8c969aa493fbe0829600f66fc8c, type: 3}
+  m_Name: Level07
+  m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
+  levelName: Stalker
+  levelNumber: 7
+  requiredStars: 14
+  maxMatchDurationSeconds: 400
+  fastVictorySeconds: 300
+  scenePath: Assets/Scenes/BaseSimulation.unity
+  codeFolder: Level07
+  entryModule: nexus_07
+  entryFunction: main
+  worldLayout:
+    Origin: {x: 0, y: 0}
+    Width: 50
+    Height: 50
+    Seed: 20261111
+    InitialResourcesSide1: 10
+    InitialResourcesSide2: 10
+    NexusSide1: {x: 6, y: 25}
+    NexusSide2: {x: 44, y: 25}
+    Deposits:
+    - Position: {x: 10, y: 20}
+      Amount: 70
+      Richness: 1
+      MirrorPairId: 1
+    - Position: {x: 40, y: 30}
+      Amount: 70
+      Richness: 1
+      MirrorPairId: 1
+    - Position: {x: 18, y: 36}
+      Amount: 80
+      Richness: 1
+      MirrorPairId: 2
+    - Position: {x: 32, y: 14}
+      Amount: 80
+      Richness: 1
+      MirrorPairId: 2
+    - Position: {x: 23, y: 20}
+      Amount: 90
+      Richness: 1
+      MirrorPairId: 3
+    - Position: {x: 27, y: 30}
+      Amount: 90
+      Richness: 1
+      MirrorPairId: 3
+    MirrorMode: 2
+    MirrorCenter: {x: 25, y: 25}
+    MirrorAxisDegrees: 90
+  simulationSettings:
+    deltaTime: 0.02
+    nexusPriority: 0
+    resourcePriority: 1
+    unitPriority: 2
+    nexusRadius: 2
+    resourceRadius: 1
+    unitRadius: 0.5
+    nexusDamage: 5
+    nexusAttackSpeed: 1
+    nexusRange: 6
+    unitDamage: 5
+    unitAttackSpeed: 1
+    unitRange: 4
+    nexusHealth: 100
+    unitHealth: 10
+    resourceHealth: 100
+    nexusShield: 50
+    unitShields: 10
+    resourceShields: 0
+    nexusShieldRegen: 1.6666
+    unitShieldRegen: 2.5
+    resourceShieldRegen: 0
+    shieldRegenCooldown: 4
+    resourceGatherSpeed: 1
+    resourceGatherAmount: 1
+    resourceMaxAmount: 100
+    unitCost: 10
+    unitBuildTime: 10
+    followDistance: 0.1
+    maxSpeed: 5
+    acceleration: 5
+    angularVelocity: 360
+    rotationSoftness: 10
+    gatherDistance: 0.2
+    unloadDistance: 1
+    cargoSlowdown: 0.9
+    maxCargo: 15
+    followGain: 4
+    aimAlignment: 0.99
+    aimDistanceFactor: 1.5

@@ -163,6 +163,7 @@ namespace Directiva.EditorTests
             CodeUITests.OutputPrintTests.Register(tests);
             CodeUITests.ExecutionSourceLockTests.Register(tests);
             CodeUITests.CodeEditorTextCommandsTests.Register(tests);
+            CodeUITests.EditorFocusScrollTests.Register(tests);
             CodeUITests.SymbolRenameTests.Register(tests);
             CodeUITests.WorkspaceSymbolRenameTests.Register(tests);
             DirectivaTupleSmokeTests.Register(tests);
