@@ -102,6 +102,23 @@ namespace Directiva.CodeUI
             _lastChangeTime = now;
         }
 
+        /// <summary>
+        /// Replace an existing completion preview without creating another undo
+        /// step. Only the current preview may be replaced; an unrelated edit or
+        /// document change never gets silently merged into the completion cycle.
+        /// </summary>
+        internal bool TryReplaceCompletionPreview(string previousPreview,
+            string text, int cursor, int select)
+        {
+            if (_index <= 0 ||
+                !string.Equals(_states[_index].Text, previousPreview, StringComparison.Ordinal))
+                return false;
+
+            _states[_index] = new Snapshot(text, cursor, select);
+            ResetMergeState();
+            return true;
+        }
+
         public bool TryUndo(int currentCursor, int currentSelect, out Snapshot snapshot)
         {
             UpdateCurrentSelection(currentCursor, currentSelect);

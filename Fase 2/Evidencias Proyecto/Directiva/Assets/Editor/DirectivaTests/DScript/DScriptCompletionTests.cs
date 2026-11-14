@@ -231,6 +231,184 @@ namespace Directiva.EditorTests.DScript
                 t.Check(!Selected(3, 3), "out-of-range selection cannot be accepted");
             });
 
+            Add("CompletionTabCycleKeepsCurrentText", "Tab replaces candidates, Escape only dismisses, and undo skips intermediate previews", t =>
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var editor = new CodeEditorView(null, null, 14f, 0f, 0f, 0f, 0f, 0f);
+                editor.SetTextWithoutNotify("mo");
+
+                // The completion transform is synchronous even without a UI panel.
+                // History behavior is tested separately: detached TextFields do
+                // not emit value-changed events in every Unity UI Toolkit version.
+
+                var candidates = new[]
+                {
+                    new DScriptCompletionItem("move", "function"),
+                    new DScriptCompletionItem("modify", "function"),
+                    new DScriptCompletionItem("moment", "variable")
+                };
+                typeof(CodeEditorView).GetField("_completionResult", flags)
+                    .SetValue(editor, new DScriptCompletionResult(0, 2, candidates));
+                var visible = typeof(CodeEditorView).GetField("_completionOpen", flags);
+                visible.SetValue(editor, true);
+                var cycle = typeof(CodeEditorView).GetMethod("CycleCompletion", flags);
+                var dismiss = typeof(CodeEditorView).GetMethod("DismissContextMenus", flags);
+                t.Check(cycle != null && dismiss != null, "completion keyboard commands exist");
+
+                cycle.Invoke(editor, new object[] { false });
+                t.Equal("move", editor.Text, "first Tab inserts first candidate");
+                cycle.Invoke(editor, new object[] { false });
+                t.Equal("modify", editor.Text, "second Tab replaces, not indents");
+                cycle.Invoke(editor, new object[] { false });
+                t.Equal("moment", editor.Text, "third Tab still cycles");
+                cycle.Invoke(editor, new object[] { true });
+                t.Equal("modify", editor.Text, "Shift+Tab returns to the previous candidate");
+                t.Equal(true, (bool)visible.GetValue(editor),
+                    "popup remains open while cycling");
+
+                dismiss.Invoke(editor, null);
+                t.Equal("modify", editor.Text, "Escape never restores the initial prefix");
+                t.Equal(false, (bool)visible.GetValue(editor), "Escape closes completion");
+            });
+
+            Add("CompletionCycleUndoIsAtomic", "Replacing a Tab preview does not fill undo with intermediate suggestions", t =>
+            {
+                var historyType = typeof(CodeEditorView).Assembly.GetType(
+                    "Directiva.CodeUI.EditorUndoHistory");
+                t.Check(historyType != null, "undo history is available");
+                object history = Activator.CreateInstance(historyType,
+                    new object[] { "mo", 2, 2, 200 });
+                var record = historyType.GetMethod("Record");
+                var replacePreview = historyType.GetMethod("TryReplaceCompletionPreview",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                var undo = historyType.GetMethod("TryUndo");
+                var redo = historyType.GetMethod("TryRedo");
+                t.Check(record != null && replacePreview != null && undo != null && redo != null,
+                    "history supports a single completion cycle");
+
+                record.Invoke(history, new object[] { "move", 4, 4, true, 1f, 0.75f });
+                t.Check((bool)replacePreview.Invoke(history,
+                    new object[] { "move", "modify", 6, 6 }),
+                    "second candidate replaces existing preview");
+                t.Check((bool)replacePreview.Invoke(history,
+                    new object[] { "modify", "moment", 6, 6 }),
+                    "third candidate replaces the same preview");
+                object[] undoArgs = { 6, 6, null };
+                t.Check((bool)undo.Invoke(history, undoArgs), "completion has one undo action");
+                string restored = (string)undoArgs[2].GetType().GetProperty("Text")
+                    .GetValue(undoArgs[2]);
+                t.Equal("mo", restored, "one undo returns to the original prefix");
+                object[] redoArgs = { 2, 2, null };
+                t.Check((bool)redo.Invoke(history, redoArgs), "redo restores final candidate");
+                string redone = (string)redoArgs[2].GetType().GetProperty("Text")
+                    .GetValue(redoArgs[2]);
+                t.Equal("moment", redone, "redo skips intermediate suggestions");
+                t.Check(!(bool)replacePreview.Invoke(history,
+                    new object[] { "stale preview", "bad", 3, 3 }),
+                    "stale completion text cannot overwrite unrelated undo state");
+            });
+
+            Add("CompletionTabUndoInEditor", "Multiple Tabs form one undo step in the actual code editor", t =>
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var editor = new CodeEditorView(null, null, 14f, 0f, 0f, 0f, 0f, 0f);
+                editor.SetTextWithoutNotify("mo");
+                var historyType = typeof(CodeEditorView).Assembly.GetType(
+                    "Directiva.CodeUI.EditorUndoHistory");
+                t.Check(historyType != null, "history type exists");
+                var history = Activator.CreateInstance(historyType,
+                    new object[] { "mo", 2, 2, 200 });
+                typeof(CodeEditorView).GetField("_activeUndoHistory", flags)
+                    .SetValue(editor, history);
+                var candidates = new[]
+                {
+                    new DScriptCompletionItem("move", "function"),
+                    new DScriptCompletionItem("modify", "function"),
+                    new DScriptCompletionItem("moment", "variable")
+                };
+                typeof(CodeEditorView).GetField("_completionResult", flags)
+                    .SetValue(editor, new DScriptCompletionResult(0, 2, candidates));
+                typeof(CodeEditorView).GetField("_completionOpen", flags)
+                    .SetValue(editor, true);
+                var cycle = typeof(CodeEditorView).GetMethod("CycleCompletion", flags);
+                var escape = typeof(CodeEditorView).GetMethod("DismissContextMenus", flags);
+                t.Check(cycle != null && escape != null, "editor commands exist");
+
+                cycle.Invoke(editor, new object[] { false });
+                cycle.Invoke(editor, new object[] { false });
+                cycle.Invoke(editor, new object[] { false });
+                cycle.Invoke(editor, new object[] { true });
+                t.Equal("modify", editor.Text, "Tab previews replace the previous candidate");
+                escape.Invoke(editor, null);
+                t.Equal("modify", editor.Text, "Escape never reverts applied text");
+                t.Check(editor.Undo(), "there is one undoable completion");
+                t.Equal("mo", editor.Text, "one Ctrl+Z returns to the typed prefix");
+                t.Check(editor.Redo(), "there is one redoable completion");
+                t.Equal("modify", editor.Text, "one Ctrl+Y restores the final candidate");
+            });
+
+            Add("CompletionTabSpaceUndoInEditor", "Confirming a Tab candidate with Space does not add an undo step", t =>
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var editor = new CodeEditorView(null, null, 14f, 0f, 0f, 0f, 0f, 0f);
+                editor.SetTextWithoutNotify("mo");
+                var historyType = typeof(CodeEditorView).Assembly.GetType(
+                    "Directiva.CodeUI.EditorUndoHistory");
+                t.Check(historyType != null, "history type exists");
+                typeof(CodeEditorView).GetField("_activeUndoHistory", flags)
+                    .SetValue(editor, Activator.CreateInstance(historyType,
+                        new object[] { "mo", 2, 2, 200 }));
+                typeof(CodeEditorView).GetField("_completionResult", flags)
+                    .SetValue(editor, new DScriptCompletionResult(0, 2, new[]
+                    {
+                        new DScriptCompletionItem("move", "function"),
+                        new DScriptCompletionItem("modify", "function")
+                    }));
+                typeof(CodeEditorView).GetField("_completionOpen", flags)
+                    .SetValue(editor, true);
+                typeof(CodeEditorView).GetMethod("CycleCompletion", flags)
+                    .Invoke(editor, new object[] { false });
+                typeof(CodeEditorView).GetMethod("CycleCompletion", flags)
+                    .Invoke(editor, new object[] { false });
+                typeof(CodeEditorView).GetMethod("CommitCompletion", flags)
+                    .Invoke(editor, new object[] { 1, true });
+                t.Equal("modify ", editor.Text, "Space confirms with one trailing space");
+                t.Check(editor.Undo(), "completion can be undone");
+                t.Equal("mo", editor.Text, "one Ctrl+Z undoes Tab, Tab and Space together");
+            });
+
+            Add("CompletionTabThenSpace", "Space confirms the currently previewed Tab candidate", t =>
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var editor = new CodeEditorView(null, null, 14f, 0f, 0f, 0f, 0f, 0f);
+                editor.SetTextWithoutNotify("mo");
+                var items = new[] { new DScriptCompletionItem("move", "function") };
+                typeof(CodeEditorView).GetField("_completionResult", flags)
+                    .SetValue(editor, new DScriptCompletionResult(0, 2, items));
+                typeof(CodeEditorView).GetField("_completionOpen", flags)
+                    .SetValue(editor, true);
+                typeof(CodeEditorView).GetMethod("CycleCompletion", flags)
+                    .Invoke(editor, new object[] { false });
+                typeof(CodeEditorView).GetMethod("CommitCompletion", flags)
+                    .Invoke(editor, new object[] { 0, true });
+                t.Equal("move ", editor.Text, "Space adds a space after the candidate");
+            });
+
+            Add("DismissSignatureWithoutReverting", "Escape closes signature help without touching the editor buffer", t =>
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var editor = new CodeEditorView(null, null, 14f, 0f, 0f, 0f, 0f, 0f);
+                editor.SetTextWithoutNotify("def main():\n    move(10, ");
+                string textBefore = editor.Text;
+                var dismiss = typeof(CodeEditorView).GetMethod("DismissContextMenus", flags);
+                dismiss.Invoke(editor, null);
+                t.Equal(textBefore, editor.Text, "dismissal leaves the entire buffer unchanged");
+                var dismissedText = typeof(CodeEditorView).GetField(
+                    "_signatureDismissedSource", flags).GetValue(editor) as string;
+                t.Equal(textBefore, dismissedText,
+                    "queued KeyUp refresh must not immediately reopen signature help");
+            });
+
             Add("LiveUndefinedName", "Live analysis highlights undefined names in the current unsaved buffer", t =>
             {
                 const string src = "def run():\n    atack(10)\n";
@@ -773,6 +951,40 @@ namespace Directiva.EditorTests.DScript
                 const string returning = "def unit():\n    pass\ndef factory() -> Function:\n    return uni";
                 var fn = Complete(returning).Items.First(i => i.Name == "unit");
                 t.Check(!fn.InsertParentheses, "Function return annotation accepts a function value");
+            });
+
+            Add("AnnotatedReferencesAtWordStart", "Function hints apply at the start of a completion token", t =>
+            {
+                // The completion engine receives the start of `uni`, so the text
+                // before that offset ends after '=' or 'return' (without any name).
+                const string shared = "shared callback: Function = uni\ndef unit():\n    pass\n";
+                int caret = shared.IndexOf("uni\n", StringComparison.Ordinal) + 3;
+                var provider = new InMemoryDScriptSourceProvider(new Dictionary<string, string>
+                    { ["test"] = shared });
+                var result = DScriptCompletionEngine.Complete("test", shared, caret, provider);
+                var item = result.Items.First(i => i.Name == "unit");
+                t.Check(!item.InsertParentheses, "typed shared completion proposes a function reference");
+                // Simulate a stale popup item to exercise final insertion revalidation.
+                var stale = new DScriptCompletionItem(item.Name, item.Kind, item.Detail,
+                    item.Type, true, item.TakesArguments, true);
+                var edit = CodeEditorCompletionText.Build(shared,
+                    result.ReplaceStart, result.ReplaceEnd, stale, false);
+                t.Check(edit.Text.StartsWith("shared callback: Function = unit\n",
+                    StringComparison.Ordinal), "commit inserts the reference without ()");
+
+                const string local = "def unit():\n    pass\ndef main():\n    cb: Function = uni";
+                var localItem = Complete(local).Items.First(i => i.Name == "unit");
+                t.Check(!localItem.InsertParentheses,
+                    "local Function annotation inserts a reference, too");
+
+                const string returning = "def unit():\n    pass\ndef factory() -> Function:\n    return uni";
+                var returnItem = Complete(returning).Items.First(i => i.Name == "unit");
+                t.Check(!returnItem.InsertParentheses, "Function return accepts a reference");
+                // Negative guard: a non-Function hint should continue inserting calls.
+                const string value = "def unit() -> Bool:\n    return True\nshared flag: Bool = uni";
+                var valueItem = Complete(value).Items.First(i => i.Name == "unit");
+                t.Check(valueItem.InsertParentheses,
+                    "non-Function annotation still requests a return value");
             });
 
             Add("ShadowedNativeSignatureNoFalseWarning", "User function definitions override implicit self signatures", t =>

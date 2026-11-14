@@ -118,11 +118,22 @@ namespace Directiva.CodeUI
         private bool _completionOpen;
         private bool _completionSpaceHandled;
         private bool _completionEnabled = true;
-        // Tab previews one suggestion at a time; Escape restores the original text.
+        // Tab cycles through applied suggestions. Closing the menu NEVER reverts text.
+        // Each replacement is calculated from the original prefix, and the entire
+        // sequence is one undoable action rather than an undo entry per candidate.
         private bool _completionCycling;
         private bool _completionCycleApplying;
+        private bool _completionCommitApplying;
+        private bool _completionCycleHistoryEntry;
         private string _completionCycleSource;
-        private int _completionCycleCaret;
+        private string _completionCyclePreviewText;
+        private bool _tabKeyHandled;
+
+        // Escape dismisses signature help until its call changes or text is edited.
+        // KeyUp schedules another refresh, so hiding the popup alone is insufficient.
+        private string _signatureDismissedSource;
+        private int _signatureDismissedOpening = -1;
+        private int _signatureDismissedCaret = -1;
 
         private EditorUndoHistory _activeUndoHistory;
 
@@ -130,6 +141,7 @@ namespace Directiva.CodeUI
         private bool _textInputGeometryHooked;
         private bool _textInputKeyHooked;
         private bool _returnKeyHandled;
+        private int _pendingEditSelectionRevision;
         private bool _suppressChange;
         private bool _historyApplying;
         private bool _forceHistoryBoundaryNextChange;
@@ -329,12 +341,12 @@ namespace Directiva.CodeUI
                     var cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, normalized.Length);
                     var select = Mathf.Clamp(_textField.textSelection.selectIndex, 0, normalized.Length);
 
-                    _activeUndoHistory.Record(
-                        normalized,
-                        cursor,
-                        select,
-                        _forceHistoryBoundaryNextChange,
-                        Time.realtimeSinceStartup,
+                    // Completion edits record their own history synchronously, before
+                    // changing the TextField. Only ordinary typing is recorded here:
+                    // UI Toolkit's change-event timing must not split one Tab cycle
+                    // into several independent undo steps.
+                    _activeUndoHistory.Record(normalized, cursor, select,
+                        _forceHistoryBoundaryNextChange, Time.realtimeSinceStartup,
                         UndoMergeWindowSeconds);
 
                     _forceHistoryBoundaryNextChange = false;
@@ -348,10 +360,20 @@ namespace Directiva.CodeUI
                 ValidateExecutionLine();
                 UpdateExecutionHighlightPosition();
                 TextChanged?.Invoke(normalized);
+                // A changed buffer starts a new signature-help context. Escape
+                // suppresses the old popup, not future edits.
+                _signatureDismissedSource = null;
                 ScheduleSignatureRefresh();
-                if (_completionCycleApplying)
+                // Committing a Tab candidate has already suppressed completion
+                // refresh. Do not let the one-shot flag eat the NEXT user edit.
+                if (_completionCommitApplying)
+                    _completionSuppressNextChange = false;
+                if (_completionCycleApplying || _completionCommitApplying ||
+                    (_completionCycling && string.Equals(normalized,
+                        _completionCyclePreviewText, StringComparison.Ordinal)))
                 {
-                    // Preview remains in place while Tab is cycling its candidates.
+                    // Keep the same menu and candidate list while Tab replaces
+                    // its own text, including a deferred native TextField callback.
                 }
                 else if (_completionSuppressNextChange)
                 {
@@ -361,8 +383,8 @@ namespace Directiva.CodeUI
                 else
                 {
                     _completionDismissed = false;
-                    // A typed edit accepts a Tab preview and invalidates its
-                    // original replacement range. Never overwrite newly typed text.
+                    // A typed edit keeps the last Tab result and ends the cycle.
+                    // Never overwrite newly typed text with an old candidate.
                     if (_completionCycling)
                         HideCompletion();
                     else if (_completionOpen)
@@ -606,7 +628,22 @@ namespace Directiva.CodeUI
             DScriptCallSignatureResult info;
             try { info = _signatureProvider(source, caret); }
             catch (Exception) { HideSignatureHelp(); return; }
-            if (info == null || info.Overloads.Count == 0) { HideSignatureHelp(); return; }
+            if (info == null || info.Overloads.Count == 0)
+            {
+                // Once the caret leaves the call, returning to it may show help
+                // again without requiring an edit to the source.
+                _signatureDismissedSource = null;
+                HideSignatureHelp();
+                return;
+            }
+            if (_signatureDismissedSource != null &&
+                string.Equals(_signatureDismissedSource, source, StringComparison.Ordinal) &&
+                (_signatureDismissedOpening == info.OpeningOffset ||
+                 (_signatureDismissedOpening < 0 && _signatureDismissedCaret == caret)))
+            {
+                HideSignatureHelp();
+                return;
+            }
             // User selection lasts while inspecting this unchanged call. Editing the
             // text or moving to another call restores automatic overload ranking.
             if (_signatureCallOpening != info.OpeningOffset || _signatureRenderedCaret != caret ||
@@ -703,6 +740,7 @@ namespace Directiva.CodeUI
         private void ScheduleCompletionRefresh()
         {
             _completionTask?.Pause();
+            if (_completionCycling) return; // The candidate list stays frozen during Tab cycling.
             if (!_completionEnabled || _completionProvider == null || _isReadOnly ||
                 string.IsNullOrEmpty(DocumentPath) || panel == null)
             {
@@ -718,6 +756,11 @@ namespace Directiva.CodeUI
 
         private void RefreshCompletion()
         {
+            // Do not recompute a prefix from the already-inserted Tab candidate.
+            // Otherwise the menu disappears and the next Tab indents the line.
+            if (_completionCycling && _completionOpen &&
+                string.Equals(Text, _completionCyclePreviewText, StringComparison.Ordinal))
+                return;
             if (!_completionEnabled || _completionProvider == null || _completionDismissed || _isReadOnly ||
                 string.IsNullOrEmpty(DocumentPath) || panel == null)
             {
@@ -839,9 +882,16 @@ namespace Directiva.CodeUI
             if (begin < 0 || end < begin || end > source.Length) { HideCompletion(); return; }
             var edit = CodeEditorCompletionText.Build(source, begin, end,
                 _completionResult.Items[index], insertSpace);
+            bool wasCycling = _completionCycling;
+            bool hadHistoryEntry = _completionCycleHistoryEntry;
+            string before = Text;
             HideCompletion();
-            _completionSuppressNextChange = !string.Equals(edit.Text, Text, StringComparison.Ordinal);
-            ApplyEdit(edit.Text, edit.Caret, edit.Caret);
+            _completionSuppressNextChange = !string.Equals(edit.Text, before, StringComparison.Ordinal);
+            // Confirming a Tab candidate updates the same history entry rather
+            // than recording an additional step (even when Space adds a character).
+            _completionCommitApplying = wasCycling;
+            try { ApplyCompletionEdit(edit.Text, edit.Caret, wasCycling && hadHistoryEntry); }
+            finally { _completionCommitApplying = false; }
             ScheduleSignatureRefresh();
         }
 
@@ -852,28 +902,102 @@ namespace Directiva.CodeUI
             if (!_completionCycling)
             {
                 _completionCycleSource = Text;
-                _completionCycleCaret = _completionResult.ReplaceEnd;
+                _completionCycleHistoryEntry = false;
                 _completionCycling = true;
             }
             _completionSelected = StepCompletionSelection(_completionSelected,
                 _completionResult.Items.Count, !backwards);
+            // Always replace from the original typed prefix, not from the
+            // previous candidate (which may be longer and contain parentheses).
             var edit = CodeEditorCompletionText.Build(_completionCycleSource,
                 _completionResult.ReplaceStart, _completionResult.ReplaceEnd,
                 _completionResult.Items[_completionSelected], false);
+            _completionCyclePreviewText = edit.Text;
             _completionCycleApplying = true;
-            try { ApplyEdit(edit.Text, edit.Caret, edit.Caret); }
+            try
+            {
+                bool changed = ApplyCompletionEdit(edit.Text, edit.Caret,
+                    _completionCycleHistoryEntry);
+                if (changed) _completionCycleHistoryEntry = true;
+            }
             finally { _completionCycleApplying = false; }
             HighlightCompletionSelection();
         }
 
-        private void CancelCompletionCycle()
+        /// <summary>
+        /// Apply one completion candidate as part of a single undo transaction.
+        /// History is updated explicitly before changing the TextField because
+        /// UI Toolkit does not guarantee the timing of its value-change callbacks.
+        /// All Tab alternatives replace the same snapshot; Escape never restores it.
+        /// </summary>
+        private bool ApplyCompletionEdit(string updated, int caret, bool replacePreview)
         {
-            if (!_completionCycling) { HideCompletion(); return; }
-            string original = _completionCycleSource;
-            int caret = _completionCycleCaret;
+            string before = Text;
+            bool changed = !string.Equals(before, updated, StringComparison.Ordinal);
+            if (_activeUndoHistory != null)
+            {
+                if (changed)
+                {
+                    // The last typed prefix is the undo baseline, even if a native
+                    // value-change event did not arrive before the first Tab.
+                    if (!string.Equals(_activeUndoHistory.Current.Text, before,
+                        StringComparison.Ordinal))
+                    {
+                        _activeUndoHistory.Record(before, CaretIndex,
+                            Mathf.Clamp(_textField.textSelection.selectIndex, 0, before.Length),
+                            true, Time.realtimeSinceStartup, UndoMergeWindowSeconds);
+                    }
+                    else if (!replacePreview)
+                    {
+                        // Preserve the caret and selection from immediately before
+                        // the first completion, not from a delayed previous key-up.
+                        _activeUndoHistory.UpdateCurrentSelection(CaretIndex,
+                            Mathf.Clamp(_textField.textSelection.selectIndex, 0, before.Length));
+                    }
+
+                    if (!replacePreview ||
+                        !_activeUndoHistory.TryReplaceCompletionPreview(
+                            before, updated, caret, caret))
+                    {
+                        _activeUndoHistory.Record(updated, caret, caret,
+                            true, Time.realtimeSinceStartup, UndoMergeWindowSeconds);
+                    }
+                }
+                else if (string.Equals(_activeUndoHistory.Current.Text, updated,
+                    StringComparison.Ordinal))
+                {
+                    _activeUndoHistory.UpdateCurrentSelection(caret, caret);
+                }
+            }
+
+            // Let the regular text change event refresh syntax, console state and
+            // completion overlays, but never let it record a second undo snapshot.
+            bool previousHistoryApplying = _historyApplying;
+            _historyApplying = true;
+            try { ApplyEdit(updated, caret, caret); }
+            finally
+            {
+                _historyApplying = previousHistoryApplying;
+                _forceHistoryBoundaryNextChange = false;
+            }
+            return changed;
+        }
+
+        private void DismissContextMenus()
+        {
+            // Escape only closes contextual UI. The last Tab suggestion is already
+            // part of the document; do not restore source or touch undo/redo.
+            // Also cancel any completion refresh already queued for this caret.
+            // Typing a new character clears this dismissal in the value callback.
+            _completionDismissed = true;
+            // Also suppress a pending signature refresh: the KeyUp event after
+            // Escape must not immediately recreate the popup we just closed.
+            _signatureDismissedSource = Text;
+            _signatureDismissedOpening = _signatureResult?.OpeningOffset ?? -1;
+            _signatureDismissedCaret = CaretIndex;
             HideCompletion();
-            _completionSuppressNextChange = !string.Equals(original, Text, StringComparison.Ordinal);
-            ApplyEdit(original, caret, caret);
+            HideSignatureHelp();
+            HideDiagnosticTooltip();
         }
 
         private void HideCompletion()
@@ -884,6 +1008,8 @@ namespace Directiva.CodeUI
             _completionSelected = NoCompletionSelection;
             _completionCycling = false;
             _completionCycleSource = null;
+            _completionCyclePreviewText = null;
+            _completionCycleHistoryEntry = false;
             _completionRows.Clear();
             if (_completionDetail != null) _completionDetail.text = string.Empty;
             if (_completionPopup != null) _completionPopup.style.display = DisplayStyle.None;
@@ -1068,6 +1194,9 @@ namespace Directiva.CodeUI
             _zoomLayoutSyncPassesRemaining = 0;
             _zoomLayoutSyncTask?.Pause();
             _returnKeyHandled = false;
+            ++_pendingEditSelectionRevision;
+            _tabKeyHandled = false;
+            _signatureDismissedSource = null;
             HideCompletion();
             HideSignatureHelp();
             SetLiveDiagnostics(null);
@@ -1116,6 +1245,9 @@ namespace Directiva.CodeUI
 
         public void ClearDocument()
         {
+            ++_pendingEditSelectionRevision;
+            _tabKeyHandled = false;
+            _signatureDismissedSource = null;
             HideCompletion();
             HideSignatureHelp();
             SetLiveDiagnostics(null);
@@ -2351,28 +2483,39 @@ namespace Directiva.CodeUI
 
         private void OnEditorLineShortcut(KeyDownEvent evt)
         {
+            // Capture Escape even when no popup is visible. Otherwise the native
+            // TextField may interpret it as cancel/revert editing in some Unity
+            // versions. Dismissing UI MUST NOT modify the source or its history.
+            if (evt.keyCode == KeyCode.Escape || evt.character == '\x1b')
+            {
+                evt.StopImmediatePropagation();
+                DismissContextMenus();
+                return;
+            }
             // UI Toolkit may emit a KeyCode.Space followed by a character event.
-            // The completion already inserted one space; consume that second event.
             if (_completionSpaceHandled && evt.character == ' ')
             {
                 evt.StopImmediatePropagation();
                 return;
             }
+            if (_tabKeyHandled && evt.character == '\t')
+            {
+                // Some Unity versions send Tab as both a key and a character.
+                // Never let its second event insert a literal tab or indentation.
+                evt.StopImmediatePropagation();
+                return;
+            }
             if (_completionOpen && !_isReadOnly && !evt.ctrlKey && !evt.commandKey && !evt.altKey)
             {
-                // Only while the popup is visible do Tab/Shift+Tab cycle suggestions.
-                // Otherwise both keys continue using the ordinary Python indentation.
-                if (evt.keyCode == KeyCode.Tab)
+                // While the popup is visible, Tab/Shift+Tab replace the current
+                // candidate. Each Tab uses the original prefix; no indentation.
+                // A character-only Tab event after KeyCode.Tab must not cycle twice.
+                if (evt.keyCode == KeyCode.Tab || evt.character == '\t')
                 {
                     evt.StopImmediatePropagation();
-                    CycleCompletion(evt.shiftKey);
-                    return;
-                }
-                if (evt.keyCode == KeyCode.Escape)
-                {
-                    evt.StopImmediatePropagation();
-                    _completionDismissed = true;
-                    CancelCompletionCycle();
+                    if (!_tabKeyHandled)
+                        CycleCompletion(evt.shiftKey);
+                    _tabKeyHandled = true;
                     return;
                 }
                 if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow)
@@ -2496,6 +2639,8 @@ namespace Directiva.CodeUI
         private void OnEditorLineShortcutReleased(KeyUpEvent evt)
         {
             if (evt.keyCode == KeyCode.Space) _completionSpaceHandled = false;
+            if (evt.keyCode == KeyCode.Tab || evt.character == '\t')
+                _tabKeyHandled = false;
             if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter &&
                 evt.character != '\n' && evt.character != '\r')
                 return;
@@ -2699,9 +2844,15 @@ namespace Directiva.CodeUI
             if (_isReadOnly)
                 return;
             _forceHistoryBoundaryNextChange = true;
+            int revision = ++_pendingEditSelectionRevision;
+            string document = DocumentPath;
             _textField.value = updated;
             schedule.Execute(() =>
             {
+                // Rapid successive Tab presses can queue several caret restores.
+                // Never let an older candidate move the caret after a newer one.
+                if (revision != _pendingEditSelectionRevision || document != DocumentPath)
+                    return;
                 var len = _textField.value?.Length ?? 0;
                 _textField.textSelection.SelectRange(
                     Mathf.Clamp(cursor, 0, len),

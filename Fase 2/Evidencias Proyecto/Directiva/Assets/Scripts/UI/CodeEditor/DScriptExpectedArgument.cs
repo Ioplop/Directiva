@@ -61,11 +61,18 @@ namespace Directiva.CodeUI
             // returns can also request a function *reference*.
             int lineStart = source.LastIndexOf('\n', Math.Max(0, caret - 1)) + 1;
             string before = source.Substring(lineStart, caret - lineStart);
+            // Completion asks for the expected type at ReplaceStart (the first
+            // character of the identifier), not at the end of the typed prefix.
+            // Accept an *empty* right-hand-side prefix as well as a partial name.
+            // Without this, `shared cb: Function = uni` looks untyped at `uni`'s
+            // start, so the editor incorrectly inserts `unit()` instead of `unit`.
             Match assignment = Regex.Match(before,
-                @"^\s*(?:shared\s+)?[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?<type>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*[A-Za-z_][A-Za-z0-9_]*$");
+                @"^[ \t]*(?:shared[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*:[ \t]*(?<type>[A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*)?$");
             if (assignment.Success)
                 return DScriptCompletionEngine.CanonicalType(assignment.Groups["type"].Value);
-            if (Regex.IsMatch(before, @"^\s+return\s+[A-Za-z_][A-Za-z0-9_]*$"))
+            // Likewise, a `return uni` completion asks at the start of `uni`.
+            // An unannotated return remains unknown, preserving dynamic behavior.
+            if (Regex.IsMatch(before, @"^[ \t]+return[ \t]+(?:[A-Za-z_][A-Za-z0-9_]*)?$"))
             {
                 var current = DScriptCompletionEngine.FunctionHeaders(source)
                     .Where(f => f.Start < lineStart).OrderByDescending(f => f.Start).FirstOrDefault();
