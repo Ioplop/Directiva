@@ -26,6 +26,9 @@ namespace Directiva.SimulationUI
         private readonly Metric[] metrics = new Metric[3];
         private readonly Label remainingTimeCaption;
         private readonly Label remainingTimeValue;
+        private static readonly StyleColor NormalTimeColor = new StyleColor(new UnityEngine.Color32(231, 235, 242, 255));
+        private static readonly StyleColor WarningTimeColor = new StyleColor(new UnityEngine.Color32(255, 211, 92, 255));
+        private static readonly StyleColor CriticalTimeColor = new StyleColor(new UnityEngine.Color32(255, 107, 111, 255));
 
         public VisualElement Root => root;
 
@@ -37,8 +40,7 @@ namespace Directiva.SimulationUI
             bar = new VisualElement { name = "sim-match-stats", pickingMode = PickingMode.Ignore };
             bar.AddToClassList("sim-match-stats");
             root.Add(bar);
-            // All later HUD/editor children paint above the non-interactive stats.
-            parent.Insert(0, root);
+            parent.Add(root);
 
             AddMetric(0, "hud_resources", "resources");
             AddMetric(1, "hud_units", "units");
@@ -112,10 +114,11 @@ namespace Directiva.SimulationUI
                 Format(match != null ? match.GetErrorCount(1) : 0L),
                 Format(match != null ? match.GetErrorCount(2) : 0L));
 
-            string remaining = FormatRemainingTime(matchDurationSeconds,
-                (double)simulation.Time.RawValue / DMath.Constants.FixedScale);
+            double elapsedSeconds = (double)simulation.Time.RawValue / DMath.Constants.FixedScale;
+            string remaining = FormatRemainingTime(matchDurationSeconds, elapsedSeconds);
             if (remainingTimeValue.text != remaining)
                 remainingTimeValue.text = remaining;
+            ApplyRemainingTimeColor(matchDurationSeconds, elapsedSeconds);
         }
 
         /// <summary>
@@ -129,6 +132,22 @@ namespace Directiva.SimulationUI
             long seconds = (long)Math.Ceiling(remaining - 0.0000001);
             return (seconds / 60).ToString(CultureInfo.InvariantCulture) + ":" +
                 (seconds % 60).ToString("00", CultureInfo.InvariantCulture);
+        }
+
+
+        private void ApplyRemainingTimeColor(int durationSeconds, double elapsedSeconds)
+        {
+            if (durationSeconds <= 0)
+            {
+                remainingTimeValue.style.color = NormalTimeColor;
+                return;
+            }
+
+            double remainingSeconds = Math.Max(0.0, durationSeconds - Math.Max(0.0, elapsedSeconds));
+            double ratio = remainingSeconds / durationSeconds;
+            remainingTimeValue.style.color = ratio <= 0.10
+                ? CriticalTimeColor
+                : ratio <= 0.25 ? WarningTimeColor : NormalTimeColor;
         }
 
         private static int AliveUnits(SBSide side)

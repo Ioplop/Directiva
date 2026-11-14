@@ -19,6 +19,37 @@ namespace Directiva.EditorTests.SimulationFrontendTests
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
                 tests.Add(new DirectivaTestCase("Simulation", "Frontend", name, description, action));
 
+            Add("ResponsiveHudAndOptionsLayouts",
+                "Narrow viewports reflow the HUD and options, while Full HD and 4K retain readable sizes", t =>
+            {
+                t.Equal(Directiva.UI.SimulationHudLayout.Stacked,
+                    Directiva.UI.ResponsiveUILayout.ForSimulation(800f, 600f),
+                    "800 x 600 uses two top HUD rows, avoiding collisions with Main Menu");
+                t.Equal(Directiva.UI.SimulationHudLayout.Standard,
+                    Directiva.UI.ResponsiveUILayout.ForSimulation(1920f, 1080f),
+                    "Full HD retains the existing horizontal HUD layout");
+                t.Equal(Directiva.UI.SimulationHudLayout.Large,
+                    Directiva.UI.ResponsiveUILayout.ForSimulation(3840f, 2160f),
+                    "4K panel coordinates receive larger HUD targets");
+                t.Equal(Directiva.UI.SimulationHudLayout.Narrow,
+                    Directiva.UI.ResponsiveUILayout.ForSimulation(640f, 480f),
+                    "very narrow screens wrap the four metrics in two rows");
+                t.Equal(Directiva.UI.OptionsLayout.Compact,
+                    Directiva.UI.ResponsiveUILayout.ForOptions(800f, 600f),
+                    "800 x 600 settings stack long labels above controls");
+                t.Equal(Directiva.UI.OptionsLayout.Standard,
+                    Directiva.UI.ResponsiveUILayout.ForOptions(1920f, 1080f),
+                    "Full HD keeps the existing options layout");
+                t.Equal(Directiva.UI.OptionsLayout.Large,
+                    Directiva.UI.ResponsiveUILayout.ForOptions(3840f, 2160f),
+                    "4K settings use larger labels and targets");
+                t.Check(Directiva.UI.ResponsiveUILayout.EditorTopInset(
+                    Directiva.UI.SimulationHudLayout.Stacked) >
+                    Directiva.UI.ResponsiveUILayout.EditorTopInset(
+                    Directiva.UI.SimulationHudLayout.Standard),
+                    "code editor never covers the second HUD row");
+            });
+
             Add("CameraBoundsMatchSimulationProjection",
                 "Camera focus uses the same centered X/Z rectangle as the simulated world", t =>
             {
@@ -643,8 +674,10 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 var otherUi = new VisualElement { name = "editor" };
                 uiRoot.Add(otherUi);
                 var stats = new SimulationMatchStatsBar(uiRoot);
-                t.Equal(stats.Root, uiRoot[0], "scoreboard paints under editor");
-                t.Equal(otherUi, uiRoot[1], "editor remains in front");
+                // Since the RTS HUD places Editor to the left of statistics,
+                // the stats element is appended after the preceding sibling.
+                t.Equal(otherUi, uiRoot[0], "existing editor sibling keeps its place");
+                t.Equal(stats.Root, uiRoot[1], "statistics are appended to the host row");
                 t.Equal(PickingMode.Ignore, stats.Root.pickingMode, "stat bar is not pickable");
                 t.Equal(4, stats.Root.Q<VisualElement>("sim-match-stats").childCount,
                     "three side metrics plus one match countdown");

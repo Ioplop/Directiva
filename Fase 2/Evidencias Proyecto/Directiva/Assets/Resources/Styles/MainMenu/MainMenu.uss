@@ -73,3 +73,152 @@
 
 /* Shared-theme icons are rendered as Sprite Images. Never draw glyph substitutes. */
 .dm-back-icon { width: 17px; height: 17px; margin-right: 7px; flex-shrink: 0; }
+
+/* The numeric value and its slider form a single control group. This makes
+   stacked narrow layouts possible without stretching the control off screen. */
+.dm-volume-controls {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+}
+.dm-volume-controls .dm-slider { min-width: 0; }
+
+/* Responsive options only. Main-menu home and level-selection pages retain
+   their own existing layouts, as does the separately hosted DScript editor. */
+.dm-root.dm-compact .dm-options-page {
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+.dm-root.dm-compact .dm-options {
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+}
+.dm-root.dm-compact .dm-options-header { margin-bottom: 7px; }
+.dm-root.dm-compact .dm-options-content {
+    padding-left: 4px;
+    padding-right: 10px;
+    padding-top: 3px;
+    padding-bottom: 12px;
+}
+.dm-root.dm-compact .dm-options-section {
+    margin-bottom: 15px;
+    padding-bottom: 11px;
+}
+.dm-root.dm-compact .dm-section-title {
+    font-size: 22px;
+    margin-bottom: 9px;
+}
+.dm-root.dm-compact .dm-back-button {
+    height: 37px;
+    min-width: 90px;
+    font-size: 14px;
+}
+.dm-root.dm-compact .dm-option-row,
+.dm-root.dm-compact .dm-volume-row {
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+    margin-bottom: 9px;
+}
+.dm-root.dm-compact .dm-option-name,
+.dm-root.dm-compact .dm-volume-name {
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    margin-bottom: 5px;
+    font-size: 15px;
+    white-space: normal;
+}
+.dm-root.dm-compact .dm-dropdown {
+    width: 100%;
+    min-width: 0;
+    flex-grow: 0;
+    min-height: 35px;
+    font-size: 14px;
+}
+.dm-root.dm-compact .dm-dropdown .unity-base-popup-field__input {
+    min-height: 35px;
+}
+.dm-root.dm-compact .dm-option-toggle-button {
+    width: 100%;
+    max-width: 380px;
+    min-width: 0;
+    height: 37px;
+    font-size: 14px;
+    white-space: normal;
+    align-self: flex-start;
+}
+.dm-root.dm-compact .dm-volume-controls {
+    width: 100%;
+    flex-grow: 0;
+    flex-shrink: 1;
+}
+.dm-root.dm-compact .dm-value {
+    width: 55px;
+    flex-shrink: 0;
+    font-size: 14px;
+    padding: 6px;
+}
+.dm-root.dm-compact .dm-slider { margin-left: 11px; }
+.dm-root.dm-compact .dm-resolution-dialog {
+    min-width: 0;
+    width: 92%;
+    max-width: 100%;
+    padding: 16px;
+}
+.dm-root.dm-compact .dm-resolution-question { font-size: 19px; }
+.dm-root.dm-compact .dm-resolution-button {
+    min-width: 118px;
+    height: 38px;
+    font-size: 14px;
+}
+
+/* Additional safety margin for very small windowed modes. */
+.dm-root.dm-small .dm-options-page {
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+.dm-root.dm-small .dm-options {
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+.dm-root.dm-small .dm-section-title { font-size: 19px; }
+.dm-root.dm-small .dm-options-content { padding-left: 0; padding-right: 5px; }
+
+/* Large panels receive larger type and touch targets. A PanelSettings-scaled
+   display retains the regular Full HD sizing instead of scaling twice. */
+.dm-root.dm-large .dm-options-page {
+    padding-left: 72px;
+    padding-right: 72px;
+    padding-top: 48px;
+    padding-bottom: 48px;
+}
+.dm-root.dm-large .dm-options {
+    padding: 46px;
+}
+.dm-root.dm-large .dm-options-content {
+    padding-left: 35px;
+    padding-right: 35px;
+}
+.dm-root.dm-large .dm-section-title { font-size: 40px; margin-bottom: 27px; }
+.dm-root.dm-large .dm-option-row,
+.dm-root.dm-large .dm-volume-row { min-height: 94px; }
+.dm-root.dm-large .dm-option-name,
+.dm-root.dm-large .dm-volume-name { font-size: 27px; }
+.dm-root.dm-large .dm-dropdown { min-height: 58px; font-size: 25px; }
+.dm-root.dm-large .dm-dropdown .unity-base-popup-field__input { min-height: 58px; }
+.dm-root.dm-large .dm-option-toggle-button { min-width: 325px; height: 60px; font-size: 24px; }
+.dm-root.dm-large .dm-back-button { min-width: 150px; height: 61px; font-size: 25px; }
+.dm-root.dm-large .dm-value { width: 89px; font-size: 26px; }
+.dm-root.dm-large .dm-resolution-question { font-size: 34px; }
+.dm-root.dm-large .dm-resolution-button { min-width: 245px; height: 62px; font-size: 24px; }

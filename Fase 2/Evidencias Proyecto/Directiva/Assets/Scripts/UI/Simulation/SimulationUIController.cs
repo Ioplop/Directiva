@@ -95,6 +95,7 @@ namespace Directiva.SimulationUI
         private SimulationNexusProgramPicker _nexusPicker;
         private SimulationMatchStatsBar _matchStats;
         private float _nextNexusWarningCheckAt;
+        private SimulationHudLayout _hudLayout = SimulationHudLayout.Standard;
 
         private static string T(string key, params object[] arguments) =>
             DirectivaLocalization.Get("Simulation", key, arguments);
@@ -155,7 +156,7 @@ namespace Directiva.SimulationUI
             }
 
             // Keep the level name available without reserving permanent HUD space.
-            // The first slot of the HUD is now the editor toggle.
+            // The status readout can expose it as hover text.
             _statusLabel.tooltip = string.IsNullOrWhiteSpace(LevelLaunchContext.CurrentLevelName)
                 ? defaultLevelTitle
                 : LevelLaunchContext.CurrentLevelName;
@@ -170,6 +171,8 @@ namespace Directiva.SimulationUI
             {
                 _dockedWidth = minDockedWidth;
             }
+            if (rootWidth > 1f)
+                ApplyHudLayout(rootWidth, _root.resolvedStyle.height);
             SetEditorMode(initialEditorMode);
         }
 
@@ -188,34 +191,82 @@ namespace Directiva.SimulationUI
             overlay.AddToClassList("sim-overlay");
             overlay.pickingMode = PickingMode.Ignore;
             _root.Add(overlay);
-            _matchStats = new SimulationMatchStatsBar(overlay);
 
-            var hud = new VisualElement();
-            hud.AddToClassList("sim-hud");
-            hud.pickingMode = PickingMode.Ignore;
-            overlay.Add(hud);
+            // The window header belongs to the host: only presentation controls
+            // live there. The main menu button remains separate so it can later
+            // evolve independently from the match HUD layout.
+            _editorPane = new VisualElement();
+            _editorPane.AddToClassList("sim-editor-pane");
+            _editorPane.pickingMode = PickingMode.Position;
+            overlay.Add(_editorPane);
 
-            // The editor toggle belongs to the global HUD, not to the editor
-            // pane. This keeps it reachable in every presentation mode.
+            var editorHeader = new VisualElement();
+            editorHeader.AddToClassList("sim-editor-header");
+            _editorPane.Add(editorHeader);
+
+            var spacer = new VisualElement();
+            spacer.style.flexGrow = 1;
+            spacer.pickingMode = PickingMode.Ignore;
+            editorHeader.Add(spacer);
+
+            _minimizeButton = new Button(() => SetEditorMode(EditorDisplayMode.Hidden));
+            _minimizeButton.AddToClassList("sim-editor-header-button");
+            _minimizeButton.tooltip = T("hide_editor");
+            UIIconView.SetButton(_minimizeButton, _theme?.icons?.minimize, 16f);
+            editorHeader.Add(_minimizeButton);
+
+            _fullscreenButton = new Button(() =>
+                SetEditorMode(CurrentEditorMode == EditorDisplayMode.Fullscreen
+                    ? EditorDisplayMode.Docked : EditorDisplayMode.Fullscreen));
+            _fullscreenButton.AddToClassList("sim-editor-header-button");
+            editorHeader.Add(_fullscreenButton);
+
+            _editorMount = new VisualElement();
+            _editorMount.AddToClassList("sim-editor-mount");
+            _editorPane.Add(_editorMount);
+
+            _resizeHandle = new SimulationEditorResizeHandle(ResizeDockedEditor);
+            _editorPane.Add(_resizeHandle);
+
+            // Match information sits at the top, leaving the bottom edge for
+            // simulation controls. Its editor button shares exactly the same row.
+            var topInfoRow = new VisualElement { name = "simulation-top-info-row" };
+            topInfoRow.AddToClassList("sim-top-info-row");
+            topInfoRow.pickingMode = PickingMode.Ignore;
+            overlay.Add(topInfoRow);
+
+            // The editor toggle now lives beside the match data panel so the
+            // lower HUD resembles the compact control strips common in RTS games.
             _openEditorTab = new Button(() =>
                 SetEditorMode(CurrentEditorMode == EditorDisplayMode.Hidden
                     ? EditorDisplayMode.Docked : EditorDisplayMode.Hidden));
             _openEditorTab.AddToClassList("sim-editor-tab");
             UIIconView.SetButton(_openEditorTab, _theme?.icons?.openEditor, 22f);
-            // SetButton clears Button.text because it is designed for icon-only controls.
-            // This global toggle must remain identifiable even without a theme sprite.
             _openEditorTab.style.flexDirection = FlexDirection.Row;
             var editorTabLabel = new Label(string.IsNullOrWhiteSpace(editorButtonLabel) || editorButtonLabel == "Editor"
                 ? T("editor") : editorButtonLabel);
             _editorTabLabel = editorTabLabel;
             editorTabLabel.pickingMode = PickingMode.Ignore;
-            editorTabLabel.style.marginLeft = _theme?.icons?.openEditor != null ? 7f : 0f;
+            editorTabLabel.style.marginLeft = _theme?.icons?.openEditor != null ? 8f : 0f;
             _openEditorTab.Add(editorTabLabel);
-            hud.Add(_openEditorTab);
+            topInfoRow.Add(_openEditorTab);
+
+            _matchStats = new SimulationMatchStatsBar(topInfoRow);
+
+            var controlsRow = new VisualElement { name = "simulation-controls-row" };
+            controlsRow.AddToClassList("sim-controls-row");
+            controlsRow.pickingMode = PickingMode.Ignore;
+            overlay.Add(controlsRow);
+
+            var controlsCluster = new VisualElement { name = "simulation-controls-cluster" };
+            controlsCluster.AddToClassList("sim-controls-cluster");
+            controlsCluster.pickingMode = PickingMode.Ignore;
+            controlsRow.Add(controlsCluster);
 
             var controls = new VisualElement();
             controls.AddToClassList("sim-controls");
-            hud.Add(controls);
+            controls.pickingMode = PickingMode.Ignore;
+            controlsCluster.Add(controls);
 
             // A hoverable slot is needed when Play is disabled: the disabled
             // Button itself cannot be the reliable tooltip target.
@@ -249,42 +300,8 @@ namespace Directiva.SimulationUI
 
             _statusLabel = new Label(T("status_stopped") + " · 1×");
             _statusLabel.AddToClassList("sim-status");
-            hud.Add(_statusLabel);
-
-            _editorPane = new VisualElement();
-            _editorPane.AddToClassList("sim-editor-pane");
-            _editorPane.pickingMode = PickingMode.Position;
-            overlay.Add(_editorPane);
-
-            var editorHeader = new VisualElement();
-            editorHeader.AddToClassList("sim-editor-header");
-            _editorPane.Add(editorHeader);
-
-            // The window header belongs to the host: only presentation controls
-            // live here. The global menu button is outside the editor altogether.
-            var spacer = new VisualElement();
-            spacer.style.flexGrow = 1;
-            spacer.pickingMode = PickingMode.Ignore;
-            editorHeader.Add(spacer);
-
-            _minimizeButton = new Button(() => SetEditorMode(EditorDisplayMode.Hidden));
-            _minimizeButton.AddToClassList("sim-editor-header-button");
-            _minimizeButton.tooltip = T("hide_editor");
-            UIIconView.SetButton(_minimizeButton, _theme?.icons?.minimize, 16f);
-            editorHeader.Add(_minimizeButton);
-
-            _fullscreenButton = new Button(() =>
-                SetEditorMode(CurrentEditorMode == EditorDisplayMode.Fullscreen
-                    ? EditorDisplayMode.Docked : EditorDisplayMode.Fullscreen));
-            _fullscreenButton.AddToClassList("sim-editor-header-button");
-            editorHeader.Add(_fullscreenButton);
-
-            _editorMount = new VisualElement();
-            _editorMount.AddToClassList("sim-editor-mount");
-            _editorPane.Add(_editorMount);
-
-            _resizeHandle = new SimulationEditorResizeHandle(ResizeDockedEditor);
-            _editorPane.Add(_resizeHandle);
+            _statusLabel.pickingMode = PickingMode.Ignore;
+            controlsCluster.Add(_statusLabel);
 
             // This button remains accessible above the fullscreen editor. It is
             // owned by the simulation UI, never by the reusable code editor.
@@ -297,9 +314,6 @@ namespace Directiva.SimulationUI
 
             // VisualElement.tooltip is Editor-only. Reuse the editor's runtime
             // tooltip implementation for Play, including when its Button is disabled.
-            // Register the always-enabled slot, not the disabled Button: the hover
-            // overlay catches pointer movement while the Button is unavailable.
-            // Construct last so the tooltip draws above the editor and HUD.
             _hudTooltips = new HoverTooltipController(_root, overlay, 0.65f);
             _hudTooltips.Register(playSlot, () => T(string.IsNullOrEmpty(_playBlockReasonKey)
                 ? "play" : _playBlockReasonKey));
@@ -321,10 +335,11 @@ namespace Directiva.SimulationUI
                 if (evt.button == 0) _pointerPressStartedOnUI = false;
             }, TrickleDown.TrickleDown);
             _root.RegisterCallback<PointerCancelEvent>(_ => _pointerPressStartedOnUI = false);
-            _root.RegisterCallback<GeometryChangedEvent>(_ =>
+            _root.RegisterCallback<GeometryChangedEvent>(evt =>
             {
-                float available = _root.resolvedStyle.width;
+                float available = evt.newRect.width;
                 if (available <= 1f) return;
+                ApplyHudLayout(available, evt.newRect.height);
                 if (!_initialWidthMeasured)
                 {
                     _initialWidthMeasured = true;
@@ -334,6 +349,21 @@ namespace Directiva.SimulationUI
                     _resizeHandle != null && !_resizeHandle.IsDragging)
                     ResizeDockedEditor(_dockedWidth);
             });
+        }
+
+        private void ApplyHudLayout(float width, float height)
+        {
+            SimulationHudLayout next = ResponsiveUILayout.ForSimulation(width, height);
+            if (next == _hudLayout && _root.ClassListContains("sim-hud-responsive-ready"))
+                return;
+            _hudLayout = next;
+            _root.AddToClassList("sim-hud-responsive-ready");
+            bool stacked = next == SimulationHudLayout.Stacked || next == SimulationHudLayout.Narrow;
+            _root.EnableInClassList("sim-hud-stacked", stacked);
+            _root.EnableInClassList("sim-hud-narrow", next == SimulationHudLayout.Narrow);
+            _root.EnableInClassList("sim-hud-large", next == SimulationHudLayout.Large);
+            if (_editorPane != null && _openEditorTab != null)
+                SetEditorMode(CurrentEditorMode);
         }
 
         private void Update()
@@ -459,8 +489,7 @@ namespace Directiva.SimulationUI
             bool fullscreen = mode == EditorDisplayMode.Fullscreen;
             if (fullscreen) _nexusPicker?.Hide();
             _editorPane.style.display = hidden ? DisplayStyle.None : DisplayStyle.Flex;
-            // Keep this button (and therefore the simulation controls beside it)
-            // in the same position when the editor opens, hides or maximizes.
+            // The editor button stays in the top statistics row in every mode.
             _openEditorTab.EnableInClassList("sim-editor-tab-active", !hidden);
             _openEditorTab.tooltip = hidden ? T("show_editor") : T("hide_editor");
             _resizeHandle.style.display = mode == EditorDisplayMode.Docked ? DisplayStyle.Flex : DisplayStyle.None;
@@ -468,13 +497,15 @@ namespace Directiva.SimulationUI
                 fullscreen ? _theme?.icons?.restore : _theme?.icons?.maximize, 17f);
             _fullscreenButton.tooltip = fullscreen ? T("restore_editor") : T("expand_editor");
             _minimizeButton.tooltip = T("hide_editor");
-            // The global HUD is always visible: fullscreen editor begins below
-            // the simulation controls and the host-owned menu button.
+            // Respect the top HUD's row count at the current resolution.
+            // The code editor itself keeps all of its existing layout rules.
+            float topInset = ResponsiveUILayout.EditorTopInset(_hudLayout);
+            float bottomInset = ResponsiveUILayout.EditorBottomInset(_hudLayout);
             if (fullscreen)
             {
                 _editorPane.AddToClassList("sim-editor-fullscreen");
-                _editorPane.style.top = 64;
-                _editorPane.style.bottom = 0;
+                _editorPane.style.top = topInset;
+                _editorPane.style.bottom = bottomInset;
                 _editorPane.style.left = 0;
                 _editorPane.style.right = 0;
                 _editorPane.style.width = StyleKeyword.Auto;
@@ -482,8 +513,8 @@ namespace Directiva.SimulationUI
             else
             {
                 _editorPane.RemoveFromClassList("sim-editor-fullscreen");
-                _editorPane.style.top = 70;
-                _editorPane.style.bottom = 10;
+                _editorPane.style.top = topInset;
+                _editorPane.style.bottom = bottomInset;
                 _editorPane.style.left = 8;
                 _editorPane.style.right = StyleKeyword.Auto;
                 if (hidden)

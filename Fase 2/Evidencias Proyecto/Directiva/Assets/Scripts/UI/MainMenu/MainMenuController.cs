@@ -166,6 +166,7 @@ namespace Directiva.MainMenu
         private IVisualElementScheduledItem resolutionTimer;
         private Vector2Int? pendingResolution;
         private string builtLocale;
+        private OptionsLayout optionsLayout = OptionsLayout.Standard;
 
         private static Label Label(string text, string className = null)
         {
@@ -298,20 +299,56 @@ namespace Directiva.MainMenu
             root.AddToClassList("dm-root");
             _theme?.ApplyInterfaceFont(root);
             root.style.backgroundColor = appearance != null ? appearance.screenOverlay : Color.clear;
+            root.RegisterCallback<GeometryChangedEvent>(OnRootGeometryChanged);
             BuildHome();
             BuildOptions();
             BuildLevels();
             Show(home);
+            if (root.resolvedStyle.width > 1f)
+                ApplyOptionsLayout(root.resolvedStyle.width, root.resolvedStyle.height);
             SettingsManager.SettingsChanged += OnSettingsChanged;
         }
 
         private void OnDisable()
         {
             SettingsManager.SettingsChanged -= OnSettingsChanged;
+            root?.UnregisterCallback<GeometryChangedEvent>(OnRootGeometryChanged);
             resolutionTimer?.Pause();
             resolutionTimer = null;
             pendingResolution = null;
             SettingsRuntimeApplier.CancelResolutionPreview();
+        }
+
+        private void OnRootGeometryChanged(GeometryChangedEvent evt)
+        {
+            ApplyOptionsLayout(evt.newRect.width, evt.newRect.height);
+        }
+
+        private void ApplyOptionsLayout(float width, float height)
+        {
+            if (width <= 1f || height <= 1f || root == null) return;
+            OptionsLayout next = ResponsiveUILayout.ForOptions(width, height);
+            if (next != optionsLayout || !root.ClassListContains("dm-responsive-ready"))
+            {
+                optionsLayout = next;
+                root.AddToClassList("dm-responsive-ready");
+                root.EnableInClassList("dm-compact", next == OptionsLayout.Compact || next == OptionsLayout.Small);
+                root.EnableInClassList("dm-small", next == OptionsLayout.Small);
+                root.EnableInClassList("dm-large", next == OptionsLayout.Large);
+            }
+            RefreshOptionsFrameBackground();
+        }
+
+        private void RefreshOptionsFrameBackground()
+        {
+            if (options == null || appearance == null) return;
+            Color color = appearance.frameBackground;
+            // On a compact screen, translucent panels make controls compete
+            // with the animated 3D backdrop. Preserve the chosen tint, but
+            // keep its text and controls readable while navigating settings.
+            if (optionsLayout == OptionsLayout.Compact || optionsLayout == OptionsLayout.Small)
+                color.a = Mathf.Max(color.a, 0.92f);
+            options.style.backgroundColor = color;
         }
 
         private void OnSettingsChanged(GameSettings _)
@@ -434,6 +471,7 @@ namespace Directiva.MainMenu
         private void BuildOptions()
         {
             options = BuildPage();
+            options.parent.AddToClassList("dm-options-page");
             options.AddToClassList("dm-options");
 
             // Only the content scrolls; Back stays fixed at the top.
@@ -493,19 +531,22 @@ namespace Directiva.MainMenu
                 () => SettingsManager.SetEditorErrorSuggestions(!SettingsManager.Current.editor.showErrorSuggestions));
             var editorDelayRow = Container("dm-volume-row");
             editorDelayRow.Add(Label(T("editor_delay"), "dm-volume-name"));
+            var editorDelayControls = Container("dm-volume-controls");
             editorDelayValue = Label("", "dm-value");
-            editorDelayRow.Add(editorDelayValue);
+            editorDelayControls.Add(editorDelayValue);
             editorDelaySlider = new Slider(0.1f, 3f);
             editorDelaySlider.AddToClassList("dm-slider");
             editorDelaySlider.SetValueWithoutNotify(values.editor.liveErrorDelaySeconds);
             editorDelaySlider.RegisterValueChangedCallback(evt =>
                 SettingsManager.SetEditorErrorDelay(Mathf.Round(evt.newValue * 10f) / 10f));
-            editorDelayRow.Add(editorDelaySlider);
+            editorDelayControls.Add(editorDelaySlider);
+            editorDelayRow.Add(editorDelayControls);
             editorSection.Add(editorDelayRow);
 
             BuildResolutionConfirmation();
             RefreshResolutionChoices();
             RefreshOptionValues();
+            RefreshOptionsFrameBackground();
         }
 
         private static string SectionTitle(string overrideTitle, MainMenuButtonAction oldTab,
@@ -564,8 +605,9 @@ namespace Directiva.MainMenu
         {
             var row = Container("dm-volume-row");
             row.Add(Label(caption, "dm-volume-name"));
+            var controls = Container("dm-volume-controls");
             var text = Label(initialValue.ToString(), "dm-value");
-            row.Add(text);
+            controls.Add(text);
             var slider = new Slider(0, 100);
             slider.AddToClassList("dm-slider");
             slider.SetValueWithoutNotify(initialValue);
@@ -575,7 +617,8 @@ namespace Directiva.MainMenu
                 text.text = value.ToString();
                 onChanged(value);
             });
-            row.Add(slider);
+            controls.Add(slider);
+            row.Add(controls);
             section.Add(row);
             volumeSliders[key] = slider;
             volumeLabels[key] = text;
