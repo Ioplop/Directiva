@@ -101,3 +101,8 @@
 [hint_function_value]: Advertencia: se está usando una función donde se espera {{1}}.
 
 [hint_function_argument]: Advertencia: ninguna sobrecarga acepta una referencia a función en este argumento.
+[vm_global_scope]: Las declaraciones 'global' solo se permiten a nivel de módulo.
+[expected_vm_global_name]: Se esperaba un nombre de variable después de 'global'.
+[end_vm_global_declaration]: Se esperaba el final de la declaración global.
+[vm_global_scope_binder]: Las variables 'global' privadas de cada VM deben declararse a nivel de módulo.
+[parameter_vm_global_collision]: El parámetro '{{1}}' entra en conflicto con una variable global privada de la VM.

@@ -66,7 +66,21 @@ namespace Directiva.CodeUI
 
             foreach (Statement statement in root.Statements)
             {
-                if (statement is SharedStatement shared)
+                if (statement is VmGlobalStatement vmGlobal)
+                {
+                    string existing = ExistingName(vmGlobal.Name);
+                    if (existing != null)
+                        Warn("DS6201", "Global shadows " + existing, vmGlobal.NameSpan,
+                            "hint_shadow", vmGlobal.Name, existing);
+                    if (vmGlobal.Initializer != null)
+                    {
+                        CheckExpected(vmGlobal.Name, vmGlobal.DeclaredType,
+                            vmGlobal.Initializer, null, vmGlobal.Span.Start,
+                            module, analysis, Warn);
+                        InspectExpression(vmGlobal.Initializer, null);
+                    }
+                }
+                else if (statement is SharedStatement shared)
                 {
                     string existing = ExistingName(shared.Name);
                     if (existing != null)
@@ -88,6 +102,9 @@ namespace Directiva.CodeUI
                             HeaderNameSpan(function, source), "hint_shadow", function.Name, existing);
 
                     var declared = new Dictionary<string, string>(sharedHints, StringComparer.Ordinal);
+                    foreach (var global in root.Statements.OfType<VmGlobalStatement>())
+                        if (!string.IsNullOrEmpty(global.DeclaredType))
+                            declared[global.Name] = DScriptCompletionEngine.CanonicalType(global.DeclaredType);
                     foreach (var parameter in function.ParameterTypes)
                         declared[parameter.Key] = DScriptCompletionEngine.CanonicalType(parameter.Value);
                     CollectDeclaredTypes(function.Body, declared);
@@ -184,7 +201,8 @@ namespace Directiva.CodeUI
                     if (call.Callee is NameExpression name &&
                         analysis.ExpressionSymbols.TryGetValue(name, out DScriptSymbol symbol) &&
                         (symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter ||
-                         (symbol.Kind == SymbolKind.Global && sharedHints.ContainsKey(name.Name))))
+                         (symbol.Kind == SymbolKind.Global && sharedHints.ContainsKey(name.Name)) ||
+                         symbol.Kind == SymbolKind.VmGlobal))
                     {
                         string actual = DScriptCompletionEngine.InferKnownType(analysis,
                             module, function, name, name.Span.Start);

@@ -135,7 +135,7 @@ namespace Directiva.CodeUI
 
         private static bool BeginsIndependentStatement(string s)
         {
-            string[] keywords = { "def ", "shared ", "import ", "from ", "return ",
+            string[] keywords = { "def ", "shared ", "global ", "import ", "from ", "return ",
                 "return", "pass", "break", "continue", "if ", "elif ", "else:",
                 "while ", "for " };
             foreach (string keyword in keywords)

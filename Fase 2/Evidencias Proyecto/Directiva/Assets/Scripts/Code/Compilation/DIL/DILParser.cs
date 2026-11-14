@@ -71,6 +71,7 @@ namespace DSCompilation.DIL
             public SourceLine[] Lines { get; }
             public List<string> Imports { get; } = new();
             public List<string> Globals { get; } = new();
+            public List<string> VmGlobals { get; } = new();
             public List<FunctionDefinition> Functions { get; } = new();
 
             public ModuleDefinition(string name, SourceLine[] lines)
@@ -208,6 +209,7 @@ namespace DSCompilation.DIL
             foreach (NativeFunction native in nativeFunctions)
                 functionIds.Add(native.QualifiedName, native.Id);
             var globalSlots = AssignGlobalSlots(orderedModules);
+            var vmGlobalSlots = AssignVmGlobalSlots(orderedModules);
 
             if (globalSlots.Count > options.MaxGlobalSlots)
             {
@@ -219,6 +221,11 @@ namespace DSCompilation.DIL
                     "global_limit", globalSlots.Count, options.MaxGlobalSlots
                 );
             }
+
+            if (vmGlobalSlots.Count > options.MaxGlobalSlots)
+                throw new DILParseException(rootModuleName, 0,
+                    "VM-private global storage exceeds the slot limit.", "global_limit",
+                    vmGlobalSlots.Count, options.MaxGlobalSlots);
 
             if (!modules[rootModuleName].Functions.Any())
             {
@@ -234,6 +241,7 @@ namespace DSCompilation.DIL
                 orderedModules,
                 functionIds,
                 globalSlots,
+                vmGlobalSlots,
                 options.GenerateDebugMetadata
             );
 
@@ -243,7 +251,8 @@ namespace DSCompilation.DIL
                 defaultEntryId,
                 globalSlots.Count,
                 compiledFunctions,
-                nativeFunctions
+                nativeFunctions,
+                vmGlobalSlots.Count
             );
         }
 
@@ -350,6 +359,19 @@ namespace DSCompilation.DIL
                             Throw(moduleName, sourceLine.Number, $"Invalid global name '{value}'.", "invalid_global_name", value!);
 
                         module.Globals.Add(value!);
+                        continue;
+                    }
+
+                    if (annotation == "VM_GLOBAL")
+                    {
+                        if (currentFunction != null)
+                            Throw(moduleName, sourceLine.Number,
+                                "# VM_GLOBAL cannot appear inside a function.", "global_in_function");
+                        RequireAnnotationValue(moduleName, sourceLine.Number, annotation, value);
+                        if (!IsValidIdentifier(value!))
+                            Throw(moduleName, sourceLine.Number,
+                                "Invalid VM-global name '" + value + "'.", "invalid_global_name", value!);
+                        module.VmGlobals.Add(value!);
                         continue;
                     }
 
@@ -478,10 +500,20 @@ namespace DSCompilation.DIL
             return result;
         }
 
+        private static Dictionary<string, int> AssignVmGlobalSlots(ModuleDefinition[] orderedModules)
+        {
+            var result = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (ModuleDefinition module in orderedModules)
+                foreach (string name in module.VmGlobals)
+                    if (!result.ContainsKey(name)) result.Add(name, result.Count);
+            return result;
+        }
+
         private static FunctionContext[] CompileFunctions(
             ModuleDefinition[] orderedModules,
             Dictionary<string, int> functionIds,
             Dictionary<string, int> globalSlots,
+            Dictionary<string, int> vmGlobalSlots,
             bool generateDebugMetadata)
         {
             int compiledCount = orderedModules.Sum(m => m.Functions.Count);
@@ -504,6 +536,7 @@ namespace DSCompilation.DIL
                     baseSymbols,
                     functionIds,
                     globalSlots.Count,
+                    vmGlobalSlots.Count,
                     compiled,
                     generateDebugMetadata
                 );
@@ -517,6 +550,7 @@ namespace DSCompilation.DIL
             Dictionary<string, long> baseSymbols,
             Dictionary<string, int> functionIds,
             int globalCount,
+            int vmGlobalCount,
             FunctionContext[] output,
             bool generateDebugMetadata)
         {
@@ -541,6 +575,7 @@ namespace DSCompilation.DIL
                     {
                         case "IMPORT":
                         case "GLOBAL":
+                        case "VM_GLOBAL":
                         case "PARAMS":
                         case "LOCALS":
                             continue;
@@ -625,6 +660,7 @@ namespace DSCompilation.DIL
                     symbols,
                     functionIds,
                     globalCount,
+                    vmGlobalCount,
                     functionIds.Count,
                     module.Imports,
                     instructions!,
@@ -722,6 +758,7 @@ namespace DSCompilation.DIL
             Dictionary<string, long> symbols,
             Dictionary<string, int> functionIds,
             int globalCount,
+            int vmGlobalCount,
             int functionCount,
             IReadOnlyCollection<string> functionImports,
             List<Instruction> instructions,
@@ -911,6 +948,22 @@ namespace DSCompilation.DIL
                     int globalIndex = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
                     ValidateGlobalIndex(moduleName, lineNumber, globalCount, globalIndex);
                     instructions.Add(Instruction.StoreGlobal(globalIndex));
+                    return;
+                }
+
+                case "LOAD_VM_GLOBAL":
+                {
+                    int slot = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    ValidateGlobalIndex(moduleName, lineNumber, vmGlobalCount, slot);
+                    instructions.Add(Instruction.LoadVmGlobal(slot));
+                    return;
+                }
+
+                case "STORE_VM_GLOBAL":
+                {
+                    int slot = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    ValidateGlobalIndex(moduleName, lineNumber, vmGlobalCount, slot);
+                    instructions.Add(Instruction.StoreVmGlobal(slot));
                     return;
                 }
 

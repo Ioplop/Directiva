@@ -29,7 +29,7 @@ namespace DSimulation
         /// <returns>true if the entity can attack the target, false otherwise</returns>
         protected virtual bool CanAttack(SBEntity target)
         {
-            return target.alive // El objetivo aún está vivo
+            return alive && target.alive // El objetivo aún está vivo
                 && simulation.Time - lastAttack >= attackSpeed // El cooldown de ataque ya acabó
                 && (target.Position - Position).SqrMagnitude <= range * range; // El objetivo está a nuestro alcance
         }

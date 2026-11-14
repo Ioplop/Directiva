@@ -113,13 +113,14 @@ namespace Directiva.CodeUI
             IEnumerable<string> workspaceModules, out Plan savedPlan, out string error)
         {
             savedPlan = null;
-            if (workingPlan == null || (workingPlan.Kind != "function" && workingPlan.Kind != "shared"))
+            if (workingPlan == null || (workingPlan.Kind != "function" && workingPlan.Kind != "shared" &&
+                workingPlan.Kind != "global"))
             { error = "rename_no_symbol"; return false; }
             if (!TrySnapshot(savedProvider, workspaceModules, out var snapshot, out error)) return false;
-            string identity = workingPlan.Kind == "function"
-                ? workingPlan.OwnerModule + "." + workingPlan.OldName
-                : "shared." + workingPlan.OldName;
-            SymbolKind kind = workingPlan.Kind == "function" ? SymbolKind.Function : SymbolKind.Global;
+            string identity = workingPlan.Kind == "shared" ? "shared." + workingPlan.OldName
+                : workingPlan.OwnerModule + "." + workingPlan.OldName;
+            SymbolKind kind = workingPlan.Kind == "function" ? SymbolKind.Function :
+                workingPlan.Kind == "global" ? SymbolKind.VmGlobal : SymbolKind.Global;
             var selected = snapshot.Occurrences.Values.FirstOrDefault(e =>
                 e.Kind == kind && e.Identity == identity && e.Rename && e.Selectable &&
                 snapshot.Sources[e.Module].Substring(e.Span.Start, e.Span.Length) == workingPlan.OldName);
@@ -139,8 +140,11 @@ namespace Directiva.CodeUI
             { error = "rename_invalid_identifier"; return false; }
             if (newName == oldName)
             {
-                plan = new Plan(oldName, newName, selected.Kind == SymbolKind.Function ? "function" : "shared",
-                    selected.Kind == SymbolKind.Function ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null,
+                plan = new Plan(oldName, newName,
+                    selected.Kind == SymbolKind.Function ? "function" :
+                    selected.Kind == SymbolKind.VmGlobal ? "global" : "shared",
+                    selected.Kind != SymbolKind.Global
+                        ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null,
                     0, caret, new Dictionary<string, string>(), new Dictionary<string, string>());
                 error = null;
                 return true;
@@ -208,8 +212,11 @@ namespace Directiva.CodeUI
                 foreach (var edit in sameFile)
                     if (edit.Span.Start < selected.Span.Start)
                         newCaret += newName.Length - edit.Span.Length;
-            plan = new Plan(oldName, newName, selected.Kind == SymbolKind.Function ? "function" : "shared",
-                selected.Kind == SymbolKind.Function ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null,
+            plan = new Plan(oldName, newName,
+                selected.Kind == SymbolKind.Function ? "function" :
+                selected.Kind == SymbolKind.VmGlobal ? "global" : "shared",
+                selected.Kind != SymbolKind.Global
+                    ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null,
                 edits.Values.Sum(items => items.Length), newCaret, originals, changes);
             error = null;
             return true;
@@ -264,6 +271,9 @@ namespace Directiva.CodeUI
                 else if (statement is SharedStatement shared &&
                     analysis.SharedDeclarations.TryGetValue(shared, out var global))
                     AddOccurrence(snapshot, module, shared.NameSpan, global, true, true);
+                else if (statement is VmGlobalStatement privateGlobal &&
+                    analysis.VmGlobalDeclarations.TryGetValue(privateGlobal, out var slot))
+                    AddOccurrence(snapshot, module, privateGlobal.NameSpan, slot, true, true);
                 else if (statement is FromImportStatement from)
                 {
                     foreach (var imported in from.Names)
@@ -273,7 +283,8 @@ namespace Directiva.CodeUI
                         // a previously invalid `from ... import newName` resolve.
                         AddTrace(snapshot, module, imported.Span.Start, target);
                         if (target != null &&
-                            (target.Kind == SymbolKind.Function || target.Kind == SymbolKind.Global))
+                            (target.Kind == SymbolKind.Function || target.Kind == SymbolKind.Global ||
+                             target.Kind == SymbolKind.VmGlobal))
                             AddOccurrence(snapshot, module, imported.Span, target, true, true);
                     }
                 }
@@ -302,7 +313,8 @@ namespace Directiva.CodeUI
                 else return;
                 AddTrace(snapshot, module, location.Start, symbol);
                 if (symbol == null ||
-                    (symbol.Kind != SymbolKind.Function && symbol.Kind != SymbolKind.Global)) return;
+                    (symbol.Kind != SymbolKind.Function && symbol.Kind != SymbolKind.Global &&
+                     symbol.Kind != SymbolKind.VmGlobal)) return;
                 // An explicit import alias remains local to the importing module.
                 bool alias = expression is NameExpression aliasName &&
                     explicitAliases.Contains(aliasName.Name) &&
@@ -313,10 +325,11 @@ namespace Directiva.CodeUI
             {
                 analysis.ForTargetSymbols.TryGetValue(target, out var symbol);
                 AddTrace(snapshot, module, target.VariableSpan.Start, symbol);
-                if (symbol == null || symbol.Kind != SymbolKind.Global) return;
+                if (symbol == null || (symbol.Kind != SymbolKind.Global &&
+                    symbol.Kind != SymbolKind.VmGlobal)) return;
                 bool alias = explicitAliases.Contains(target.Variable) &&
                     symbols.Imports.TryGetValue(target.Variable, out var imported) &&
-                    imported.Kind == SymbolKind.Global && imported.QualifiedName == symbol.QualifiedName;
+                    imported.Kind == symbol.Kind && imported.QualifiedName == symbol.QualifiedName;
                 AddOccurrence(snapshot, module, target.VariableSpan, symbol, !alias, !alias);
             });
         }
@@ -341,6 +354,9 @@ namespace Directiva.CodeUI
                     break;
                 case SharedStatement shared:
                     WalkExpression(shared.Initializer, expression);
+                    break;
+                case VmGlobalStatement vmGlobal:
+                    WalkExpression(vmGlobal.Initializer, expression);
                     break;
                 case AssignmentStatement assignment:
                     WalkExpression(assignment.Target, expression);
@@ -450,7 +466,7 @@ namespace Directiva.CodeUI
         private static bool HasCompleteReferenceCoverage(Snapshot snapshot, Edit selected,
             string oldName, string newName)
         {
-            string owner = selected.Kind == SymbolKind.Function
+            string owner = selected.Kind == SymbolKind.Function || selected.Kind == SymbolKind.VmGlobal
                 ? selected.Identity.Substring(0, selected.Identity.LastIndexOf('.')) : null;
             foreach (var pair in snapshot.Tokens)
             {
@@ -465,18 +481,19 @@ namespace Directiva.CodeUI
                 // the parser. Shared slots additionally require a declaration/import.
                 bool couldReference = module == owner ||
                     (owner != null && ImportsModule(pair.Value, owner));
-                if (selected.Kind == SymbolKind.Global)
+                if (selected.Kind == SymbolKind.Global || selected.Kind == SymbolKind.VmGlobal)
                 {
                     var symbols = snapshot.Analyses[module].ModuleSymbols[module];
                     couldReference |= symbols.Globals.ContainsKey(oldName) ||
                         symbols.Imports.Values.Any(s => s.QualifiedName == selected.Identity);
                     for (int i = 0; i + 1 < pair.Value.Count; i++)
-                        if (pair.Value[i].Kind == TokenKind.Shared &&
+                        if ((pair.Value[i].Kind == TokenKind.Shared ||
+                            pair.Value[i].Kind == TokenKind.Global) &&
                             pair.Value[i + 1].Kind == TokenKind.Identifier &&
                             pair.Value[i + 1].Text == oldName) couldReference = true;
                     // For a shared slot there can be more than one declaring module.
                     foreach (var declaration in snapshot.Occurrences.Values)
-                        if (declaration.Kind == SymbolKind.Global &&
+                        if (declaration.Kind == selected.Kind &&
                             declaration.Identity == selected.Identity &&
                             ImportsModule(pair.Value, declaration.Module))
                         { couldReference = true; break; }

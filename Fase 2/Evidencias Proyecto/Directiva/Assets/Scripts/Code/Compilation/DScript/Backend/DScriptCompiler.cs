@@ -21,6 +21,7 @@ namespace DSCompilation.DScript.Backend
         public IReadOnlyDictionary<string, int> FunctionIds { get; }
         public IReadOnlyList<DScriptCompiledInitializer> Initializers { get; }
         public IReadOnlyList<DScriptSymbol> SharedSlots { get; }
+        public IReadOnlyList<DScriptSymbol> VmGlobalSlots { get; }
 
         internal DScriptCompiledProgram(DScriptAnalysis analysis, string bootstrapModule,
             Dictionary<string, string> dil, CodeContext code,
@@ -35,6 +36,7 @@ namespace DSCompilation.DScript.Backend
                 code.Functions.ToDictionary(f => f.Name, f => f.Id, StringComparer.Ordinal));
             Initializers = initializers;
             SharedSlots = Array.AsReadOnly(analysis.GlobalSlots.ToArray());
+            VmGlobalSlots = Array.AsReadOnly(analysis.VmGlobalSlots.ToArray());
         }
 
         /// <summary>Qualified function identifiers are module.name (not just name).</summary>
@@ -124,6 +126,8 @@ namespace DSCompilation.DScript.Backend
                     bootstrapSource.Append("# IMPORT : ").Append(module).Append('\n');
                 foreach (DScriptSymbol shared in analysis.GlobalSlots)
                     bootstrapSource.Append("# GLOBAL : ").Append(shared.DILGlobalName).Append('\n');
+                foreach (DScriptSymbol vmGlobal in analysis.VmGlobalSlots)
+                    bootstrapSource.Append("# VM_GLOBAL : ").Append(vmGlobal.DILGlobalName).Append('\n');
 
                 // The default entry is an inert function. A host MUST select a real user
                 // function explicitly and run initializers once before starting units.
@@ -137,12 +141,42 @@ namespace DSCompilation.DScript.Backend
                     bootstrapSource.Append(new DScriptDILEmitter(analysis, step.Module, 0, maxLocalSlots)
                         .EmitInitializer(functionName, step));
                 }
+                // Each unit receives its own initializers. A synthetic trampoline
+                // runs them before the chosen entry function, inside that VM's steps.
+                string vmInitializerName = null;
+                if (analysis.VmGlobalInitializers.Count != 0)
+                {
+                    vmInitializerName = bootstrap + ".__vm_init";
+                    for (int i = 0; i < analysis.VmGlobalInitializers.Count; i++)
+                    {
+                        var step = analysis.VmGlobalInitializers[i];
+                        string functionName = "__vinit_" + i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+                        bootstrapSource.Append(new DScriptDILEmitter(analysis, step.Module, 0, maxLocalSlots)
+                            .EmitVmGlobalInitializer(functionName, step));
+                    }
+                    bootstrapSource.Append("# FUNCTION : __vm_init\n# PARAMS : 0\n# LOCALS : 0\n");
+                    for (int i = 0; i < analysis.VmGlobalInitializers.Count; i++)
+                    {
+                        // CALL takes a numeric function ID in DIL. Generated names
+                        // must instead be resolved by PUSH_FUNCTION, followed by
+                        // the zero-argument indirect call. The resulting None is
+                        // discarded so the initializer leaves an empty stack.
+                        bootstrapSource.Append("PUSH_FUNCTION ").Append(bootstrap).Append(".__vinit_")
+                            .Append(i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture))
+                            .Append("\nCALL_INDIRECT 0\nPOP\n");
+                    }
+                    bootstrapSource.Append("PUSH NONE\nRETURN\n# END_FUNCTION\n");
+                }
                 modules.Add(bootstrap, bootstrapSource.ToString());
                 var provider = new InMemoryDILSourceProvider(modules);
                 // Explicit source maps must not be overwritten by auto-generated DIL positions.
                 CodeContext code = new DILParser(provider, new DILParserOptions(generateDebugMetadata: false))
                     .Parse(bootstrap);
                 var ids = code.Functions.ToDictionary(f => f.Name, f => f.Id, StringComparer.Ordinal);
+                if (vmInitializerName != null)
+                    code = new CodeContext(code.EntryFunctionId, code.GlobalCount,
+                        code.Functions, code.NativeFunctions, code.VmGlobalCount,
+                        ids[vmInitializerName]);
                 var initializers = new List<DScriptCompiledInitializer>();
                 for (int i = 0; i < initializerNames.Count; i++)
                     initializers.Add(new DScriptCompiledInitializer(analysis.SharedInitializers[i], ids[initializerNames[i]]));

@@ -4,7 +4,7 @@ using DSCompilation.DScript.Ast;
 
 namespace DSCompilation.DScript.Semantics
 {
-    public enum SymbolKind { Parameter, Local, Global, Function, NativeFunction, NativeConstant, Module, Self, ImplicitSelfMethod }
+    public enum SymbolKind { Parameter, Local, Global, Function, NativeFunction, NativeConstant, Module, Self, ImplicitSelfMethod, VmGlobal }
 
     /// <summary>Resolved, stable identity of a function, shared slot, import or native symbol.</summary>
     public sealed class DScriptSymbol
@@ -15,7 +15,8 @@ namespace DSCompilation.DScript.Semantics
         public int Slot { get; internal set; } = -1;
         public int ParameterCount { get; }
         /// <summary>Collision-free DIL identifier for a program-wide shared slot.</summary>
-        public string DILGlobalName => Kind == SymbolKind.Global ? DScriptNameMangler.Global(QualifiedName) : null;
+        public string DILGlobalName => Kind == SymbolKind.Global || Kind == SymbolKind.VmGlobal
+            ? DScriptNameMangler.Global(QualifiedName) : null;
         public DScriptSymbol(string name, string qualifiedName, SymbolKind kind, int parameters = -1)
         { Name = name; QualifiedName = qualifiedName; Kind = kind; ParameterCount = parameters; }
         public override string ToString() => Kind + " " + QualifiedName + (Slot < 0 ? "" : " @" + Slot);
@@ -66,6 +67,20 @@ namespace DSCompilation.DScript.Semantics
         { Order = order; Module = module; Declaration = declaration; Symbol = symbol; }
     }
 
+    /// <summary>One initializer run once for every new VM, in import/source order.</summary>
+    public sealed class DScriptVmGlobalInitializer
+    {
+        public int Order { get; }
+        public string Module { get; }
+        public VmGlobalStatement Declaration { get; }
+        public DScriptSymbol Symbol { get; }
+        public Expression Expression => Declaration.Initializer;
+        public SourceSpan Span => Declaration.Span;
+        internal DScriptVmGlobalInitializer(int order, string module, VmGlobalStatement declaration,
+            DScriptSymbol symbol)
+        { Order = order; Module = module; Declaration = declaration; Symbol = symbol; }
+    }
+
     /// <summary>
     /// Semantic side tables preserve the original AST; the backend will consume these bindings,
     /// already-assigned local/global slots, and source spans to emit DIL + debug metadata.
@@ -79,6 +94,9 @@ namespace DSCompilation.DScript.Semantics
         public IReadOnlyDictionary<Expression, DScriptSymbol> ExpressionSymbols { get; }
         public IReadOnlyDictionary<ForStatement, DScriptSymbol> ForTargetSymbols { get; }
         public IReadOnlyList<DScriptSymbol> GlobalSlots { get; }
+        public IReadOnlyList<DScriptSymbol> VmGlobalSlots { get; }
+        public IReadOnlyDictionary<VmGlobalStatement, DScriptSymbol> VmGlobalDeclarations { get; }
+        public IReadOnlyList<DScriptVmGlobalInitializer> VmGlobalInitializers { get; }
         /// <summary>Every declaration points at the canonical program-wide shared symbol.</summary>
         public IReadOnlyDictionary<SharedStatement, DScriptSymbol> SharedDeclarations { get; }
         /// <summary>Initialization steps in deterministic import/source order, one step per variable.</summary>
@@ -95,12 +113,17 @@ namespace DSCompilation.DScript.Semantics
             IReadOnlyList<DScriptSymbol> globals,
             IReadOnlyDictionary<SharedStatement, DScriptSymbol> sharedDeclarations,
             IReadOnlyList<DScriptSharedInitializer> sharedInitializers,
+            IReadOnlyList<DScriptSymbol> vmGlobals,
+            IReadOnlyDictionary<VmGlobalStatement, DScriptSymbol> vmGlobalDeclarations,
+            IReadOnlyList<DScriptVmGlobalInitializer> vmGlobalInitializers,
             IReadOnlyList<string> order, IReadOnlyList<DScriptDiagnostic> diagnostics)
         {
             EntryModule = entry; Modules = modules; ModuleSymbols = moduleSymbols;
             FunctionSymbols = functionSymbols; ExpressionSymbols = expressions;
             ForTargetSymbols = targets; GlobalSlots = globals;
             SharedDeclarations = sharedDeclarations; SharedInitializers = sharedInitializers;
+            VmGlobalSlots = vmGlobals; VmGlobalDeclarations = vmGlobalDeclarations;
+            VmGlobalInitializers = vmGlobalInitializers;
             DependenciesFirst = order; Diagnostics = diagnostics;
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DMath;
 using DOrchestration;
 using DSimulation;
 using Directiva.EditorTests.SimulationTests;
@@ -125,7 +126,7 @@ namespace Directiva.EditorTests.OrchestrationTests
                 t.Equal(0L, world.Tick, "read-only queries do not advance the world");
             });
 
-            Add("DeadAndIncompatible", "Only id and alive survive death; unsupported receivers return a warning", t =>
+            Add("DeadAndIncompatible", "Archived states remain inspectable; unsupported receivers still warn", t =>
             {
                 World world = SimulationTestHarness.NewWorld();
                 SBUnit unit = SimulationTestHarness.AddUnit(world, 1, 5, 5, 0);
@@ -140,9 +141,20 @@ namespace Directiva.EditorTests.OrchestrationTests
                 SimulationTestHarness.Kill(unit);
                 t.Equal(unit.id, (int)bridge.Observe(unit.id, "id").Value, "dead ID is retained");
                 t.Equal(false, (bool)bridge.Observe(unit.id, "alive").Value, "dead alive is false");
+                world.Update(); // Archive the dead unit after removing it from the active registry.
                 SimulationCallResult health = bridge.Observe(unit.id, "health");
                 t.Equal(SimulationCallStatus.Success, health.Status, "dead property does not warn");
-                t.Check(health.Value == null, "dead health returns None");
+                t.Equal((Fixed)0, (Fixed)health.Value, "dead health is zero");
+                t.Equal(SimulationEntityType.Unit, (SimulationEntityType)bridge.Observe(unit.id, "type").Value,
+                    "dead entity type remains available");
+                t.Equal(SimulationMoveMode.Hold, (SimulationMoveMode)bridge.Observe(unit.id, "move_mode").Value,
+                    "dead unit movement is Hold");
+                t.Equal(SimulationCallStatus.Success,
+                    bridge.Observe(unit.id, "distance_to", new SimulationEntityReference(resource.id)).Status,
+                    "distance from archived entity remains valid");
+                t.Check(bridge.Observe(unit.id, "enemies").Value == null, "dead receiver cannot discover enemies");
+                t.Check(bridge.Order(unit.id, unit.id, "move", 10, 10).Value == null,
+                    "dead unit cannot receive orders");
             });
 
             Add("OrderOverloads", "Position and entity movement use the same public DScript name", t =>

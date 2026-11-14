@@ -65,7 +65,7 @@ pass              := 'pass' NEWLINE
 ```
 
 - **Fuera de funciones:** únicamente imports, `shared name [= expression]` y `def`. `counter = 0`, `print(...)`, bucles o condicionales al nivel superior son errores **sintácticos DS2013**.
-- **Dentro de funciones/bloques:** `shared` es un **error sintáctico DS2014**. El antiguo `global` de Python **no está admitido** (DS2015 en cualquier ámbito).
+- **Dentro de funciones/bloques:** `shared` es un **error sintáctico DS2014**. `global` es una declaración de módulo con memoria persistente **privada por VM**. No puede aparecer en funciones (DS2023).
 - Cada declaración `shared` lleva **un nombre** (no `shared a, b`); puede ubicarse antes o después de las funciones, aunque por claridad se aconseja ponerlas arriba.
 - Listas, llamadas y declaraciones `def` admiten coma final opcional (`[1,2,]`, `f(1,)`, `def f(a,):`). No se aceptan comas dobles ni argumentos nombrados.
 - `print()` admite **0..16 argumentos** (límite actual de llamadas nativas). Evalúa los argumentos de izquierda a derecha, los convierte con la misma semántica que `str`, los separa con un espacio y emite **una sola línea** (inclusive vacía). Por ejemplo `print("Primos:", [2, 3, 5])` produce `Primos: [2, 3, 5]`. No hay `sep=` ni `end=` y el compilador no reescribe esta llamada: genera `CALL_INDIRECT n` como con cualquier función nativa.
@@ -173,3 +173,18 @@ Consultar `Backend/README.md` para un ejemplo de integración con el orquestador
 ## Fuera del alcance actual
 
 Arranque de la simulación real, objetos y acciones de unidades/Nexo, stepping por sentencia DScript (actualmente Step avanza instrucciones VM), tipado estático e instrucciones DIB. El editor ya oculta `.dil`, compila `.dscript` y publica opcionalmente DIL generado sin sobrescribir archivos manuales. Las pruebas del backend **sí ejecutan la VM desde DScript**, pero deben validarse dentro de Unity antes de afirmar PASS.
+
+
+## `global` privado de cada VM
+
+`global objetivo: SimulationObject = None` declara un slot por **instancia de VM**,
+visible desde todas sus funciones y desde módulos importadores. No es Python's
+`global` como declaración dentro de funciones: aquí se declara exclusivamente en el módulo.
+Cada VM ejecuta una sola vez sus inicializadores privados antes de la primera
+función; reiniciar la función de entrada conserva su estado. Los `shared` se
+inicializan previamente por equipo en VMs de bootstrap, sin ejecutar los `global`.
+`global` y `shared` aceptan las mismas anotaciones opcionales para el editor,
+y las asignaciones no son verificadas en tiempo de ejecución.
+
+El heap permanece compartido por bando y las referencias almacenadas en `global`
+se consideran raíces del GC, incluso entre llamadas.

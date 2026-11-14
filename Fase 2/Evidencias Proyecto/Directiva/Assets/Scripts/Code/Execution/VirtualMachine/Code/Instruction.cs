@@ -117,6 +117,12 @@ namespace DSExecution.VirtualMachine
         public static Instruction StoreGlobal(int globalIndex)
             => new(InstructionId.StoreGlobal, operandA: globalIndex);
 
+        public static Instruction LoadVmGlobal(int index)
+            => new(InstructionId.LoadVmGlobal, operandA: index);
+
+        public static Instruction StoreVmGlobal(int index)
+            => new(InstructionId.StoreVmGlobal, operandA: index);
+
         public static Instruction Operation(OperationId operationId)
             => new(InstructionId.Operation, operationOperand: operationId);
 
@@ -205,6 +211,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.StoreLocal => $"StoreLocal {OperandA}",
                 InstructionId.LoadGlobal => $"LoadGlobal {OperandA}",
                 InstructionId.StoreGlobal => $"StoreGlobal {OperandA}",
+                InstructionId.LoadVmGlobal => $"LoadVmGlobal {OperandA}",
+                InstructionId.StoreVmGlobal => $"StoreVmGlobal {OperandA}",
                 InstructionId.Operation => $"Operation {OperationOperand}",
                 InstructionId.Jump => $"Jump {OperandA}",
                 InstructionId.JumpIfTrue => $"JumpIfTrue {OperandA}",

@@ -20,12 +20,15 @@ namespace Directiva.EditorTests.SimulationTests
             void Add(string name, string description, Action<DirectivaTestContext> action) =>
                 SimulationTestHarness.AddTest(tests, "Observations", name, description, action);
 
-            Add("IdentityAndDeadEntities", "Only id and alive can be observed after death", t =>
+            Add("IdentityAndDeadEntities", "Death preserves readable entity state without keeping it active", t =>
             {
                 World world = SimulationTestHarness.NewWorld();
                 SBUnit unit = SimulationTestHarness.AddUnit(world, 1, 5, 5, 0);
+                SBUnit enemy = SimulationTestHarness.AddUnit(world, 2, 12, 5, 0);
                 world.Start();
                 SimulationObserver observer = world.Observer;
+                FixedVector2 lastPosition = unit.Position;
+                Fixed lastRotation = unit.Rotation;
 
                 t.Equal(unit.id, observer.GetId(unit.id), "living ID");
                 t.Check(observer.IsAlive(unit.id), "living entity");
@@ -33,19 +36,62 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Equal((Fixed?)SConstants.UnitHealth, observer.GetHealth(unit.id), "health");
 
                 SimulationTestHarness.Kill(unit);
-                world.Update(); // Remove the entity from the registry.
+                world.Update(); // Remove from active registry, archive for observation.
 
-                t.Equal(unit.id, observer.GetId(unit.id), "removed entity keeps its identifier");
-                t.Check(!observer.IsAlive(unit.id), "removed entity is dead");
-                t.Check(!observer.GetEntityType(unit.id).HasValue, "no type retained");
-                t.Check(!observer.GetHealth(unit.id).HasValue, "no health retained");
-                t.Check(!observer.GetPosition(unit.id).HasValue, "no position retained");
-                t.Check(!observer.GetResources(unit.id).HasValue, "no side resources retained");
-                t.Check(observer.GetEnemies(unit.id) == null, "no entity queries after death");
-                t.Check(!observer.GetTime(unit.id).HasValue, "no global query after death");
-                t.Check(!observer.GetTick(unit.id).HasValue, "no world tick after death");
-                t.Check(!observer.GetUnitCost(unit.id).HasValue, "no rules after death");
+                t.Check(!SimulationTestHarness.Registry(world).ContainsKey(unit.id), "not in active registry");
+                t.Equal(unit.id, observer.GetId(unit.id), "dead entity retains its identifier");
+                t.Check(!observer.IsAlive(unit.id), "dead entity is not alive");
+                t.Equal((SimulationEntityType?)SimulationEntityType.Unit, observer.GetEntityType(unit.id), "type retained");
+                t.Equal((Fixed?)0, observer.GetHealth(unit.id), "dead health is zero");
+                t.Equal((Fixed?)0, observer.GetShields(unit.id), "dead shields are zero");
+                t.Equal((Fixed?)SConstants.UnitHealth, observer.GetMaxHealth(unit.id), "maximum health retained");
+                t.Equal((FixedVector2?)lastPosition, observer.GetPosition(unit.id), "last position retained");
+                t.Equal((Fixed?)lastRotation, observer.GetRotation(unit.id), "last rotation retained");
+                t.Equal((SimulationMoveMode?)SimulationMoveMode.Hold, observer.GetMoveMode(unit.id), "move is Hold");
+                t.Equal((SimulationActionMode?)SimulationActionMode.Hold, observer.GetActionMode(unit.id), "action is Hold");
+                t.Equal((FixedVector2?)FixedVector2.Zero, observer.GetVelocity(unit.id), "velocity cleared");
+                t.Equal((bool?)false, observer.IsMoving(unit.id), "dead unit is not moving");
+                t.Equal((bool?)false, observer.IsAttackReady(unit.id), "dead unit cannot attack");
+                t.Equal((SimulationSideRelation?)SimulationSideRelation.Enemy,
+                    observer.GetRelation(unit.id, enemy.id), "original side retained");
+                t.Equal((Fixed?)7, observer.GetDistanceTo(unit.id, enemy.id), "geometric observations remain valid");
+                t.Check(observer.GetEnemies(unit.id) == null, "dead receiver cannot discover live entities");
+                t.Check(!observer.GetEntitiesByType(enemy.id).Contains(unit.id), "dead unit is not discoverable");
+                t.Equal((Fixed?)world.Time, observer.GetTime(unit.id), "world time remains available");
+                t.Equal((long?)world.Tick, observer.GetTick(unit.id), "world tick remains available");
+                t.Equal((int?)world.Parameters.UnitCost, observer.GetUnitCost(unit.id), "world rules available");
                 t.Check(!observer.IsAlive(987654), "unknown entity is not alive");
+                t.Check(!observer.GetPosition(987654).HasValue, "unknown entity has no state");
+            });
+
+            Add("DeadResourceAndNexus", "Depleted deposits and destroyed nexuses retain inspection data", t =>
+            {
+                World world = SimulationTestHarness.NewWorld(width: 40, height: 40);
+                var nexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(6, 6));
+                var unit = SimulationTestHarness.AddUnit(world, 1, 10, 10, 0);
+                var resource = new SBResource(world.GetSide(0), SimulationTestHarness.P(20, 20), 0, 25, 3);
+                world.EnqueueCreation(nexus);
+                world.EnqueueCreation(resource);
+                world.Start();
+                int nexusId = nexus.id;
+                int resourceId = resource.id;
+                SimulationTestHarness.Kill(resource);
+                SimulationTestHarness.Kill(nexus);
+                world.Update();
+                var o = world.Observer;
+
+                t.Equal((SimulationEntityType?)SimulationEntityType.Nexus, o.GetEntityType(nexusId), "nexus type archived");
+                t.Equal((Fixed?)0, o.GetHealth(nexusId), "nexus health zero");
+                t.Equal((Fixed?)0, o.GetShields(nexusId), "nexus shields zero");
+                t.Equal((bool?)false, o.IsBuilding(nexusId), "nexus construction stopped");
+                t.Equal((bool?)false, o.CanBuild(nexusId), "dead nexus cannot build");
+                t.Equal((int?)nexusId, o.GetNexus(unit.id), "reference to dead friendly nexus retained");
+                t.Equal((SimulationEntityType?)SimulationEntityType.Resource, o.GetEntityType(resourceId), "resource type archived");
+                t.Equal((Fixed?)0, o.GetHealth(resourceId), "resource health zero");
+                t.Equal((int?)25, o.GetAmount(resourceId), "resource last amount retained");
+                t.Equal((int?)3, o.GetRichness(resourceId), "resource richness retained");
+                t.Equal((bool?)false, o.IsAvailableToGather(resourceId), "dead deposit not available");
+                t.Check(!o.GetResourceNodes(unit.id).Contains(resourceId), "dead resource absent from queries");
             });
 
             Add("NeutralRelationships", "Neutrality always wins; allies and enemies are relative", t =>

@@ -20,6 +20,9 @@ namespace DSCompilation.DScript.Semantics
         private readonly Dictionary<Expression, DScriptSymbol> bindings = new Dictionary<Expression, DScriptSymbol>();
         private readonly Dictionary<ForStatement, DScriptSymbol> forTargets = new Dictionary<ForStatement, DScriptSymbol>();
         private readonly List<DScriptSymbol> globalSlots = new List<DScriptSymbol>();
+        private readonly List<DScriptSymbol> vmGlobalSlots = new List<DScriptSymbol>();
+        private readonly Dictionary<VmGlobalStatement, DScriptSymbol> vmGlobalDeclarations =
+            new Dictionary<VmGlobalStatement, DScriptSymbol>();
         private readonly Dictionary<string, DScriptSymbol> sharedByName =
             new Dictionary<string, DScriptSymbol>(StringComparer.Ordinal);
         private readonly Dictionary<SharedStatement, DScriptSymbol> sharedDeclarations =
@@ -39,6 +42,8 @@ namespace DSCompilation.DScript.Semantics
         public IReadOnlyDictionary<Expression, DScriptSymbol> Bindings => bindings;
         public IReadOnlyDictionary<ForStatement, DScriptSymbol> ForTargets => forTargets;
         public IReadOnlyList<DScriptSymbol> GlobalSlots => globalSlots;
+        public IReadOnlyList<DScriptSymbol> VmGlobalSlots => vmGlobalSlots;
+        public IReadOnlyDictionary<VmGlobalStatement, DScriptSymbol> VmGlobalDeclarations => vmGlobalDeclarations;
         public IReadOnlyDictionary<SharedStatement, DScriptSymbol> SharedDeclarations => sharedDeclarations;
 
         public DScriptBinder(IReadOnlyDictionary<string, ModuleNode> parsed, DScriptFrontendOptions options = null)
@@ -57,6 +62,7 @@ namespace DSCompilation.DScript.Semantics
         {
             errors.Clear(); modules.Clear(); functions.Clear(); bindings.Clear(); forTargets.Clear(); globalSlots.Clear();
             sharedByName.Clear(); sharedDeclarations.Clear(); firstInitializer.Clear();
+            vmGlobalSlots.Clear(); vmGlobalDeclarations.Clear();
             // Declare every module's exports before processing imports or function bodies.
             foreach (var entry in nodes.OrderBy(p => p.Key, StringComparer.Ordinal))
                 modules.Add(entry.Key, new DScriptModuleSymbols(entry.Key, entry.Value));
@@ -68,6 +74,14 @@ namespace DSCompilation.DScript.Semantics
                 symbol.Slot = globalSlots.Count;
                 globalSlots.Add(symbol);
             }
+            // Private slots are unique per module (not per name across the whole team).
+            // Their order is immutable and independent of filesystem enumeration.
+            foreach (DScriptSymbol symbol in vmGlobalDeclarations.Values.Distinct()
+                .OrderBy(s => s.QualifiedName, StringComparer.Ordinal))
+            {
+                symbol.Slot = vmGlobalSlots.Count;
+                vmGlobalSlots.Add(symbol);
+            }
             foreach (var module in modules.Values)
                 RegisterImports(module);
             foreach (var module in modules.Values)
@@ -78,11 +92,13 @@ namespace DSCompilation.DScript.Semantics
                 {
                     if (statement is SharedStatement shared && shared.Initializer != null)
                         VisitExpression(shared.Initializer);
+                    else if (statement is VmGlobalStatement vmGlobal && vmGlobal.Initializer != null)
+                        VisitExpression(vmGlobal.Initializer);
                     else if (statement is FunctionStatement function)
                         BindFunction(function, module);
                     else if (!(statement is ImportStatement || statement is FromImportStatement ||
-                        statement is SharedStatement))
-                        Error("DS4001", "Only imports, function declarations and shared declarations are allowed at module scope.", statement.Span, "module_scope_binder");
+                        statement is SharedStatement || statement is VmGlobalStatement))
+                        Error("DS4001", "Only imports, functions and shared/global declarations are allowed at module scope.", statement.Span, "module_scope_binder");
                 }
             }
             currentFunction = null;
@@ -113,6 +129,8 @@ namespace DSCompilation.DScript.Semantics
                 }
                 else if (statement is SharedStatement declaration)
                     DeclareShared(module, declaration);
+                else if (statement is VmGlobalStatement vmDeclaration)
+                    DeclareVmGlobal(module, vmDeclaration);
             }
         }
 
@@ -130,6 +148,13 @@ namespace DSCompilation.DScript.Semantics
                 Error(module.Name, "DS4002", "Function and shared variable share the name '" + name + "'.", declaration.NameSpan, "function_shared_collision", name);
                 return;
             }
+            if (module.GlobalsInternal.TryGetValue(name, out DScriptSymbol previous) &&
+                previous.Kind == SymbolKind.VmGlobal)
+            {
+                Error(module.Name, "DS4002", "A shared variable conflicts with a private global '" + name + "'.",
+                    declaration.NameSpan, "duplicate_module_symbol", name);
+                return;
+            }
             if (!sharedByName.TryGetValue(name, out DScriptSymbol symbol))
             {
                 symbol = new DScriptSymbol(name, "shared." + name, SymbolKind.Global);
@@ -145,6 +170,27 @@ namespace DSCompilation.DScript.Semantics
                         "' has more than one initializer in the program.", declaration.NameSpan, "duplicate_shared_initializer", name);
                 else firstInitializer.Add(name, declaration);
             }
+        }
+
+        private void DeclareVmGlobal(DScriptModuleSymbols module, VmGlobalStatement declaration)
+        {
+            string name = declaration.Name;
+            if (name == "self")
+            {
+                Error(module.Name, "DS4031", "'self' is reserved for the current entity.",
+                    declaration.NameSpan, "self_reserved");
+                return;
+            }
+            if (module.ExportsInternal.ContainsKey(name))
+            {
+                Error(module.Name, "DS4002", "Duplicate module symbol '" + name + "'.",
+                    declaration.NameSpan, "duplicate_module_symbol", name);
+                return;
+            }
+            var symbol = new DScriptSymbol(name, module.Name + "." + name, SymbolKind.VmGlobal);
+            module.GlobalsInternal.Add(name, symbol);
+            module.ExportsInternal.Add(name, symbol);
+            vmGlobalDeclarations.Add(declaration, symbol);
         }
 
         /// <summary>
@@ -171,6 +217,28 @@ namespace DSCompilation.DScript.Semantics
                         firstInitializer.TryGetValue(declaration.Name, out SharedStatement first) &&
                         ReferenceEquals(first, declaration))
                         result.Add(new DScriptSharedInitializer(result.Count, name, declaration, symbol));
+                }
+            }
+        }
+
+        /// <summary>VM-global initialization follows the same inlined import-DFS as shared.</summary>
+        public IReadOnlyList<DScriptVmGlobalInitializer> BuildVmGlobalInitializationPlan(string entryModule)
+        {
+            var result = new List<DScriptVmGlobalInitializer>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            Visit(entryModule);
+            return result;
+
+            void Visit(string name)
+            {
+                if (!modules.TryGetValue(name, out DScriptModuleSymbols module) || !visited.Add(name)) return;
+                foreach (var statement in module.Ast.Statements)
+                {
+                    if (statement is ImportStatement import) Visit(import.ModuleName);
+                    else if (statement is FromImportStatement from) Visit(from.ModuleName);
+                    else if (statement is VmGlobalStatement declaration && declaration.Initializer != null &&
+                        vmGlobalDeclarations.TryGetValue(declaration, out DScriptSymbol symbol))
+                        result.Add(new DScriptVmGlobalInitializer(result.Count, name, declaration, symbol));
                 }
             }
         }
@@ -243,8 +311,8 @@ namespace DSCompilation.DScript.Semantics
             if (module.ExportsInternal.TryGetValue(alias, out DScriptSymbol declared))
             {
                 // Importing the same shared variable that this module already declared is harmless.
-                if (declared.Kind == SymbolKind.Global && target.Kind == SymbolKind.Global &&
-                    declared.QualifiedName == target.QualifiedName) return;
+                if ((declared.Kind == SymbolKind.Global || declared.Kind == SymbolKind.VmGlobal) &&
+                    declared.Kind == target.Kind && declared.QualifiedName == target.QualifiedName) return;
                 Error(module.Name, "DS4004", "Import '" + alias + "' conflicts with a declaration in this module.", span, "import_conflict", alias);
                 return;
             }
@@ -285,8 +353,15 @@ namespace DSCompilation.DScript.Semantics
                 }
                 if (table.LocalsInternal.ContainsKey(name))
                     Error("DS4005", "Duplicate parameter '" + name + "'.", function.Span, "duplicate_parameter", name);
-                else if (module.GlobalsInternal.ContainsKey(name))
-                    Error("DS4006", "Parameter '" + name + "' conflicts with a shared variable.", function.Span, "parameter_shared_collision", name);
+                else if (module.GlobalsInternal.TryGetValue(name, out DScriptSymbol globalSymbol))
+                {
+                    if (globalSymbol.Kind == SymbolKind.VmGlobal)
+                        Error("DS4006", "Parameter '" + name + "' conflicts with a VM-private global.",
+                            function.Span, "parameter_vm_global_collision", name);
+                    else
+                        Error("DS4006", "Parameter '" + name + "' conflicts with a shared variable.",
+                            function.Span, "parameter_shared_collision", name);
+                }
                 else AddLocal(name, SymbolKind.Parameter);
             }
             CollectLocalAssignments(function.Body);
@@ -388,6 +463,8 @@ namespace DSCompilation.DScript.Semantics
                 Error("DS4010", "Imports must be declared at module scope.", statement.Span, "imports_scope");
             else if (statement is SharedStatement)
                 Error("DS4019", "Shared variables must be declared at module scope.", statement.Span, "shared_scope_binder");
+            else if (statement is VmGlobalStatement)
+                Error("DS4020", "VM-global variables must be declared at module scope.", statement.Span, "vm_global_scope_binder");
         }
 
         private void VisitTarget(Expression target, bool readBeforeWrite)
@@ -401,7 +478,8 @@ namespace DSCompilation.DScript.Semantics
                     return;
                 }
                 var symbol = FindName(variable.Name, variable.Span, true);
-                if (symbol == null || symbol.Kind != SymbolKind.Local && symbol.Kind != SymbolKind.Parameter && symbol.Kind != SymbolKind.Global)
+                if (symbol == null || symbol.Kind != SymbolKind.Local && symbol.Kind != SymbolKind.Parameter && symbol.Kind != SymbolKind.Global &&
+                    symbol.Kind != SymbolKind.VmGlobal)
                     Error("DS4011", "Cannot assign to '" + variable.Name + "'.", variable.Span, "cannot_assign", variable.Name);
                 else bindings[variable] = symbol;
             }
@@ -414,7 +492,8 @@ namespace DSCompilation.DScript.Semantics
             {
                 if (TryResolveStaticModule(attribute, out DScriptSymbol member, out _, out _, out _))
                 {
-                    if (member != null && member.Kind == SymbolKind.Global)
+                    if (member != null && (member.Kind == SymbolKind.Global ||
+                        member.Kind == SymbolKind.VmGlobal))
                         bindings[attribute] = member;
                     else Error("DS4012", "Only variables (not functions/constants) can be assigned through imported modules.", attribute.Span, "import_assignment");
                 }

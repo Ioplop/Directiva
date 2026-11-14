@@ -24,6 +24,7 @@ namespace Directiva.EditorTests.DScript
                 ("AugmentedAssignment", "def f():\n    a = 1\n    a += 2\n    a //= 3\n    a **= 2\n", 1),
                 ("NestedBlocks", "def f():\n    while True:\n        for x in range(3):\n            if x:\n                pass\n", 1),
                 ("SharedDeclaration", "shared total\nshared next_value = 7\ndef f():\n    total = 4\n", 3),
+                ("VmGlobalDeclaration", "global target: SimulationObject = None\nglobal attempts = 0\ndef f():\n    attempts += 1\n", 3),
                 ("StringAndComments", "# comment\ndef f():\n    x = 'abc' # tail\n    return x\n", 1),
                 ("EmptyTupleAndDict", "def f():\n    return [(), {}]\n", 1),
                 ("NotIn", "def f(x):\n    return x not in [1,2]\n", 1),
@@ -57,7 +58,7 @@ namespace Directiva.EditorTests.DScript
                 ("ModuleAssignment", "x = 1\n", "DS2013"),
                 ("ModuleCall", "print(1)\n", "DS2013"),
                 ("ModuleConditional", "if True:\n    pass\n", "DS2013"),
-                ("LegacyGlobal", "global x\n", "DS2015"),
+                ("NestedGlobal", "def f():\n    global x\n", "DS2023"),
                 ("SharedCommaUnsupported", "shared x, y\n", "DS2000")
             };
             foreach (var fixture in invalid)

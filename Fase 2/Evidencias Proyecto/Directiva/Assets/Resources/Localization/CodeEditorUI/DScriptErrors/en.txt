@@ -101,3 +101,8 @@
 [hint_function_value]: Warning: a function value is used where {{1}} is expected.
 
 [hint_function_argument]: Warning: none of the overloads accepts a function reference in this argument.
+[vm_global_scope]: 'global' declarations are only allowed at module scope.
+[expected_vm_global_name]: Expected a variable name after 'global'.
+[end_vm_global_declaration]: Expected the end of the global declaration.
+[vm_global_scope_binder]: VM-private 'global' variables must be declared at module scope.
+[parameter_vm_global_collision]: Parameter '{{1}}' conflicts with a VM-private global variable.

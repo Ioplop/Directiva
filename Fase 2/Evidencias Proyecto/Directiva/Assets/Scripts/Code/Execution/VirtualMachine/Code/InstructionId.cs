@@ -49,6 +49,10 @@ namespace DSExecution.VirtualMachine
         IterNext = 32,
 
         // Push the receiver identity from the VM host (not from shared memory).
-        PushSelf = 33
+        PushSelf = 33,
+
+        // VM-private slots (append-only IDs for binary compatibility).
+        LoadVmGlobal = 34,
+        StoreVmGlobal = 35
     }
 }

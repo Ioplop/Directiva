@@ -68,6 +68,15 @@ namespace DSCompilation.DScript.Backend
             return FunctionText(functionName, 0);
         }
 
+        internal string EmitVmGlobalInitializer(string functionName, DScriptVmGlobalInitializer initializer)
+        {
+            EmitExpression(initializer.Expression);
+            Store(initializer.Symbol, initializer.Span);
+            Op("PUSH NONE", initializer.Span);
+            Op("RETURN", initializer.Span);
+            return FunctionText(functionName, 0);
+        }
+
         private string FunctionText(string name, int parameters)
         {
             var text = new StringBuilder();
@@ -102,6 +111,8 @@ namespace DSCompilation.DScript.Backend
         {
             if (symbol.Kind == SymbolKind.Global)
                 Op("LOAD_GLOBAL " + symbol.Slot, span);
+            else if (symbol.Kind == SymbolKind.VmGlobal)
+                Op("LOAD_VM_GLOBAL " + symbol.Slot, span);
             else if (symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter)
                 Op("LOAD_LOCAL " + symbol.Slot, span);
             else if (symbol.Kind == SymbolKind.Self)
@@ -118,6 +129,8 @@ namespace DSCompilation.DScript.Backend
         {
             if (symbol.Kind == SymbolKind.Global)
                 Op("STORE_GLOBAL " + symbol.Slot, span);
+            else if (symbol.Kind == SymbolKind.VmGlobal)
+                Op("STORE_VM_GLOBAL " + symbol.Slot, span);
             else if (symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter)
                 Op("STORE_LOCAL " + symbol.Slot, span);
             else throw Failure(span, "Assignment to an immutable symbol.");

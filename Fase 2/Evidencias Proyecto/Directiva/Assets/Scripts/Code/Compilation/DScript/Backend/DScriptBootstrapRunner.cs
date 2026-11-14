@@ -65,7 +65,8 @@ namespace DSCompilation.DScript.Backend
             var outcomes = new List<DScriptInitializerOutcome>();
             foreach (DScriptCompiledInitializer step in program.Initializers)
             {
-                var vm = new DirectivaVM(program.Code, memory, options, step.FunctionId);
+                // Bootstrap VMs only initialize team-wide `shared`, never unit-private `global`.
+                var vm = new DirectivaVM(program.Code, memory, options, step.FunctionId, false);
                 if (onOutput != null) vm.Printed += onOutput;
                 Action<string> captureOutput = null;
                 if (onOutputWithDebug != null)

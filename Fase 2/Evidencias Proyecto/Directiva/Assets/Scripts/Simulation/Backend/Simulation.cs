@@ -9,6 +9,9 @@ namespace DSimulation
     {
         private static readonly Fixed GridScale = 2;
         private static readonly short SolverPasses = 3;
+        // Maximum tangential correction per contact (0.015 world units).
+        // This breaks exact head-on symmetry without perturbing normal separation.
+        private static readonly Fixed CollisionSlideStep = Fixed.Decimal(15, 3);
         // Note on object pooling: While Object pooling is a valid strategy for storing unused entities, for now, building a new one is preffered for simplicity, as no
         // simulation should have more than a couple hundred entities at any given time and more than a single removal / instantiation is already expected
         // to be a rare occurence.
@@ -37,10 +40,29 @@ namespace DSimulation
         // Public order API; the future orchestrator is responsible for authorization.
         public SimulationController Controller { get; }
 
+        // Commands and active-world queries only see living registrations.
         internal bool TryGetEntity(int id, out SBEntity entity) => entityRegistry.TryGetValue(id, out entity);
+
+        /// <summary>
+        /// Read-only identity lookup. A dead entity remains observable at its final
+        /// state, but never returns to the active registry, collision grid or sides.
+        /// This archive lives only as long as its simulation match.
+        /// </summary>
+        internal bool TryGetRecordedEntity(int id, out SBEntity entity) =>
+            entityRegistry.TryGetValue(id, out entity) || deadEntityRegistry.TryGetValue(id, out entity);
+
+        internal int? GetLastNexusId(SBSide side)
+        {
+            int id = lastNexusIds[side.id];
+            return id != 0 && TryGetRecordedEntity(id, out _) ? id : null;
+        }
 
         // Maintains entities on a dictionary for quick fixed access time by ID
         private Dictionary<int, SBEntity> entityRegistry = new();
+        // Dead entities are archived separately: queries can still read their last
+        // state without exposing them to simulation updates or entity enumeration.
+        private readonly Dictionary<int, SBEntity> deadEntityRegistry = new();
+        private readonly int[] lastNexusIds = new int[3];
         
         // A set of all entities which need to be removed. Order *should not* matter, because removing entities has no immediate consequences.
         // Note: If order DOES end up mattering, change this into a list and ensure that no one entity is removed twice. No further changes are necessary.
@@ -57,6 +79,9 @@ namespace DSimulation
         public long Tick { get; private set; }
         public ulong seed { get; }
         internal readonly DeterministicRandom random;
+        // A pair must keep its preferred passing side from one tick to the next.
+        // Keyed by ordered entity IDs; collisions do not consume the script RNG.
+        private readonly Dictionary<ulong, int> collisionSlideDirections = new();
 
         // The spatial grid where everything lives in the simulation.
         private readonly List<SBEntity>[,] worldSpace;
@@ -289,6 +314,8 @@ namespace DSimulation
             SBEntity entity = entityRegistry[id];
             entityRegistry.Remove(id);
             entityList.Remove(entity);
+            if (!entity.alive)
+                deadEntityRegistry.Add(id, entity);
 
             if (entity is SBUnit unit)
                 unit.side.units.Remove(unit);
@@ -330,6 +357,7 @@ namespace DSimulation
             }
             else if (entity is SBNexus nexus)
             {
+                lastNexusIds[entity.side.id] = id;
                 nexus.side.Nexus = nexus;
                 NotifyEvent(nexus.CreateNexusEvent());
             }
@@ -417,6 +445,56 @@ namespace DSimulation
             }
         }
 
+        private static ulong CollisionPairKey(int aId, int bId)
+        {
+            uint low = (uint)Math.Min(aId, bId);
+            uint high = (uint)Math.Max(aId, bId);
+            return ((ulong)low << 32) | high;
+        }
+
+        /// <summary>
+        /// The seeded left/right preference for a colliding pair remains stable
+        /// across ticks and solver passes. Using an independent PCG stream keyed
+        /// by the pair avoids consuming the simulation RNG used by DScript.
+        /// </summary>
+        private int GetCollisionSlideDirection(ulong pairKey)
+        {
+            if (!collisionSlideDirections.TryGetValue(pairKey, out int direction))
+            {
+                ulong pairSeed = unchecked(seed ^ (pairKey * 0x9E3779B97F4A7C15UL));
+                var pairRandom = new DeterministicRandom(pairSeed);
+                direction = pairRandom.NextInt(0, 2) == 0 ? -1 : 1;
+                collisionSlideDirections.Add(pairKey, direction);
+            }
+            return direction;
+        }
+
+        /// <summary>
+        /// Checks whether the clearance needed to pass on a given side would
+        /// leave the world. Test the full contact radius here, NOT the tiny slide
+        /// step: waiting until the unit reaches the wall can trap it permanently.
+        /// </summary>
+        private int CountBlockedSidewaysMoves(SBEntity a, SBEntity b, FixedVector2 sideways)
+        {
+            if (a.CollisionPriority > b.CollisionPriority)
+                return WouldLeaveWorld(a, -sideways) ? 1 : 0;
+            if (b.CollisionPriority > a.CollisionPriority)
+                return WouldLeaveWorld(b, sideways) ? 1 : 0;
+
+            int blocked = 0;
+            if (WouldLeaveWorld(a, -sideways / 2)) blocked++;
+            if (WouldLeaveWorld(b, sideways / 2)) blocked++;
+            return blocked;
+        }
+
+        private bool WouldLeaveWorld(SBEntity entity, FixedVector2 displacement)
+        {
+            FixedVector2 pos = entity.Position + displacement;
+            Fixed radius = entity.Radius;
+            return pos.X - radius < 0 || pos.X + radius > dimensions.X ||
+                pos.Y - radius < 0 || pos.Y + radius > dimensions.Y;
+        }
+
         /// <summary>
         /// Solves the collision between two entities.
         /// </summary>
@@ -456,22 +534,43 @@ namespace DSimulation
                 normalDistance = distance / scalarDistance;
             }
 
-            // Check if there are priorities involved.
-            // Then separate accordingly
+            // Preserve the exact normal correction and add a tiny sideways one.
+            // The signed tangent is chosen ONCE per entity pair: rerolling each
+            // tick would cancel the slide and leave centered routes stuck.
+            Fixed tangentStep = Fixed.Min(CollisionSlideStep, overlap / 4);
+            FixedVector2 tangent = normalDistance.Rotate90();
+            ulong pairKey = CollisionPairKey(a.id, b.id);
+            int side = GetCollisionSlideDirection(pairKey);
+
+            // Prefer the side with enough room for the entire contact radius.
+            // A 0.015-unit probe alone would only notice the wall when it is too
+            // late to pass the obstacle. The actual displacement stays tiny.
+            FixedVector2 passage = tangent * (minDistance * side);
+            if (CountBlockedSidewaysMoves(a, b, passage) >
+                CountBlockedSidewaysMoves(a, b, -passage))
+            {
+                side = -side;
+                collisionSlideDirections[pairKey] = side;
+            }
+            FixedVector2 sideways = tangent * (tangentStep * side);
+            FixedVector2 correction = normalDistance * overlap + sideways;
+
+            // Preserve the original collision-priority convention: higher
+            // priority yields, equal priorities split the total correction.
             if (a.CollisionPriority > b.CollisionPriority)
             {
-                a.Position -= normalDistance * overlap;
+                a.Position -= correction;
                 EnsureWorldLimits(a);
             }
-            else if (b.CollisionPriority > a.CollisionPriority) 
+            else if (b.CollisionPriority > a.CollisionPriority)
             {
-                b.Position += normalDistance * overlap;
+                b.Position += correction;
                 EnsureWorldLimits(b);
             }
             else
             {
-                a.Position -= normalDistance * overlap / 2;
-                b.Position += normalDistance * overlap / 2;
+                a.Position -= correction / 2;
+                b.Position += correction / 2;
                 EnsureWorldLimits(a);
                 EnsureWorldLimits(b);
             }

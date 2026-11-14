@@ -42,6 +42,9 @@ namespace DSCompilation.DScript
             var globals = new List<DScriptSymbol>();
             var sharedDeclarations = new Dictionary<DSCompilation.DScript.Ast.SharedStatement, DScriptSymbol>();
             var sharedInitializers = new List<DScriptSharedInitializer>();
+            var vmGlobalSlots = new List<DScriptSymbol>();
+            var vmGlobalDeclarations = new Dictionary<DSCompilation.DScript.Ast.VmGlobalStatement, DScriptSymbol>();
+            var vmGlobalInitializers = new List<DScriptVmGlobalInitializer>();
             if (errors.Count == 0 || (allowPartialBindings && loader.Modules.Count != 0))
             {
                 var binder = new DScriptBinder(loader.Modules, options);
@@ -54,6 +57,10 @@ namespace DSCompilation.DScript
                 globals.AddRange(binder.GlobalSlots);
                 foreach (var item in binder.SharedDeclarations) sharedDeclarations[item.Key] = item.Value;
                 sharedInitializers.AddRange(binder.BuildSharedInitializationPlan(entryModule));
+                vmGlobalSlots.AddRange(binder.VmGlobalSlots);
+                foreach (var item in binder.VmGlobalDeclarations)
+                    vmGlobalDeclarations[item.Key] = item.Value;
+                vmGlobalInitializers.AddRange(binder.BuildVmGlobalInitializationPlan(entryModule));
             }
             // Stable order across machines and filesystem enumeration; diagnostics still retain source locations.
             errors.Sort((a, b) =>
@@ -65,7 +72,9 @@ namespace DSCompilation.DScript
             });
             if (errors.Count > options.MaxDiagnostics) errors.RemoveRange(options.MaxDiagnostics, errors.Count - options.MaxDiagnostics);
             return new DScriptAnalysis(entryModule, loader.Modules, moduleSymbols, functions, expressions,
-                targets, globals, sharedDeclarations, sharedInitializers, loader.DependenciesFirst, errors);
+                targets, globals, sharedDeclarations, sharedInitializers,
+                vmGlobalSlots, vmGlobalDeclarations, vmGlobalInitializers,
+                loader.DependenciesFirst, errors);
         }
     }
 }

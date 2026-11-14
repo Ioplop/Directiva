@@ -165,6 +165,12 @@ namespace DSimulation
                 return;
             NotifyTransform();
             alive = false;
+            // Dead entities expose an immutable, unambiguous final combat state.
+            // Their position, rotation, identity and maximum stats remain intact.
+            // EventDeath already removes the visual; no extra health/shields
+            // events are needed for this transition.
+            Health = 0;
+            Shields = 0;
             simulation.MarkRemoval(id);
             NotifyDeath();
         }
@@ -192,6 +198,9 @@ namespace DSimulation
         /// <param name="dmg">Damage to apply. Negative numbers heal, but only health.</param>
         internal virtual void Damage(Fixed dmg)
         {
+            // Death freezes this entity's last state for future observations.
+            if (!alive)
+                return;
             if (dmg == 0)
             {
                 return;

@@ -517,7 +517,17 @@ namespace DSimulation
         /// </summary>
         internal override void Die()
         {
+            if (!alive)
+                return;
             StopAction();
+            // A dead unit must never retain an active movement command, velocity,
+            // target or pending drop. The final position and facing are preserved.
+            moveMode = MoveMode.Hold;
+            entityMoveTarget = null;
+            positionMoveTarget = Position;
+            linearVelocity = FixedVector2.Zero;
+            dropResource = false;
+            timeGathering = 0;
             base.Die();
         }
     }

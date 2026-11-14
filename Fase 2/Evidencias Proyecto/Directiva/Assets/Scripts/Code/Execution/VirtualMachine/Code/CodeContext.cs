@@ -15,6 +15,10 @@ namespace DSExecution.VirtualMachine
 
         public int EntryFunctionId { get; }
         public int GlobalCount { get; }
+        /// <summary>Persistent slots that belong to each VM separately.</summary>
+        public int VmGlobalCount { get; }
+        /// <summary>Optional synthesized initialization entry run once per VM.</summary>
+        public int VmInitializerFunctionId { get; }
         public IReadOnlyCollection<FunctionContext> Functions => functions.Values;
         public IReadOnlyCollection<NativeFunction> NativeFunctions => nativeFunctions.Values;
 
@@ -22,10 +26,14 @@ namespace DSExecution.VirtualMachine
             int entryFunctionId,
             int globalCount,
             IEnumerable<FunctionContext> functions,
-            IEnumerable<NativeFunction> nativeFunctions = null)
+            IEnumerable<NativeFunction> nativeFunctions = null,
+            int vmGlobalCount = 0,
+            int vmInitializerFunctionId = -1)
         {
             if (globalCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(globalCount));
+            if (vmGlobalCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(vmGlobalCount));
 
             if (functions == null)
                 throw new ArgumentNullException(nameof(functions));
@@ -62,8 +70,16 @@ namespace DSExecution.VirtualMachine
                     nameof(entryFunctionId)
                 );
 
+            if (vmInitializerFunctionId >= 0 &&
+                (!this.functions.TryGetValue(vmInitializerFunctionId, out var vmInitializer) ||
+                 vmInitializer.ParameterCount != 0))
+                throw new ArgumentException("VM initializer must be a zero-argument compiled function.",
+                    nameof(vmInitializerFunctionId));
+
             EntryFunctionId = entryFunctionId;
             GlobalCount = globalCount;
+            VmGlobalCount = vmGlobalCount;
+            VmInitializerFunctionId = vmInitializerFunctionId;
         }
 
         /// <summary>

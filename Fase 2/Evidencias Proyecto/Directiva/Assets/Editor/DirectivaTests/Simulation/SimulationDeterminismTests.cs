@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using DMath;
 using DSimulation;
@@ -27,20 +28,41 @@ namespace Directiva.EditorTests.SimulationTests
                 t.Attach("world_snapshot", Snapshot(a));
             });
 
-            Add("DifferentSeedsSameNonRandomScenario", "When there is no randomness, changing the seed changes nothing", t =>
+            Add("DifferentSeedsPreserveNormalCorrection", "Changing the seed may change the slide side, but not the normal resolution", t =>
             {
                 World a = SimulationTestHarness.NewWorld(seed: 1);
                 World b = SimulationTestHarness.NewWorld(seed: 999);
-                SimulationTestHarness.Add(a, 5, 5, 1);
-                SimulationTestHarness.Add(a, 6, 5, 1);
-                SimulationTestHarness.Add(b, 5, 5, 1);
-                SimulationTestHarness.Add(b, 6, 5, 1);
-                for (int i = 0; i < 3; i++)
-                {
-                    a.Update();
-                    b.Update();
-                }
-                t.Equal(Snapshot(a), Snapshot(b), "seed should not change nonrandom correction");
+                var a1 = SimulationTestHarness.Add(a, 5, 5, 1);
+                var a2 = SimulationTestHarness.Add(a, 6, 5, 1);
+                var b1 = SimulationTestHarness.Add(b, 5, 5, 1);
+                var b2 = SimulationTestHarness.Add(b, 6, 5, 1);
+                a.Update();
+                b.Update();
+                t.Equal(a1.Position.X, b1.Position.X, "first normal displacement");
+                t.Equal(a2.Position.X, b2.Position.X, "second normal displacement");
+                t.Check(FixedVector2.Distance(a1.Position, a2.Position) >= 2,
+                    "first world has no residual overlap");
+                t.Check(FixedVector2.Distance(b1.Position, b2.Position) >= 2,
+                    "second world has no residual overlap");
+            });
+
+            Add("SlideDoesNotAdvanceScriptRandom", "Collision side choices do not consume the simulation's script RNG", t =>
+            {
+                World contact = SimulationTestHarness.NewWorld(seed: 765);
+                World separated = SimulationTestHarness.NewWorld(seed: 765);
+                SimulationTestHarness.Add(contact, 5, 5, 1);
+                SimulationTestHarness.Add(contact, 6, 5, 1);
+                SimulationTestHarness.Add(separated, 5, 5, 1);
+                SimulationTestHarness.Add(separated, 9, 5, 1);
+                contact.Update();
+                separated.Update();
+                var field = typeof(World).GetField("random",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                t.Check(field != null, "simulation's seeded RNG field exists");
+                if (field == null) return;
+                var a = (DeterministicRandom)field.GetValue(contact);
+                var b = (DeterministicRandom)field.GetValue(separated);
+                t.Equal(a.NextUInt(), b.NextUInt(), "script RNG sequence is unchanged");
             });
 
             Add("DeterministicCreateDieSequence", "Equal creation and death queues yield the same future state", t =>

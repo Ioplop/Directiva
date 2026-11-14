@@ -82,6 +82,21 @@ namespace DSCompilation.DScript.Ast
             : base(span) { Name = name; NameSpan = nameSpan; Initializer = initializer; DeclaredType = declaredType; }
     }
 
+    /// <summary>
+    /// Module-scoped variable whose storage belongs to one VM, not the team.
+    /// Imports can reference the same slot inside that VM; type hints remain optional.
+    /// </summary>
+    public sealed class VmGlobalStatement : Statement
+    {
+        public string Name { get; }
+        public SourceSpan NameSpan { get; }
+        public Expression Initializer { get; }
+        public string DeclaredType { get; }
+        public VmGlobalStatement(string name, SourceSpan nameSpan, Expression initializer,
+            SourceSpan span, string declaredType = null) : base(span)
+        { Name = name; NameSpan = nameSpan; Initializer = initializer; DeclaredType = declaredType; }
+    }
+
     public sealed class AssignmentStatement : Statement
     {
         public Expression Target { get; }

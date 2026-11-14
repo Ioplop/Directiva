@@ -4,13 +4,13 @@ using DMath;
 namespace DSimulation
 {
     /// <summary>
-    /// Read-only interface to the live simulation state. All operations receive the ID of
+    /// Read-only interface to active and archived simulation state. All operations receive the ID of
     /// the entity whose perspective is being observed. No SBEntity or SBSide references
     /// leave this interface; entity references are represented by IDs.
     ///
-    /// Except for id and alive, every observation returns null when the receiver is
-    /// dead or absent. Inapplicable receiver types also return null (and will produce
-    /// a warning when called through the future DScript orchestrator).
+    /// Dead entities retain their final state for ordinary getters and geometric
+    /// observations. Discovery queries still require a living receiver and only
+    /// enumerate living entities. Unknown IDs and inapplicable types return null.
     /// </summary>
     public sealed class SimulationObserver
     {
@@ -31,34 +31,40 @@ namespace DSimulation
             return false;
         }
 
-        /// <summary>Resolves an ID to a living unit.</summary>
+        /// <summary>Resolves a registered or archived entity, including one which died.</summary>
+        internal bool IsRecorded(int id) => simulation.TryGetRecordedEntity(id, out _);
+
+        private bool TryRecorded(int id, out SBEntity entity) =>
+            simulation.TryGetRecordedEntity(id, out entity);
+
+        /// <summary>Resolves an ID to a unit, including its last state after death.</summary>
         private bool TryUnit(int id, out SBUnit unit)
         {
-            bool valid = TryAlive(id, out SBEntity entity) && entity is SBUnit;
+            bool valid = TryRecorded(id, out SBEntity entity) && entity is SBUnit;
             unit = valid ? (SBUnit)entity : null;
             return valid;
         }
 
-        /// <summary>Resolves an ID to a living nexus.</summary>
+        /// <summary>Resolves an ID to a nexus, including its last state after death.</summary>
         private bool TryNexus(int id, out SBNexus nexus)
         {
-            bool valid = TryAlive(id, out SBEntity entity) && entity is SBNexus;
+            bool valid = TryRecorded(id, out SBEntity entity) && entity is SBNexus;
             nexus = valid ? (SBNexus)entity : null;
             return valid;
         }
 
-        /// <summary>Resolves an ID to a living resource deposit.</summary>
+        /// <summary>Resolves an ID to a resource, including its last state after death.</summary>
         private bool TryResource(int id, out SBResource resource)
         {
-            bool valid = TryAlive(id, out SBEntity entity) && entity is SBResource;
+            bool valid = TryRecorded(id, out SBEntity entity) && entity is SBResource;
             resource = valid ? (SBResource)entity : null;
             return valid;
         }
 
-        /// <summary>Resolves an ID to a living unit or nexus.</summary>
+        /// <summary>Resolves an ID to a unit or nexus, including its final state.</summary>
         private bool TryVMEntity(int id, out SBVMEntity vmEntity)
         {
-            bool valid = TryAlive(id, out SBEntity entity) && entity is SBVMEntity;
+            bool valid = TryRecorded(id, out SBEntity entity) && entity is SBVMEntity;
             vmEntity = valid ? (SBVMEntity)entity : null;
             return valid;
         }
@@ -163,13 +169,13 @@ namespace DSimulation
         /// <summary>Returns whether the entity is a unit, nexus, or resource.</summary>
         [SimulationObservation("type", MemberKind = SimulationObservationMemberKind.Property)]
         public SimulationEntityType? GetEntityType(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? TypeOf(entity) : null;
+            TryRecorded(receiverId, out SBEntity entity) ? TypeOf(entity) : null;
 
         /// <summary>Returns the relation between the receiver and another entity.</summary>
         [SimulationObservation("relation")]
         public SimulationSideRelation? GetRelation(int receiverId, [SimulationEntityArgument] int otherId)
         {
-            if (!TryAlive(receiverId, out SBEntity receiver) || !TryAlive(otherId, out SBEntity other))
+            if (!TryRecorded(receiverId, out SBEntity receiver) || !TryRecorded(otherId, out SBEntity other))
                 return null;
             return Relate(receiver, other);
         }
@@ -203,13 +209,13 @@ namespace DSimulation
         /// <summary>Returns the entity position in world coordinates.</summary>
         [SimulationObservation("position", MemberKind = SimulationObservationMemberKind.Property)]
         public FixedVector2? GetPosition(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Position : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Position : null;
 
         /// <summary>Returns the center-to-center distance to another entity.</summary>
         [SimulationObservation("distance_to")]
         public Fixed? GetDistanceTo(int receiverId, [SimulationEntityArgument] int otherId)
         {
-            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+            if (!TryRecorded(receiverId, out SBEntity entity) || !TryRecorded(otherId, out SBEntity other))
                 return null;
             return (other.Position - entity.Position).Magnitude;
         }
@@ -218,7 +224,7 @@ namespace DSimulation
         [SimulationObservation("distance_squared_to")]
         public Fixed? GetDistanceSquaredTo(int receiverId, [SimulationEntityArgument] int otherId)
         {
-            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+            if (!TryRecorded(receiverId, out SBEntity entity) || !TryRecorded(otherId, out SBEntity other))
                 return null;
             return (other.Position - entity.Position).SqrMagnitude;
         }
@@ -226,23 +232,23 @@ namespace DSimulation
         /// <summary>Returns the entity collision radius.</summary>
         [SimulationObservation("radius", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetRadius(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Radius : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Radius : null;
 
         /// <summary>Returns the entity rotation angle.</summary>
         [SimulationObservation("rotation", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetRotation(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Rotation : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Rotation : null;
 
         /// <summary>Returns the forward direction derived from the entity rotation.</summary>
         [SimulationObservation("forward", MemberKind = SimulationObservationMemberKind.Property)]
         public FixedVector2? GetForward(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Forward : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Forward : null;
 
         /// <summary>Returns the distance between entity surfaces, clamped to zero.</summary>
         [SimulationObservation("surface_distance_to")]
         public Fixed? GetSurfaceDistanceTo(int receiverId, [SimulationEntityArgument] int otherId)
         {
-            if (!TryAlive(receiverId, out SBEntity entity) || !TryAlive(otherId, out SBEntity other))
+            if (!TryRecorded(receiverId, out SBEntity entity) || !TryRecorded(otherId, out SBEntity other))
                 return null;
             return Fixed.Max(0, (other.Position - entity.Position).Magnitude - entity.Radius - other.Radius);
         }
@@ -260,8 +266,10 @@ namespace DSimulation
         public bool? IsInAttackRange(int receiverId, [SimulationEntityArgument] int targetId)
         {
             if (!TryVMEntity(receiverId, out SBVMEntity attacker) ||
-                !TryAlive(targetId, out SBEntity target))
+                !TryRecorded(targetId, out SBEntity target))
                 return null;
+            if (!attacker.alive || !target.alive)
+                return false;
             return (target.Position - attacker.Position).SqrMagnitude <= attacker.range * attacker.range;
         }
 
@@ -271,6 +279,8 @@ namespace DSimulation
         {
             if (!TryUnit(receiverId, out SBUnit unit) || !TryResource(resourceId, out SBResource resource))
                 return null;
+            if (!unit.alive || !resource.alive)
+                return false;
             Fixed range = unit.Radius + resource.Radius + simulation.Parameters.GatherDistance;
             return (resource.Position - unit.Position).SqrMagnitude <= range * range;
         }
@@ -292,14 +302,15 @@ namespace DSimulation
         public List<int> GetUnits(int receiverId) =>
             FindEntities(receiverId, SimulationSideRelation.Ally, SimulationEntityType.Unit);
 
-        /// <summary>Returns the ID of the receiver side living nexus, if any.</summary>
+        /// <summary>Returns the side's last known nexus, even if it was destroyed.</summary>
         [SimulationObservation("nexus", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity, MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetNexus(int receiverId)
         {
-            if (!TryAlive(receiverId, out SBEntity receiver) || receiver.side.id == 0)
+            if (!TryRecorded(receiverId, out SBEntity receiver) || receiver.side.id == 0)
                 return null;
-            SBNexus nexus = receiver.side.Nexus;
-            return nexus != null && nexus.alive ? nexus.id : null;
+            // A previously destroyed nexus is still a stable, inspectable
+            // SimulationObject, although no active nexus exists for orders.
+            return simulation.GetLastNexusId(receiver.side);
         }
 
         /// <summary>Returns a snapshot of all living resource deposits.</summary>
@@ -393,40 +404,42 @@ namespace DSimulation
         /// <summary>Returns the entity current health.</summary>
         [SimulationObservation("health", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetHealth(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Health : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Health : null;
 
         /// <summary>Returns the entity maximum health.</summary>
         [SimulationObservation("max_health", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetMaxHealth(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.MaxHealth : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.MaxHealth : null;
 
         /// <summary>Returns the entity current shields.</summary>
         [SimulationObservation("shields", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetShields(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.Shields : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.Shields : null;
 
         /// <summary>Returns the entity maximum shields.</summary>
         [SimulationObservation("max_shields", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetMaxShields(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.MaxShields : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.MaxShields : null;
 
         /// <summary>Returns the entity shield regeneration rate.</summary>
         [SimulationObservation("shield_regen", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetShieldRegen(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.ShieldRegen : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.ShieldRegen : null;
 
         /// <summary>Returns the simulation time of the entity latest recorded damage.</summary>
         [SimulationObservation("last_damage_time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetLastDamageTime(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.LastDamage : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.LastDamage : null;
 
         /// <summary>Returns the time remaining before shield regeneration resumes.</summary>
         [SimulationObservation("shield_regen_cooldown_remaining", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetShieldRegenCooldownRemaining(int receiverId)
         {
-            if (!TryAlive(receiverId, out SBEntity entity))
+            if (!TryRecorded(receiverId, out SBEntity entity))
                 return null;
-            return Fixed.Max(0, simulation.Parameters.ShieldRegenCooldown - (simulation.Time - entity.LastDamage));
+            return entity.alive
+                ? Fixed.Max(0, simulation.Parameters.ShieldRegenCooldown - (simulation.Time - entity.LastDamage))
+                : (Fixed)0;
         }
 
         /// <summary>Returns the attack range of a unit or nexus.</summary>
@@ -447,18 +460,18 @@ namespace DSimulation
         /// <summary>Returns the remaining time until the next attack is available.</summary>
         [SimulationObservation("attack_cooldown_remaining", AppliesTo = SimulationEntityKinds.Player, MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetAttackCooldownRemaining(int receiverId) =>
-            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.AttackCooldownRemaining : null;
+            TryVMEntity(receiverId, out SBVMEntity entity) ? (entity.alive ? entity.AttackCooldownRemaining : (Fixed)0) : null;
 
         /// <summary>Checks whether the attack cooldown has elapsed.</summary>
         [SimulationObservation("attack_ready", AppliesTo = SimulationEntityKinds.Player, MemberKind = SimulationObservationMemberKind.Property)]
         public bool? IsAttackReady(int receiverId) =>
-            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.AttackCooldownRemaining <= 0 : null;
+            TryVMEntity(receiverId, out SBVMEntity entity) ? entity.alive && entity.AttackCooldownRemaining <= 0 : null;
 
         /// <summary>Returns the unit attack target or nexus locked target, if alive.</summary>
         [SimulationObservation("attack_target", AppliesTo = SimulationEntityKinds.Player, ResultKind = SimulationObservationResultKind.Entity, MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetAttackTarget(int receiverId)
         {
-            if (!TryAlive(receiverId, out SBEntity entity))
+            if (!TryRecorded(receiverId, out SBEntity entity))
                 return null;
             SBEntity target = null;
             if (entity is SBUnit unit && unit.actionMode == SBUnit.ActionMode.Attack)
@@ -611,7 +624,7 @@ namespace DSimulation
             if (!TryUnit(receiverId, out SBUnit unit))
                 return null;
             SBNexus nexus = unit.side.Nexus;
-            if (unit.Cargo == 0 || nexus == null || !nexus.alive)
+            if (!unit.alive || unit.Cargo == 0 || nexus == null || !nexus.alive)
                 return false;
             Fixed distance = unit.Radius + nexus.Radius + simulation.Parameters.UnloadDistance;
             return (nexus.Position - unit.Position).SqrMagnitude <= distance * distance;
@@ -645,7 +658,7 @@ namespace DSimulation
         {
             if (!TryResource(receiverId, out SBResource resource))
                 return null;
-            return resource.GatheringUnit == null || !resource.GatheringUnit.alive;
+            return resource.alive && (resource.GatheringUnit == null || !resource.GatheringUnit.alive);
         }
 
         // Economy and building
@@ -653,7 +666,7 @@ namespace DSimulation
         /// <summary>Returns the resources currently owned by the receiver side.</summary>
         [SimulationObservation("resources", MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetResources(int receiverId) =>
-            TryAlive(receiverId, out SBEntity entity) ? entity.side.Resources : null;
+            TryRecorded(receiverId, out SBEntity entity) ? entity.side.Resources : null;
 
         /// <summary>Indicates whether the nexus has a unit under construction.</summary>
         [SimulationObservation("is_building", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
@@ -663,12 +676,12 @@ namespace DSimulation
         /// <summary>Returns the resource cost of constructing a unit.</summary>
         [SimulationObservation("unit_cost", MemberKind = SimulationObservationMemberKind.Property)]
         public int? GetUnitCost(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Parameters.UnitCost : null;
+            TryRecorded(receiverId, out _) ? simulation.Parameters.UnitCost : null;
 
         /// <summary>Returns the time needed to construct a unit.</summary>
         [SimulationObservation("unit_build_time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetUnitBuildTime(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Parameters.UnitBuildTime : null;
+            TryRecorded(receiverId, out _) ? simulation.Parameters.UnitBuildTime : null;
 
         /// <summary>Returns the time left in the nexus current construction.</summary>
         [SimulationObservation("build_time_remaining", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
@@ -690,41 +703,41 @@ namespace DSimulation
         [SimulationObservation("can_build", AppliesTo = SimulationEntityKinds.Nexus, MemberKind = SimulationObservationMemberKind.Property)]
         public bool? CanBuild(int receiverId) =>
             TryNexus(receiverId, out SBNexus nexus)
-                ? nexus.side.id != 0 && !nexus.IsBuilding && nexus.side.Resources >= simulation.Parameters.UnitCost
+                ? nexus.alive && nexus.side.id != 0 && !nexus.IsBuilding && nexus.side.Resources >= simulation.Parameters.UnitCost
                 : null;
 
-        // Simulation time and world rules; still require a living receiver.
+        // Simulation time and world rules; archived receivers also retain access.
 
         /// <summary>Returns the current elapsed simulation time.</summary>
         [SimulationObservation("time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetTime(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Time : null;
+            TryRecorded(receiverId, out _) ? simulation.Time : null;
 
         /// <summary>Returns the current simulation tick.</summary>
         [SimulationObservation("tick", MemberKind = SimulationObservationMemberKind.Property)]
         public long? GetTick(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Tick : null;
+            TryRecorded(receiverId, out _) ? simulation.Tick : null;
 
         /// <summary>Returns the fixed duration of one simulation tick.</summary>
         [SimulationObservation("delta_time", MemberKind = SimulationObservationMemberKind.Property)]
         public Fixed? GetDeltaTime(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Parameters.DeltaTime : null;
+            TryRecorded(receiverId, out _) ? simulation.Parameters.DeltaTime : null;
 
         /// <summary>Returns the world dimensions.</summary>
         [SimulationObservation("world_size", MemberKind = SimulationObservationMemberKind.Property)]
         public FixedVector2? GetWorldSize(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Dimensions : null;
+            TryRecorded(receiverId, out _) ? simulation.Dimensions : null;
 
         /// <summary>Returns the geometric center of the world.</summary>
         [SimulationObservation("world_center", MemberKind = SimulationObservationMemberKind.Property)]
         public FixedVector2? GetWorldCenter(int receiverId) =>
-            TryAlive(receiverId, out _) ? simulation.Dimensions / 2 : null;
+            TryRecorded(receiverId, out _) ? simulation.Dimensions / 2 : null;
 
         /// <summary>Checks whether a coordinate lies within the world boundaries.</summary>
         [SimulationObservation("inside_world")]
         public bool? IsInsideWorld(int receiverId, Fixed x, Fixed y)
         {
-            if (!TryAlive(receiverId, out _))
+            if (!TryRecorded(receiverId, out _))
                 return null;
             return x >= 0 && y >= 0 && x <= simulation.Dimensions.X && y <= simulation.Dimensions.Y;
         }

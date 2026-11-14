@@ -58,10 +58,9 @@ namespace Directiva.CodeUI
             { "SimulationObject", "Int", "Decimal", "Bool", "String", "Tuple", "List", "Set", "Dict", "Range", "None", "Function" };
         private static readonly string[] Keywords =
             { "def", "return", "if", "elif", "else", "for", "while", "in", "break", "continue", "pass",
-              "shared", "import", "from", "as", "and", "or", "not", "True", "False", "None" };
-        // Only these declarations can begin a statement at module scope. `global`
-        // remains reserved/invalid in DScript; `import` and `from` are valid today.
-        private static readonly string[] ModuleKeywords = { "def", "shared", "import", "from" };
+              "shared", "global", "import", "from", "as", "and", "or", "not", "True", "False", "None" };
+        // Module-scope statements are declarations only; global is VM-private.
+        private static readonly string[] ModuleKeywords = { "def", "shared", "global", "import", "from" };
         private static readonly string[] InitializerKeywords = { "True", "False", "None", "not", "and", "or" };
 
         /// <summary>
@@ -137,8 +136,8 @@ namespace Directiva.CodeUI
                 if (afterDot)
                 {
                     string receiver = ReadReceiverText(source, start - 1);
-                    // `self` only exists in entity functions; it is not an
-                    // available value while initializing module-level `shared`.
+                    // `self` requires an entity-bound VM. Even for VM-private
+                    // initializers, do not claim it is available in generic IDE analysis.
                     if (atModuleScope && (receiver == "self" ||
                         receiver.StartsWith("self.", StringComparison.Ordinal)))
                         return Empty(caret);
@@ -180,6 +179,8 @@ namespace Directiva.CodeUI
                                     Add(method.Name, "function", DescribeUserFunction(method), method.ReturnType);
                                 else if (declaration is SharedStatement shared)
                                     Add(shared.Name, "shared");
+                                else if (declaration is VmGlobalStatement privateGlobal)
+                                    Add(privateGlobal.Name, "global");
                             }
                         }
                     }
@@ -427,10 +428,10 @@ namespace Directiva.CodeUI
         private static bool IsTypeHintContext(string before)
         {
             // Both declaration kinds use type hints: def f(x: Type) and
-            // shared/local x: Type = expression. A colon in if/while/else
+            // shared/global/local x: Type = expression. A colon in if/while/else
             // is *not* a variable annotation.
             if (Regex.IsMatch(before,
-                @"^\s*(?:shared\s+)?[A-Za-z_][A-Za-z0-9_]*\s*:\s*$"))
+                @"^\s*(?:(?:shared|global)\s+)?[A-Za-z_][A-Za-z0-9_]*\s*:\s*$"))
                 return true;
             int def = before.IndexOf("def ", StringComparison.Ordinal);
             if (def < 0) return false;
@@ -444,7 +445,8 @@ namespace Directiva.CodeUI
         private static bool IsSharedInitializerContext(string before)
         {
             string text = before.TrimStart();
-            return text.StartsWith("shared ", StringComparison.Ordinal) && text.IndexOf('=') >= 7;
+            return (text.StartsWith("shared ", StringComparison.Ordinal) ||
+                text.StartsWith("global ", StringComparison.Ordinal)) && text.IndexOf('=') >= 7;
         }
 
         private static bool IsImportContext(string before, out string from)
@@ -516,7 +518,7 @@ namespace Directiva.CodeUI
         {
             SymbolKind.Function => "function", SymbolKind.NativeFunction => "function",
             SymbolKind.Module => "module", SymbolKind.NativeConstant => "constant",
-            SymbolKind.Global => "shared", _ => "variable"
+            SymbolKind.Global => "shared", SymbolKind.VmGlobal => "global", _ => "variable"
         };
         private static string DescribeSymbol(DScriptSymbol symbol, DScriptAnalysis analysis)
         {
@@ -671,6 +673,10 @@ namespace Directiva.CodeUI
                         .Distinct(StringComparer.Ordinal).ToArray();
                     if (types.Length == 1) declaredHints[group.Key] = types[0];
                 }
+                if (analysis.Modules.TryGetValue(module, out ModuleNode currentAst))
+                    foreach (var global in currentAst.Statements.OfType<VmGlobalStatement>())
+                        if (!string.IsNullOrEmpty(global.DeclaredType))
+                            declaredHints[global.Name] = CanonicalType(global.DeclaredType);
                 if (function != null)
                 {
                     foreach (var parameter in function.ParameterTypes)
@@ -739,6 +745,33 @@ namespace Directiva.CodeUI
                     return "Function";
                 if (symbol.Kind == SymbolKind.NativeConstant)
                     return symbol.QualifiedName.StartsWith("math.", StringComparison.Ordinal) ? "Decimal" : "Int";
+                if (symbol.Kind == SymbolKind.VmGlobal)
+                {
+                    string identity = "vm:" + symbol.QualifiedName;
+                    if (!visited.Add(identity)) return null;
+                    try
+                    {
+                        int separator = symbol.QualifiedName.LastIndexOf('.');
+                        if (separator >= 0)
+                        {
+                            string owner = symbol.QualifiedName.Substring(0, separator);
+                            if (analysis.Modules.TryGetValue(owner, out ModuleNode source))
+                                foreach (var declaration in source.Statements.OfType<VmGlobalStatement>())
+                                    // The import may use `from owner import x as alias`;
+                                    // resolve its declaration by canonical identity, not alias.
+                                    if (owner + "." + declaration.Name == symbol.QualifiedName)
+                                    {
+                                        if (!string.IsNullOrEmpty(declaration.DeclaredType))
+                                            return CanonicalType(declaration.DeclaredType);
+                                        // No type annotation: a global can change over
+                                        // time, so do not infer a fixed type from init.
+                                        return null;
+                                    }
+                        }
+                    }
+                    finally { visited.Remove(identity); }
+                    return null;
+                }
                 if (symbol.Kind == SymbolKind.Global)
                 {
                     string identity = "shared:" + symbol.Name;

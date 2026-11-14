@@ -12,15 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2b76a8c969aa493fbe0829600f66fc8c, type: 3}
   m_Name: Level06
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
-  levelName: Directive #5
+  levelName: B4-CH1CH4
   levelNumber: 6
   requiredStars: 9
   maxMatchDurationSeconds: 600
   fastVictorySeconds: 400
   scenePath: Assets/Scenes/BaseSimulation.unity
-  codeFolder: Level05
-  entryModule: lvl05
-  entryFunction: nexo
+  codeFolder: Level06
+  entryModule: lvl06
+  entryFunction: ganemos
   worldLayout:
     Origin: {x: 0, y: 0}
     Width: 50

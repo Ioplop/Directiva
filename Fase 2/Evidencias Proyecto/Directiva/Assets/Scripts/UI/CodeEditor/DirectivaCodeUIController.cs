@@ -636,6 +636,7 @@ namespace Directiva.CodeUI
                     "variable" => "variable", "property" => "propiedad",
                     "module" => "módulo", "constant" => "constante",
                     "keyword" => "palabra clave", "shared" => "compartida",
+                    "global" => "global de VM",
                     "enum" => "enumeración", "type" => "tipo", _ => item.Kind
                 }, item.Detail, item.Type, item.IsCallable, item.TakesArguments)).ToArray();
             return new DScriptCompletionResult(suggestions.ReplaceStart, suggestions.ReplaceEnd, items);

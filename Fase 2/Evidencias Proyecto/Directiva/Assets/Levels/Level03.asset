@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2b76a8c969aa493fbe0829600f66fc8c, type: 3}
   m_Name: Level03
   m_EditorClassIdentifier: Assembly-CSharp::Directiva.Levels.DirectivaLevel
-  levelName: Directive #3
+  levelName: C0-Ward
   levelNumber: 3
   requiredStars: 2
   maxMatchDurationSeconds: 300

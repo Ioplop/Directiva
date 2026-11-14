@@ -67,7 +67,7 @@ namespace Directiva.CodeUI
             // Without this, `shared cb: Function = uni` looks untyped at `uni`'s
             // start, so the editor incorrectly inserts `unit()` instead of `unit`.
             Match assignment = Regex.Match(before,
-                @"^[ \t]*(?:shared[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*:[ \t]*(?<type>[A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*)?$");
+                @"^[ \t]*(?:(?:shared|global)[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*:[ \t]*(?<type>[A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*)?$");
             if (assignment.Success)
                 return DScriptCompletionEngine.CanonicalType(assignment.Groups["type"].Value);
             // Likewise, a `return uni` completion asks at the start of `uni`.

@@ -556,18 +556,19 @@ namespace Directiva.EditorTests.OrchestrationTests
                     "second unit self ID");
             });
 
-            Add("DeadReferences", "Entity IDs survive death while ordinary observations become None", t =>
+            Add("DeadReferences", "Entity references retain final stats after death and registry removal", t =>
             {
                 Fixture f = NewFixture();
                 var program = Compile(t,
                     "shared saved = None\n" +
                     "def capture():\n    saved = self.closest_enemy()\n    return saved\n" +
-                    "def check():\n    return saved.id > 0 and not saved.alive and saved.health == None\n");
+                    "def check():\n    return saved.id > 0 and not saved.alive and saved.health == 0 and saved.shields == 0 and saved.type == Type.Unit and saved.position != None\n");
                 var side = new SideRuntime(f.World, 1, program, 1UL);
                 t.Equal(DataTypeId.SimulationObject,
                     Run(t, side, f.Unit.id, "test.capture").ReturnValue.dataType,
                     "captured identity");
                 SimulationTestHarness.Kill(f.Enemy);
+                f.World.Update();
                 t.Equal(1UL, Run(t, side, f.Ally.id, "test.check").ReturnValue.value,
                     "dead entity identity and read-only observations");
             });

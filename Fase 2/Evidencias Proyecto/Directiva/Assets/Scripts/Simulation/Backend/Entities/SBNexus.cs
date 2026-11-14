@@ -128,6 +128,16 @@ namespace DSimulation
             BuildUnit();
         }
 
+        internal override void Die()
+        {
+            if (!alive)
+                return;
+            lockedTarget = null;
+            buildingRequestId = null;
+            buildTime = 0;
+            base.Die();
+        }
+
         internal EventCreateNexus CreateNexusEvent()
         {
             return new EventCreateNexus(id, side.id, MaxHealth, MaxShields, Position);

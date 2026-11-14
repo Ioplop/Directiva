@@ -73,7 +73,7 @@ namespace DSimulation
         /// <returns>The number of resources gathered.</returns>
         internal int TryGather(int maxAmount)
         {
-            if (maxAmount == 0) return 0;
+            if (!alive || maxAmount == 0) return 0;
             int gathered = System.Math.Min(GatherAmount, Amount);
             gathered = System.Math.Min(gathered, maxAmount);
             Amount -= gathered;

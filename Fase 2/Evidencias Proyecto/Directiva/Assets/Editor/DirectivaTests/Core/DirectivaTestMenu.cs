@@ -94,6 +94,8 @@ namespace Directiva.EditorTests
         private static void DScriptSemantics() => DirectivaTestRunner.StartCategory("DScript", "Semantics");
         [MenuItem("Directiva/Tests/DScript/Shared/TestEverything", false, 151)]
         private static void DScriptShared() => DirectivaTestRunner.StartCategory("DScript", "Shared");
+        [MenuItem("Directiva/Tests/DScript/VmGlobals/TestEverything", false, 151)]
+        private static void DScriptVmGlobals() => DirectivaTestRunner.StartCategory("DScript", "VmGlobals");
         [MenuItem("Directiva/Tests/DScript/Backend/TestEverything", false, 151)]
         private static void DScriptBackend() => DirectivaTestRunner.StartCategory("DScript", "Backend");
         [MenuItem("Directiva/Tests/DScript/EditorIntegration/TestEverything", false, 151)]

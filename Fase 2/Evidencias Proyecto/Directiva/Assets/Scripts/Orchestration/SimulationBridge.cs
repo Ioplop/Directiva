@@ -71,7 +71,8 @@ namespace DOrchestration
 
         /// <summary>
         /// Invokes an observation from the specified entity's perspective. Observations
-        /// are valid on any living entity, regardless of which VM requests them.
+        /// are valid on any known entity (including its archived death state),
+        /// regardless of which VM requests them.
         /// </summary>
         internal SimulationCallResult Observe(int receiverId, string name, params object[] arguments)
         {
@@ -181,13 +182,19 @@ namespace DOrchestration
             if (ambiguous)
                 return SimulationCallResult.Error("Ambiguous overload of " + chosen.Name + "().");
 
-            // Dead entities retain only the explicitly permitted observations, such
-            // as id and alive. Other calls simply have no current value to return.
-            if (!chosen.AllowsDeadReceiver && !observer.IsAlive(receiverId))
+            // Orders only target living entities. For observations, known dead
+            // entities remain readable; truly unknown IDs still return None.
+            // Entity discovery itself remains living-only in SimulationObserver.
+            if (chosen.Kind == SimulationApiKind.Order)
+            {
+                if (!observer.IsAlive(receiverId))
+                    return SimulationCallResult.Success(null);
+            }
+            else if (!observer.IsRecorded(receiverId) && !chosen.AllowsDeadReceiver)
                 return SimulationCallResult.Success(null);
-            // Calling a unit-only operation on a living resource is a mistake, but
-            // it should warn and return None instead of terminating the script.
-            if (observer.IsAlive(receiverId) && !AcceptsReceiver(chosen.AppliesTo, receiverId))
+            // Keep type checking for archived receivers; a dead unit does not
+            // suddenly acquire nexus- or resource-only properties.
+            if (observer.IsRecorded(receiverId) && !AcceptsReceiver(chosen.AppliesTo, receiverId))
                 return SimulationCallResult.Warning(chosen.Name + "() is not supported by this entity type.");
 
             // A player can supply any Int64/Decimal, but the simulation's Fixed math is

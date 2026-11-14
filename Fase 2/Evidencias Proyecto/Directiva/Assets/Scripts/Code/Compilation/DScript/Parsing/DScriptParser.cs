@@ -71,7 +71,7 @@ namespace DSCompilation.DScript.Parsing
             if (depth == 0 && !(Is(TokenKind.Def) || Is(TokenKind.Import) ||
                 Is(TokenKind.From) || Is(TokenKind.Shared) || Is(TokenKind.Global)))
             {
-                Error("DS2013", "Module scope allows only imports, shared declarations and functions.", Current.Span, "module_scope");
+                Error("DS2013", "Module scope allows only imports, shared/global declarations and functions.", Current.Span, "module_scope");
                 throw new BadSyntax();
             }
             switch (Current.Kind)
@@ -80,9 +80,7 @@ namespace DSCompilation.DScript.Parsing
                 case TokenKind.Import: return ReadImport();
                 case TokenKind.From: return ReadFromImport();
                 case TokenKind.Shared: return ReadShared();
-                case TokenKind.Global:
-                    Error("DS2015", "'global' is not a DScript declaration; use module-level 'shared'.", Current.Span, "global_not_supported");
-                    throw new BadSyntax();
+                case TokenKind.Global: return ReadVmGlobal();
                 case TokenKind.If: return ReadIf();
                 case TokenKind.While: return ReadWhile();
                 case TokenKind.For: return ReadFor();
@@ -189,6 +187,23 @@ namespace DSCompilation.DScript.Parsing
             Expression initializer = Match(TokenKind.Equals) ? ReadExpression() : null;
             var end = Expect(TokenKind.Newline, "Expected end of shared declaration.", "end_shared_declaration");
             return new SharedStatement(name.Text, name.Span, initializer,
+                SourceSpan.Through(begin.Span, end.Span), declaredType);
+        }
+
+        private Statement ReadVmGlobal()
+        {
+            if (depth != 0)
+            {
+                Error("DS2023", "'global' declarations are only permitted at module scope.",
+                    Current.Span, "vm_global_scope");
+                throw new BadSyntax();
+            }
+            var begin = Advance();
+            var name = Expect(TokenKind.Identifier, "Expected VM-global variable name.", "expected_vm_global_name");
+            string declaredType = Match(TokenKind.Colon) ? ReadTypeHint() : null;
+            Expression initializer = Match(TokenKind.Equals) ? ReadExpression() : null;
+            var end = Expect(TokenKind.Newline, "Expected end of global declaration.", "end_vm_global_declaration");
+            return new VmGlobalStatement(name.Text, name.Span, initializer,
                 SourceSpan.Through(begin.Span, end.Span), declaredType);
         }
 

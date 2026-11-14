@@ -51,6 +51,8 @@ namespace DSExecution.VirtualMachine
         private readonly EvaluationStack evaluationStack;
         private readonly List<CallFrame> callStack = new();
         private readonly VMOptions options;
+        private readonly DataValue[] vmGlobals;
+        private bool initializingVmGlobals;
 
         private PendingOperation? pendingOperation;
         private DataValue[]? activeOperationArguments;
@@ -71,6 +73,9 @@ namespace DSExecution.VirtualMachine
         public int EntryFunctionId { get; }
         public int CallDepth => callStack.Count;
         public int EvaluationStackCount => evaluationStack.Count;
+        /// <summary>VM-private persistent state, never stored in VMMemoryContext globals.</summary>
+        public int VmGlobalCount => vmGlobals.Length;
+        public DataValue GetVmGlobal(int index) => vmGlobals[index];
 
         /// <summary>
         /// Logical cost of the next Advance. DEBUG_* metadata costs zero; ordinary
@@ -106,7 +111,7 @@ namespace DSExecution.VirtualMachine
             => callStack.Count > 0 ? callStack[^1].Locals : null;
 
         public DirectivaVM(CodeContext code)
-            : this(code, null, null, 0, true, Array.Empty<DataValue>(), null)
+            : this(code, null, null, 0, true, Array.Empty<DataValue>(), null, true)
         {
         }
 
@@ -117,7 +122,7 @@ namespace DSExecution.VirtualMachine
             CodeContext code,
             int entryFunctionId,
             params DataValue[] entryArguments)
-            : this(code, null, null, entryFunctionId, false, entryArguments, null)
+            : this(code, null, null, entryFunctionId, false, entryArguments, null, true)
         {
         }
 
@@ -126,7 +131,7 @@ namespace DSExecution.VirtualMachine
             VMMemoryContext? memory,
             VMOptions? options,
             params DataValue[] entryArguments)
-            : this(code, memory, options, 0, true, entryArguments, null)
+            : this(code, memory, options, 0, true, entryArguments, null, true)
         {
         }
 
@@ -139,7 +144,7 @@ namespace DSExecution.VirtualMachine
             VMOptions? options,
             int entryFunctionId,
             params DataValue[] entryArguments)
-            : this(code, memory, options, entryFunctionId, false, entryArguments, null)
+            : this(code, memory, options, entryFunctionId, false, entryArguments, null, true)
         {
         }
 
@@ -147,9 +152,15 @@ namespace DSExecution.VirtualMachine
         public DirectivaVM(CodeContext code, VMMemoryContext? memory, VMOptions? options,
             int entryFunctionId, IVMHostContext hostContext, params DataValue[] entryArguments)
             : this(code, memory, options, entryFunctionId, false, entryArguments,
-                hostContext ?? throw new ArgumentNullException(nameof(hostContext)))
+                hostContext ?? throw new ArgumentNullException(nameof(hostContext)), true)
         {
         }
+
+        /// <summary>Used by the shared bootstrap, which must not initialize entity-private state.</summary>
+        internal DirectivaVM(CodeContext code, VMMemoryContext memory, VMOptions options,
+            int entryFunctionId, bool initializeVmGlobals)
+            : this(code, memory, options, entryFunctionId, false, Array.Empty<DataValue>(),
+                null, initializeVmGlobals) { }
 
         private DirectivaVM(
             CodeContext code,
@@ -158,7 +169,8 @@ namespace DSExecution.VirtualMachine
             int entryFunctionId,
             bool useDefaultEntry,
             DataValue[] entryArguments,
-            IVMHostContext? hostContext)
+            IVMHostContext? hostContext,
+            bool initializeVmGlobals)
         {
             Code = code ?? throw new ArgumentNullException(nameof(code));
             HostContext = hostContext;
@@ -173,6 +185,9 @@ namespace DSExecution.VirtualMachine
                 );
             }
 
+            vmGlobals = new DataValue[code.VmGlobalCount];
+            for (int i = 0; i < vmGlobals.Length; i++)
+                vmGlobals[i] = DataValue.Uninitialized();
             evaluationStack = new EvaluationStack(this.options.MaxEvaluationStackSize);
 
             int resolvedEntryFunctionId = useDefaultEntry
@@ -206,6 +221,16 @@ namespace DSExecution.VirtualMachine
                     entryArguments
                 )
             );
+
+            if (initializeVmGlobals && code.VmInitializerFunctionId >= 0)
+            {
+                // The initializer is the initial top frame. It runs through the
+                // normal deterministic stepping/scheduling path, before user code.
+                if (!code.TryGetFunction(code.VmInitializerFunctionId, out FunctionContext init))
+                    throw new InvalidOperationException("Compiled VM initializer is missing.");
+                callStack.Add(new CallFrame(init, 0, Array.Empty<DataValue>()));
+                initializingVmGlobals = true;
+            }
 
             returnValue = DataValue.None();
             Status = VMExecutionStatus.Running;
@@ -250,6 +275,9 @@ namespace DSExecution.VirtualMachine
             fault = null;
             returnValue = DataValue.None();
             Debug.Reset();
+            // Restarting a unit entry preserves its private globals, and never
+            // reruns the one-time module initializers.
+            initializingVmGlobals = false;
             callStack.Add(new CallFrame(entry, 0, Array.Empty<DataValue>()));
             Status = VMExecutionStatus.Running;
         }
@@ -390,6 +418,8 @@ namespace DSExecution.VirtualMachine
                 InstructionId.StoreLocal => ExecuteStoreLocal(frame, instruction.OperandA),
                 InstructionId.LoadGlobal => ExecuteLoadGlobal(frame, instruction.OperandA),
                 InstructionId.StoreGlobal => ExecuteStoreGlobal(frame, instruction.OperandA),
+                InstructionId.LoadVmGlobal => ExecuteLoadVmGlobal(frame, instruction.OperandA),
+                InstructionId.StoreVmGlobal => ExecuteStoreVmGlobal(frame, instruction.OperandA),
                 InstructionId.Operation => ExecuteOperation(frame, instruction.OperationOperand),
                 InstructionId.Jump => ExecuteJump(frame, instruction.OperandA),
                 InstructionId.JumpIfTrue => ExecuteConditionalJump(frame, instruction.OperandA, true),
@@ -836,6 +866,25 @@ namespace DSExecution.VirtualMachine
             return AdvanceInstruction(frame);
         }
 
+        private VMAdvanceResult ExecuteLoadVmGlobal(CallFrame frame, int index)
+        {
+            if ((uint)index >= (uint)vmGlobals.Length)
+                return Fault(RuntimeError.InvalidGlobalAccess(index));
+            if (!evaluationStack.TryPush(vmGlobals[index]))
+                return Fault(RuntimeError.StackOverflow());
+            return AdvanceInstruction(frame);
+        }
+
+        private VMAdvanceResult ExecuteStoreVmGlobal(CallFrame frame, int index)
+        {
+            if ((uint)index >= (uint)vmGlobals.Length)
+                return Fault(RuntimeError.InvalidGlobalAccess(index));
+            if (!evaluationStack.TryPop(frame.EvalStackBase, out DataValue value))
+                return Fault(RuntimeError.StackUnderflow());
+            vmGlobals[index] = value;
+            return AdvanceInstruction(frame);
+        }
+
         /// <summary>
         /// Pops the operation arguments, dispatches the operation and handles its first result.
         /// </summary>
@@ -1264,7 +1313,16 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.VariableUsedBeforeInitialization());
 
             evaluationStack.TrimTo(frame.EvalStackBase);
+            // The synthetic initializer frame sits above the user's entry frame.
+            // Its return value is metadata, not a value on the user's stack.
+            bool completedVmInit = initializingVmGlobals && callStack.Count == 2 &&
+                frame.Function.Id == Code.VmInitializerFunctionId;
             callStack.RemoveAt(callStack.Count - 1);
+            if (completedVmInit)
+            {
+                initializingVmGlobals = false;
+                return VMAdvanceResult.Running();
+            }
 
             if (callStack.Count == 0)
             {
@@ -1362,6 +1420,12 @@ namespace DSExecution.VirtualMachine
         /// </summary>
         public IEnumerable<uint> EnumerateHeapReferences()
         {
+            // Persistent private globals must stay alive even while the VM is
+            // completed between turns, or faulted awaiting its next restart.
+            foreach (DataValue value in vmGlobals)
+                if (value.TryGetHeapReference(out uint globalReference))
+                    yield return globalReference;
+
             if (Status == VMExecutionStatus.Completed)
             {
                 if (returnValue.TryGetHeapReference(out uint completedReference))
