@@ -669,6 +669,7 @@ namespace Directiva.CodeUI
             _explorer.MoveRequested += (source, target) => Events.RaiseMoveRequested(source, target);
 
             _editor.RenameSymbolRequested += RequestSymbolRename;
+            _editor.GoToDefinitionRequested += NavigateToSymbolDefinition;
 
             _editor.TextChanged += text =>
             {
@@ -1015,6 +1016,36 @@ namespace Directiva.CodeUI
 
                 RefreshCodebase();
             });
+        }
+
+        private bool NavigateToSymbolDefinition(int offset)
+        {
+            var active = _workspace?.Active;
+            if (active == null || Codebase == null || _storage == null ||
+                !TryGetModuleName(active.RelativePath, out string module, out _)) return false;
+
+            var provider = new WorkspaceDScriptSourceProvider(Codebase, _workspace, _storage.RootPath);
+            if (!DScriptGoToDefinition.TryResolve(module, provider, offset, out var location))
+                return false;
+
+            string path = location.Module.Replace('.', '/') + FileSystemScriptStorage.ScriptExtension;
+            if (!_storage.ScriptExists(path)) return false;
+            try
+            {
+                // The workspace opens the working (possibly unsaved) copy. Neither
+                // navigation nor selecting the declaration changes any source file.
+                if (!string.Equals(path, active.RelativePath, StringComparison.Ordinal))
+                    _workspace.Open(path);
+                _editor.RevealSourceLocation(location.Span.Line, location.Span.Column,
+                    location.Span.Start, location.Span.Length);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Output.WriteWarning(Localization.Get("Console", "source_open_failed",
+                    path, ex.Message));
+                return false;
+            }
         }
 
         private void RequestSymbolRename(int caret)

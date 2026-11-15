@@ -186,6 +186,8 @@ namespace Directiva.CodeUI
         public event Action<string> TextChanged;
         public event Action CaretMoved;
         public event Action<int> RenameSymbolRequested;
+        // Returns true only for a bound user symbol; otherwise native clicking proceeds.
+        public event Func<int, bool> GoToDefinitionRequested;
         public event Action<int, bool> BreakpointChanged;
         public event Action<float> FontSizeChanged;
 
@@ -1715,23 +1717,52 @@ namespace Directiva.CodeUI
             return true;
         }
 
+        internal static bool IsGoToDefinitionClick(int button, bool ctrlKey, bool commandKey,
+            bool shiftKey, bool altKey) =>
+            button == 0 && (ctrlKey || commandKey) && !shiftKey && !altKey;
+
         private void OnCodePointerDown(PointerDownEvent evt)
         {
             HideCompletion();
             _completionDismissed = false;
-            if (evt.button != 1) { _rightClickCaret = -1; return; }
             var world = new Vector2(evt.position.x, evt.position.y);
+            if (IsGoToDefinitionClick(evt.button, evt.ctrlKey, evt.commandKey,
+                    evt.shiftKey, evt.altKey) &&
+                TryGetCodeOffsetAtPointer(world, requireCharacter: true, out int clicked) &&
+                GoToDefinitionRequested?.Invoke(clicked) == true)
+            {
+                _rightClickCaret = -1;
+                // Do not let TextField's own Ctrl+click move the caret or
+                // steal focus after the destination declaration is revealed.
+                _textField.focusController?.IgnoreEvent(evt);
+                evt.StopImmediatePropagation();
+                return;
+            }
+
+            if (evt.button != 1) { _rightClickCaret = -1; return; }
+            if (TryGetCodeOffsetAtPointer(world, requireCharacter: false, out int offset))
+                _rightClickCaret = offset;
+        }
+
+        private bool TryGetCodeOffsetAtPointer(Vector2 world, bool requireCharacter,
+            out int offset)
+        {
+            offset = -1;
             var local = _editorStack.WorldToLocal(world);
             var scroll = _internalScroll != null ? _internalScroll.scrollOffset : Vector2.zero;
             float x = local.x - _textOriginX + scroll.x;
             float y = local.y - _textOriginY + scroll.y;
-            int lineIndex = Mathf.Max(0, Mathf.FloorToInt(y / Mathf.Max(1f, _lineHeight)));
-            int column = Mathf.Max(0, Mathf.FloorToInt(x / Mathf.Max(1f, _characterWidth)));
             var lines = Text.Split('\n');
-            lineIndex = Mathf.Clamp(lineIndex, 0, lines.Length - 1);
+            int row = Mathf.FloorToInt(y / Mathf.Max(1f, _lineHeight));
+            int column = Mathf.FloorToInt(x / Mathf.Max(1f, _characterWidth));
+            // A modified click on blank padding must not navigate the nearest name.
+            if (requireCharacter && (row < 0 || row >= lines.Length ||
+                column < 0 || column >= lines[row].Length)) return false;
+            row = Mathf.Clamp(row, 0, lines.Length - 1);
             int start = 0;
-            for (int i = 0; i < lineIndex; i++) start += lines[i].Length + 1;
-            _rightClickCaret = start + Mathf.Clamp(column, 0, lines[lineIndex].Length);
+            for (int i = 0; i < row; i++) start += lines[i].Length + 1;
+            offset = start + Mathf.Clamp(column, 0, lines[row].Length);
+            return true;
         }
 
         public void FocusEditor() => _textField.Focus();
