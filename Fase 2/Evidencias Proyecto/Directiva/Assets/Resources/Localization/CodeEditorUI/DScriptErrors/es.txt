@@ -106,3 +106,7 @@
 [end_vm_global_declaration]: Se esperaba el final de la declaración global.
 [vm_global_scope_binder]: Las variables 'global' privadas de cada VM deben declararse a nivel de módulo.
 [parameter_vm_global_collision]: El parámetro '{{1}}' entra en conflicto con una variable global privada de la VM.
+
+[expected_unpack_name]: Se esperaba un nombre de variable despues de la coma.
+[unpack_target_names]: El desempaquetado requiere dos o mas nombres de variables.
+[unpack_augmented]: El desempaquetado no permite asignaciones aumentadas.

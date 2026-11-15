@@ -56,8 +56,10 @@ statement         := assignment | expression NEWLINE | if | while | for | return
                   | break | continue | pass
 if                := 'if' expression suite {'elif' expression suite} ['else' suite]
 while             := 'while' expression suite
-for               := 'for' identifier 'in' expression suite
+for               := 'for' (identifier | unpack_names) 'in' expression suite
+unpack_names      := identifier ',' identifier {',' identifier}
 assignment        := (name | member | index) assignment_operator expression NEWLINE
+                  | (unpack_names | '(' unpack_names ')') '=' expression NEWLINE
 return            := 'return' [expression] NEWLINE
 break             := 'break' NEWLINE
 continue          := 'continue' NEWLINE
@@ -71,7 +73,8 @@ pass              := 'pass' NEWLINE
 - `print()` admite **0..16 argumentos** (límite actual de llamadas nativas). Evalúa los argumentos de izquierda a derecha, los convierte con la misma semántica que `str`, los separa con un espacio y emite **una sola línea** (inclusive vacía). Por ejemplo `print("Primos:", [2, 3, 5])` produce `Primos: [2, 3, 5]`. No hay `sep=` ni `end=` y el compilador no reescribe esta llamada: genera `CALL_INDIRECT n` como con cualquier función nativa.
 - Expresiones, de menor a mayor precedencia: `or`, `and`, `not`, comparaciones `== != < <= > >= in not in` (sin chaining), `+ -`, `* / // %`, unarios `+ -`, `**` asociativo a derecha; miembros, índices y llamadas.
 - Literales: Int64, Decimal de cuatro decimales como máximo, String con escapes, Bool (`True`/`False`), `None`, listas `[a,b]`, tuplas `(a,b)`, sets `{a,b}` y diccionarios `{clave:valor}`. `{}` es diccionario vacío; `()` es tupla vacía.
-- Sangría **solo con espacios**; comentarios `#`; bloques no vacíos (usar `pass`); continuación de línea dentro de `()[]{}`. No se admiten strings multilínea, slices, comprensiones, `is`, asignaciones múltiples ni desestructuración.
+- Sangría **solo con espacios**; comentarios `#`; bloques no vacíos (usar `pass`); continuación de línea dentro de `()[]{}`. No se admiten strings multilínea, slices, comprensiones, `is` ni asignaciones encadenadas.
+- Se admite desempaquetar tuplas planas en asignaciones (`x, y = position`) y en bucles (`for x, y in positions:`), sin `*rest` ni destinos anidados. El valor debe ser una tupla con exactamente la cantidad de elementos indicada; en otro caso se produce un error de ejecución localizado. La expresion derecha se evalua una sola vez. Para construir la tupla en linea, usar parentesis: `x, y = (1, 2)` (no `x, y = 1, 2`).
 
 ## Símbolos y almacenamiento `shared`
 

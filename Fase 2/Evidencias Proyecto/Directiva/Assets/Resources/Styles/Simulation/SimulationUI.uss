@@ -586,3 +586,261 @@
     height: 58px;
     font-size: 19px;
 }
+
+/* Finished-match screen. Use the slate palette of the main menu rather than
+   a separate blue-toned card style. Blue/red numbers and the outcome colors
+   remain semantic: they identify the sides and the match result. */
+.sim-results-backdrop {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(11, 17, 26, 0.82);
+}
+.sim-results-card {
+    width: 675px;
+    height: auto;
+    max-width: 94%;
+    max-height: 91%;
+    min-height: 0;
+    flex-direction: column;
+    flex-grow: 0;
+    flex-shrink: 1;
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-top: 22px;
+    padding-bottom: 20px;
+    background-color: rgba(27, 33, 45, 0.97);
+    border-width: 1px;
+    border-color: rgb(91, 109, 143);
+    border-radius: 14px;
+}
+.sim-results-outcome {
+    font-size: 38px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    margin-bottom: 2px;
+    flex-shrink: 0;
+}
+.sim-results-level {
+    color: rgb(147, 157, 177);
+    font-size: 19px;
+    -unity-text-align: middle-center;
+    margin-top: 0;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+.sim-results-victory { color: rgb(95, 220, 124); }
+.sim-results-defeat { color: rgb(242, 103, 107); }
+.sim-results-draw { color: rgb(240, 205, 94); }
+/* No flex-grow: 1 here: let the scroll view take its natural content height.
+   Only shrink it if the card hits its max-height on a small display. */
+.sim-results-scroll {
+    min-height: 0;
+    flex-grow: 0;
+    flex-shrink: 1;
+}
+/* Same narrow, quiet scrollbar as the menu options panel. It is Auto-hidden
+   when the whole results content fits in the viewport. */
+.sim-results-scroll .unity-scroller--vertical {
+    width: 8px;
+    min-width: 8px;
+    max-width: 8px;
+    background-color: rgba(24, 27, 32, 0.6);
+    padding-left: 1px;
+    padding-right: 1px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+.sim-results-scroll .unity-scroller__low-button,
+.sim-results-scroll .unity-scroller__high-button { display: none; }
+.sim-results-scroll .unity-scroller__slider {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    margin: 0;
+    padding: 0;
+}
+.sim-results-scroll .unity-base-slider__tracker {
+    background-color: rgba(31, 35, 41, 0.7);
+    border-width: 0;
+    border-radius: 3px;
+}
+.sim-results-scroll .unity-base-slider__dragger {
+    background-color: rgb(91, 98, 110);
+    border-width: 0;
+    border-radius: 3px;
+}
+.sim-results-scroll .unity-base-slider__dragger:hover,
+.sim-results-scroll .unity-base-slider__dragger:active {
+    background-color: rgb(126, 139, 157);
+}
+.sim-results-metrics { margin-bottom: 12px; }
+.sim-results-metric-headings {
+    min-height: 27px;
+    border-bottom-color: rgba(106, 127, 152, 0.46);
+}
+.sim-results-metric-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 33px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(106, 127, 152, 0.25);
+}
+.sim-results-metric-name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    color: rgb(231, 236, 244);
+    font-size: 16px;
+    white-space: normal;
+}
+.sim-results-metric-value {
+    width: 114px;
+    min-width: 90px;
+    flex-shrink: 0;
+    -unity-text-align: middle-right;
+    -unity-font-style: bold;
+    font-size: 17px;
+}
+.sim-results-value-blue { color: rgb(83, 170, 255); }
+.sim-results-value-red { color: rgb(255, 107, 111); }
+.sim-results-elapsed-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 37px;
+    margin-top: 5px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.sim-results-elapsed-name {
+    font-size: 16px;
+    color: rgb(231, 236, 244);
+}
+.sim-results-time-value {
+    font-size: 18px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-right;
+    color: rgb(255, 255, 255);
+}
+.sim-results-metric-heading {
+    font-size: 14px;
+    -unity-font-style: bold;
+}
+.sim-results-stars {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin-top: 11px;
+    margin-bottom: 15px;
+}
+.sim-results-star-slot {
+    width: 78px;
+    height: 72px;
+    margin-left: 13px;
+    margin-right: 13px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: rgba(91, 109, 143, 0.45);
+    background-color: rgba(49, 61, 83, 0.52);
+}
+.sim-results-star-slot:hover { background-color: rgba(70, 91, 124, 0.78); }
+.sim-results-star-icon {
+    width: 58px;
+    height: 58px;
+}
+.sim-results-actions {
+    flex-shrink: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    margin-top: 11px;
+}
+.sim-results-action {
+    height: 44px;
+    min-width: 205px;
+    margin: 5px;
+    padding-left: 18px;
+    padding-right: 18px;
+    border-width: 1px;
+    border-color: rgb(91, 109, 143);
+    border-radius: 9px;
+    background-color: rgb(49, 61, 83);
+    color: rgb(232, 240, 252);
+    font-size: 16px;
+}
+.sim-results-action:hover { background-color: rgb(70, 91, 124); }
+.sim-results-action:active { background-color: rgb(43, 110, 171); }
+.sim-results-action-primary { background-color: rgb(42, 107, 169); }
+.sim-results-action-primary:hover { background-color: rgb(43, 110, 171); }
+
+/* Confirm leaving the match from the top-right Levels button. The slate
+   palette is intentionally shared with the results dialog and main menu. */
+.sim-leave-backdrop {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(11, 17, 26, 0.82);
+}
+.sim-leave-card {
+    width: 510px;
+    max-width: 92%;
+    max-height: 90%;
+    min-width: 0;
+    padding-left: 26px;
+    padding-right: 26px;
+    padding-top: 23px;
+    padding-bottom: 22px;
+    background-color: rgba(27, 33, 45, 0.98);
+    border-width: 1px;
+    border-color: rgb(91, 109, 143);
+    border-radius: 12px;
+}
+.sim-leave-title {
+    color: rgb(235, 240, 248);
+    font-size: 25px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    margin-bottom: 12px;
+}
+.sim-leave-message {
+    color: rgb(187, 198, 217);
+    white-space: normal;
+    font-size: 16px;
+    -unity-text-align: middle-center;
+    margin-bottom: 21px;
+}
+.sim-leave-actions {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+.sim-leave-button {
+    min-width: 142px;
+    min-height: 38px;
+    margin-left: 6px;
+    margin-right: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+    background-color: rgb(49, 61, 83);
+    color: rgb(240, 243, 249);
+    border-width: 1px;
+    border-color: rgb(91, 109, 143);
+    border-radius: 6px;
+    font-size: 15px;
+}
+.sim-leave-button:hover { background-color: rgb(70, 91, 124); }
+.sim-leave-button-primary { background-color: rgb(42, 107, 169); }
+.sim-leave-button-primary:hover { background-color: rgb(43, 110, 171); }

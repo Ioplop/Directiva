@@ -68,6 +68,9 @@ namespace Directiva.SimulationFrontend
         // A paused/finished match remains locked until the player presses Stop.
         private bool programSelectionLocked;
         private Orchestrator orchestrator;
+        private SimulationMatchStatistics matchStatistics;
+        private bool pendingResults;
+        private LevelStarFlags matchEarnedStars;
         private SimulationWorldPointerController pointer;
         private CameraController cameraController;
         private DirectivaCodeUIController connectedEditor;
@@ -575,6 +578,9 @@ namespace Directiva.SimulationFrontend
             running = false;
             view.Attach(orchestrator.Simulation, ActiveWorldWidth, ActiveWorldHeight,
                 ui != null ? ui.GetComponent<UnityEngine.UIElements.UIDocument>() : null);
+            // The view discards initial creation events when attaching. Seed the
+            // tracker from that same starting world, before the first match tick.
+            matchStatistics = new SimulationMatchStatistics(orchestrator.Simulation);
             ConfigureCamera();
             ApplyPlaybackState();
         }
@@ -607,6 +613,10 @@ namespace Directiva.SimulationFrontend
 
         private void DetachOrchestrator()
         {
+            pendingResults = false;
+            matchEarnedStars = LevelStarFlags.None;
+            matchStatistics = null;
+            ui?.CloseResults();
             selectedDebugEntityId = 0;
             pointer?.ClearSelection();
             if (orchestrator == null) return;
@@ -718,8 +728,19 @@ namespace Directiva.SimulationFrontend
                     if (!orchestrator.HasPendingTick)
                         accumulatedTime -= simulationTickSeconds;
                     orchestrator.Update();
-                    view.ConsumeEvents();
+                    // A null statistics observer must not suppress event projection.
+                    if (matchStatistics != null)
+                        view.ConsumeEvents(matchStatistics.Record);
+                    else
+                        view.ConsumeEvents();
                     steps++;
+                    // MatchEnded fires before the last tick's events are drained.
+                    // Present the summary only after its final damage/kill is counted.
+                    if (pendingResults && orchestrator.IsFinished)
+                    {
+                        PresentResults();
+                        break;
+                    }
                     if (orchestrator.IsPausedAtBreakpoint)
                     {
                         running = false;
@@ -751,30 +772,42 @@ namespace Directiva.SimulationFrontend
 
         private void HandleMatchEnded(MatchOutcome outcome)
         {
-            // Only a genuine side-1 victory awards stars. Stop/Restart, draws and
-            // losses do not write progress. The callback is invoked once per match.
             DirectivaLevel level = LevelLaunchContext.CurrentLevel;
-            if (level != null && level.LevelNumber > 0 && orchestrator != null &&
-                outcome == MatchOutcome.Side1Won)
-            {
-                SBNexus playerNexus = orchestrator.Simulation.GetSide(1).Nexus;
-                LevelStarFlags achieved = LevelStarRules.Evaluate(outcome,
+            SBNexus playerNexus = orchestrator?.Simulation.GetSide(1).Nexus;
+            matchEarnedStars = orchestrator == null ? LevelStarFlags.None :
+                LevelStarRules.Evaluate(outcome,
                     playerNexus == null || playerNexus.HasTakenHealthDamage,
-                    orchestrator.Simulation.Time, level.FastVictorySeconds);
-                if (LevelProgress.Current.TryAwardStars(level.LevelNumber, achieved,
+                    orchestrator.Simulation.Time, level != null ? level.FastVictorySeconds : 0);
+
+            // Persist only newly earned objectives; the results panel instead shows
+            // objectives achieved in THIS match, not the player's lifetime total.
+            if (level != null && level.LevelNumber > 0 &&
+                LevelProgress.Current.TryAwardStars(level.LevelNumber, matchEarnedStars,
                     out LevelStarFlags newlyEarned) && newlyEarned != LevelStarFlags.None)
-                    Debug.Log("[Directiva] Level " + level.LevelNumber +
-                        " earned new stars: " + newlyEarned +
-                        " (total: " + LevelStarRules.Count(
-                            LevelProgress.Current.GetStars(level.LevelNumber)) + "/3).", this);
-            }
+                Debug.Log("[Directiva] Level " + level.LevelNumber +
+                    " earned new stars: " + newlyEarned + " (total: " +
+                    LevelStarRules.Count(LevelProgress.Current.GetStars(level.LevelNumber)) +
+                    "/3).", this);
+
             running = false;
-            // Stop backend ticks, but let the last attack/death particles finish.
-            // ConsumeEvents() runs after this callback and may spawn the final effect.
-            // Pause/Stop explicitly freeze the visual clock if requested.
+            pendingResults = true;
+            // Update the HUD without resetting Time.timeScale: final effects must
+            // finish at the match's chosen playback rate.
+            ui?.SetPlaybackFromRuntime(ScriptExecutionState.Stopped);
+            // Do not freeze final particle effects. The last tick is still being
+            // projected by view.ConsumeEvents() in the caller.
             if (view != null) view.SetPlaybackSpeed(speed);
             Debug.Log("[Directiva] Match ended: " + outcome + " (" +
                 orchestrator.EndReason + ") at tick " + orchestrator.Simulation.Tick, this);
+        }
+
+        private void PresentResults()
+        {
+            pendingResults = false;
+            if (orchestrator == null || matchStatistics == null) return;
+            DirectivaLevel level = LevelLaunchContext.CurrentLevel;
+            ui?.ShowResults(matchStatistics.CreateResult(orchestrator, matchEarnedStars,
+                level != null ? level.FastVictorySeconds : 0));
         }
 
         private void HandleOutput(VMOutputMessage output)

@@ -1,6 +1,11 @@
 [editor]: Editor
 [main_menu]: Menú principal
 [back_to_menu]: Volver al menú principal
+[levels_button]: Niveles
+[leave_levels_title]: Volver a niveles
+[leave_levels_message]: ¿Seguro que quieres abandonar la partida y regresar a la selección de niveles?
+[leave_levels_cancel]: Cancelar
+[leave_levels_confirm]: Sí, volver
 [show_editor]: Abrir editor
 [hide_editor]: Ocultar editor
 [restore_editor]: Volver a ventana lateral
@@ -55,3 +60,21 @@
 [level_world_too_small]: El mundo debe medir al menos 16 × 16.
 [level_invalid_resources]: La configuración inicial de recursos no es válida.
 [level_resource_bounds]: Un recurso está fuera de los límites seguros del mundo: {{1}}.
+
+[results_victory]: Victoria
+[results_defeat]: Derrota
+[results_draw]: Empate
+[results_side_blue]: Jugador azul
+[results_side_red]: Jugador rojo
+[results_resources]: Recursos recolectados
+[results_errors]: Número de errores
+[results_built]: Unidades construidas
+[results_destroyed]: Entidades destruidas
+[results_damage]: Daño causado
+[results_time]: Tiempo transcurrido
+[results_orders_per_second]: Órdenes por segundo (unidades)
+[results_star_victory]: Gana la partida.
+[results_star_nexus]: Gana sin que el nexo pierda salud. El daño a los escudos no cuenta.
+[results_star_fast]: Gana en menos de {{1}} de tiempo simulado.
+[results_return]: Regresar a la partida
+[results_levels]: Ver niveles

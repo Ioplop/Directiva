@@ -94,6 +94,64 @@ namespace Directiva.EditorTests.DScript
             void Add(string id, string description, Action<DirectivaTestContext> action)
                 => DScriptTestHarness.Add(tests, "Backend", id, description, action);
 
+            Add("UnpackTupleAssignment", "Tuple unpacking assigns elements in source order", t =>
+            {
+                CheckInt(t, "def main():\n    x, y = (12, 34)\n    return x * 100 + y\n", 1234);
+            });
+            Add("UnpackParenthesizedTarget", "Parenthesized assignment targets unpack identically", t =>
+            {
+                CheckInt(t, "def main():\n    (left, right) = (7, 9)\n    return left * 10 + right\n", 79);
+            });
+            Add("UnpackEvaluatesRhsOnce", "A tuple-producing call executes exactly once", t =>
+            {
+                CheckInt(t, "shared counter = 0\ndef get_pair():\n    counter += 1\n    return (3, 5)\ndef main():\n    x, y = get_pair()\n    return counter * 100 + x * 10 + y\n", 135);
+            });
+            Add("UnpackSharedAndVmGlobals", "Tuple elements may be written to shared and private global variables", t =>
+            {
+                CheckInt(t, "shared team = 0\nglobal private_count = 0\ndef main():\n    team, private_count = (2, 6)\n    return team * 10 + private_count\n", 26);
+            });
+            Add("UnpackForTupleItems", "For loop can unpack tuple items without changing iterator scheduling", t =>
+            {
+                CheckInt(t, "def main():\n    total = 0\n    for x, y in [(1, 2), (3, 4)]:\n        total += x * 10 + y\n    return total\n", 46);
+            });
+            Add("UnpackForBreakContinue", "For-tuple destructuring keeps break and continue iterator cleanup", t =>
+            {
+                CheckInt(t, "def main():\n    total = 0\n    for x, y in [(1, 2), (3, 4), (5, 6)]:\n        if x == 1:\n            continue\n        if x == 5:\n            break\n        total += x + y\n    return total\n", 7);
+            });
+            Add("UnpackStillSupportsSingleForTarget", "Existing single-variable for loops still work", t =>
+            {
+                CheckInt(t, "def main():\n    total = 0\n    for x in (2, 4, 6):\n        total += x\n    return total\n", 12);
+            });
+            Add("UnpackRejectsNonTuple", "Non-tuples fault with a specific localized runtime detail", t =>
+            {
+                var p = Compile(t, "def main():\n    x, y = [1, 2]\n");
+                t.Check(p.TryGetFunctionId("test.main", out int id), "entry function");
+                var vm = new DirectivaVM(p.Code, id);
+                vm.Run(10000);
+                t.Equal(VMExecutionStatus.Faulted, vm.Status, "non-tuple is invalid");
+                t.Equal(RuntimeErrorId.InvalidOperation, vm.Error.Id, "error category");
+                t.Equal("detail_unpack_requires_tuple", vm.Error.DetailsKey, "localized detail");
+            });
+            Add("UnpackChecksExactLength", "Mismatch faults without partially assigning targets", t =>
+            {
+                var p = Compile(t, "shared left = 7\nglobal right = 9\ndef main():\n    left, right = (1,)\n");
+                var mem = Memory(t, p, out var report);
+                t.Check(!report.HasErrors, "bootstrap succeeded");
+                t.Check(p.TryGetFunctionId("test.main", out int id), "entry function");
+                var vm = new DirectivaVM(p.Code, mem, null, id);
+                vm.Run(10000);
+                t.Equal(VMExecutionStatus.Faulted, vm.Status, "wrong tuple size");
+                t.Equal("detail_unpack_count_mismatch", vm.Error.DetailsKey, "specific error");
+                t.Equal(7L, unchecked((long)mem.GetGlobal(p.SharedSlots.Single(s => s.Name == "left").Slot).value),
+                    "shared destination is untouched");
+                t.Equal(9L, unchecked((long)vm.GetVmGlobal(p.VmGlobalSlots.Single(s => s.Name == "right").Slot).value),
+                    "VM-global destination is untouched");
+            });
+            Add("UnpackParserInvalidTargets", "Malformed targets and augmented destructuring report syntax errors", t =>
+            {
+                DScriptTestHarness.Error(t, "def main():\n    (a + b, c) = (1, 2)\n", "DS2024");
+                DScriptTestHarness.Error(t, "def main():\n    x, y += (1, 2)\n", "DS2025");
+            });
             Add("PrintMultipleArguments", "DScript print(label, list) emits one formatted event", t => {
                 var p = Compile(t, "def main():\n    print(\"Primos:\", [2, 3, 5])\n");
                 t.Contains("CALL_INDIRECT 2", p.DILModules["test"], "two arguments compiled");

@@ -989,7 +989,11 @@ namespace Directiva.CodeUI
                     else if (statement is ForStatement loop)
                     {
                         string iterable = TypeOf(loop.Iterable, vars, visited);
-                        vars[loop.Variable] = iterable == "Range" ? "Int" : null;
+                        if (loop.Target is NameExpression single)
+                            vars[single.Name] = iterable == "Range" ? "Int" : null;
+                        else if (loop.Target is CollectionExpression tuple)
+                            foreach (Expression item in tuple.Items)
+                                if (item is NameExpression name) vars[name.Name] = null;
                         Walk(loop.Body, vars, caret, visited, returned);
                     }
                     else if (statement is WhileStatement whileLoop)

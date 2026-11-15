@@ -53,6 +53,9 @@ namespace DSExecution.VirtualMachine
 
         // VM-private slots (append-only IDs for binary compatibility).
         LoadVmGlobal = 34,
-        StoreVmGlobal = 35
+        StoreVmGlobal = 35,
+
+        // Atomically verifies a tuple and exposes its elements on the stack.
+        UnpackTuple = 36
     }
 }

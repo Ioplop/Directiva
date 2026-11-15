@@ -142,12 +142,13 @@ namespace Directiva.SimulationFrontend
         }
 
         /// <summary>Consume events and submit exactly one new transform target per entity.</summary>
-        public void ConsumeEvents()
+        public void ConsumeEvents(Action<DSEvents.Event> observer = null)
         {
             if (simulation == null) return;
 
             while (simulation.TryConsumeEvent(out DSEvents.Event message))
             {
+                observer?.Invoke(message);
                 switch (message)
                 {
                     case EventCreateNexus createdNexus:

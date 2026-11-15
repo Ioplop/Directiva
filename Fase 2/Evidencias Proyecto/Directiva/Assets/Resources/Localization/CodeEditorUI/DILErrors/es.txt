@@ -73,3 +73,5 @@
 [symbol_requires_integer]: El símbolo de parseo '{{1}}' debe contener exactamente un entero.
 [annotation_requires_value]: # {{1}} requiere un valor después de ':'.
 [operand_count]: {{1}} espera {{2}} operando(s), pero recibió {{3}}.
+
+[unpack_tuple_count]: UNPACK_TUPLE requiere al menos dos variables de destino.

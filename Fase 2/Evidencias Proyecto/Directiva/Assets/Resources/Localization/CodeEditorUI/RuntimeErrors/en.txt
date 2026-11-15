@@ -181,3 +181,7 @@
 [detail_instruction_local_context]: Invalid local context range [{{1}}, {{2}}).
 [detail_instruction_debug_line]: DebugLine cannot use negative line {{1}}.
 [detail_instruction_debug_span]: Invalid debug span [{{1}}, {{2}}).
+
+[detail_unpack_invalid_target_count]: UNPACK_TUPLE requires at least two target variables.
+[detail_unpack_requires_tuple]: Tuple unpacking needs a tuple, but received {{1}}.
+[detail_unpack_count_mismatch]: Cannot unpack {{1}} values into {{2}} variables.

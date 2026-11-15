@@ -87,6 +87,9 @@ namespace DOrchestration
         /// <summary>Total execution errors since this match began, even after log eviction.</summary>
         public long GetErrorCount(int sideId) => errorCounts[GetSide(sideId).SideId];
 
+        /// <summary>Accepted orders from scripted units only; excludes Nexus build requests.</summary>
+        public long GetAcceptedUnitOrders(int sideId) => GetSide(sideId).AcceptedUnitOrders;
+
         /// <summary>Effective VM instructions per entity per simulation tick (default 10).</summary>
         public int StepsPerTick
         {

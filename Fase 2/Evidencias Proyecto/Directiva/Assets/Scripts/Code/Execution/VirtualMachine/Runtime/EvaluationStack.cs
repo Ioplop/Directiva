@@ -87,6 +87,34 @@ namespace DSExecution.VirtualMachine
             return TryPush(replacement);
         }
 
+        /// <summary>Read the current frame's top value without allocation.</summary>
+        public bool TryPeekTop(int floor, out DataValue value)
+        {
+            if (!HasValuesAbove(floor, 1))
+            {
+                value = default;
+                return false;
+            }
+            value = values[count - 1];
+            return true;
+        }
+
+        /// <summary>
+        /// Replaces one stack tuple with all of its elements. The first element
+        /// becomes the top value so successive STORE instructions assign in source
+        /// order. Capacity is checked BEFORE any mutation; the operation is atomic.
+        /// </summary>
+        public bool TryUnpackTuple(int floor, System.ReadOnlySpan<DataValue> items)
+        {
+            if (!HasValuesAbove(floor, 1) || items.Length > values.Length - count + 1)
+                return false;
+
+            TrimTo(count - 1);
+            for (int i = items.Length - 1; i >= 0; i--)
+                values[count++] = items[i];
+            return true;
+        }
+
         /// <summary>
         /// Pops a call/operation argument list while preserving the original left-to-right order.
         /// </summary>

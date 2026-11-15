@@ -2,6 +2,8 @@ using System;
 using Directiva.CodeUI;
 using Directiva.Localization;
 using Directiva.MainMenu;
+using Directiva.Settings;
+using DOrchestration;
 using Directiva.UI;
 using UnityEngine;
 using UnityEngine.Events;
@@ -64,6 +66,7 @@ namespace Directiva.SimulationUI
         public SimulationControlEvents Controls => controlEvents;
         public SimulationNexusProgramPicker NexusPicker => _nexusPicker;
         public SimulationMatchStatsBar MatchStats => _matchStats;
+        public bool AreResultsVisible => _resultsPanel?.IsVisible == true;
 
         private DirectivaUITheme _theme;
         private UIDocument _document;
@@ -94,6 +97,9 @@ namespace Directiva.SimulationUI
         private bool _pointerPressStartedOnUI;
         private SimulationNexusProgramPicker _nexusPicker;
         private SimulationMatchStatsBar _matchStats;
+        private SimulationResultsPanel _resultsPanel;
+        private SimulationLeaveConfirmation _leaveConfirmation;
+        private AudioSource _resultsAudio;
         private float _nextNexusWarningCheckAt;
         private SimulationHudLayout _hudLayout = SimulationHudLayout.Standard;
 
@@ -108,6 +114,8 @@ namespace Directiva.SimulationUI
         private void OnDisable()
         {
             DirectivaLocalization.LanguageChanged -= OnLanguageChanged;
+            if (_resultsAudio != null)
+                _resultsAudio.Stop();
         }
 
         private void OnLanguageChanged(string _)
@@ -115,7 +123,8 @@ namespace Directiva.SimulationUI
             if (_editorTabLabel != null)
                 _editorTabLabel.text = string.IsNullOrWhiteSpace(editorButtonLabel) || editorButtonLabel == "Editor"
                     ? T("editor") : editorButtonLabel;
-            if (_mainMenuButton != null) _mainMenuButton.text = T("main_menu");
+            if (_mainMenuButton != null) _mainMenuButton.text = T("levels_button");
+            _leaveConfirmation?.Relocalize();
             foreach (var entry in _controlButtons)
                 entry.Value.tooltip = T(entry.Key);
             RefreshPlayAvailability();
@@ -123,6 +132,7 @@ namespace Directiva.SimulationUI
             SelectPlayback(_playbackState);
             _nexusPicker?.Relocalize();
             _matchStats?.Relocalize();
+            _resultsPanel?.Relocalize();
             if (_editorPane != null) SetEditorMode(CurrentEditorMode);
         }
 
@@ -308,18 +318,25 @@ namespace Directiva.SimulationUI
 
             // This button remains accessible above the fullscreen editor. It is
             // owned by the simulation UI, never by the reusable code editor.
-            _mainMenuButton = new Button(ReturnToMainMenu) { text = T("main_menu") };
+            _mainMenuButton = new Button(RequestReturnToLevels) { text = T("levels_button") };
             _mainMenuButton.AddToClassList("sim-menu-button");
             overlay.Add(_mainMenuButton);
             // Inside this UIDocument, the picker inserts itself behind all other
             // panels, so an overlapping code editor always receives the click.
             _nexusPicker = new SimulationNexusProgramPicker(overlay);
 
+            // Created above the ordinary HUD but below the shared runtime tooltip.
+            _resultsPanel = new SimulationResultsPanel(overlay, _theme,
+                CloseResults, NavigateToLevels);
+            _leaveConfirmation = new SimulationLeaveConfirmation(overlay, NavigateToLevels);
+
             // VisualElement.tooltip is Editor-only. Reuse the editor's runtime
             // tooltip implementation for Play, including when its Button is disabled.
             _hudTooltips = new HoverTooltipController(_root, overlay, 0.65f);
-            _hudTooltips.Register(playSlot, () => T(string.IsNullOrEmpty(_playBlockReasonKey)
-                ? "play" : _playBlockReasonKey));
+            _hudTooltips.Register(playSlot, () => _resultsPanel.IsVisible ? null :
+                T(string.IsNullOrEmpty(_playBlockReasonKey)
+                    ? "play" : _playBlockReasonKey));
+            _resultsPanel.RegisterTooltips(_hudTooltips);
 
             // Clicking anywhere in the editor gives it priority over keyboard
             // focus previously held by a dropdown in the Nexus selector.
@@ -594,7 +611,72 @@ namespace Directiva.SimulationUI
             _nexusPicker.PositionAt(new Vector2(point.x, point.y), _root.panel);
         }
 
-        private void ReturnToMainMenu()
+        /// <summary>Show the completed match without discarding the arena or its effects.</summary>
+        public void ShowResults(SimulationMatchResult result)
+        {
+            _nexusPicker?.Hide();
+            _hudTooltips?.Hide();
+            string title = string.IsNullOrWhiteSpace(LevelLaunchContext.CurrentLevelName)
+                ? defaultLevelTitle : LevelLaunchContext.CurrentLevelName;
+            _resultsPanel?.Show(result, title);
+            PlayResultSound(result.Outcome);
+        }
+
+        private void PlayResultSound(MatchOutcome outcome)
+        {
+            AudioClip clip = SelectResultClip(_theme, outcome);
+            if (_resultsAudio == null)
+            {
+                // Dedicated non-spatial source. The mixer Music bus controls only
+                // the result fanfare in this MVP (there is no background music).
+                _resultsAudio = gameObject.AddComponent<AudioSource>();
+                _resultsAudio.playOnAwake = false;
+                _resultsAudio.loop = false;
+                _resultsAudio.spatialBlend = 0f;
+                DirectivaAudio.Route(_resultsAudio, DirectivaAudioBus.Music);
+            }
+
+            _resultsAudio.Stop();
+            _resultsAudio.clip = clip;
+            if (clip != null)
+                _resultsAudio.Play();
+        }
+
+        /// <summary>Choose the outcome's assigned audio without generating sound assets.</summary>
+        public static AudioClip SelectResultClip(DirectivaUITheme theme, MatchOutcome outcome)
+        {
+            if (theme == null) return null;
+            return outcome == MatchOutcome.Side1Won ? theme.resultVictoryClip :
+                outcome == MatchOutcome.Side2Won ? theme.resultDefeatClip :
+                theme.resultDrawClip;
+        }
+
+        public void CloseResults()
+        {
+            _hudTooltips?.Hide();
+            _resultsPanel?.Hide();
+            if (_resultsAudio != null)
+                _resultsAudio.Stop();
+        }
+
+        /// <summary>
+        /// The HUD's optional confirmation only affects scene navigation.
+        /// It does not pause, step or otherwise modify the simulation.
+        /// </summary>
+        private void RequestReturnToLevels()
+        {
+            if (SettingsManager.Current.general.skipReturnToLevelsConfirmation)
+            {
+                NavigateToLevels();
+                return;
+            }
+
+            _hudTooltips?.Hide();
+            _leaveConfirmation?.Show();
+        }
+
+        /// <summary>Use the same one-shot levels navigation for the HUD and results.</summary>
+        private void NavigateToLevels()
         {
             if (!Application.CanStreamedLevelBeLoaded(menuSceneName))
             {
@@ -602,8 +684,18 @@ namespace Directiva.SimulationUI
                 return;
             }
             onBeforeReturnToMenu?.Invoke();
+            MainMenuNavigationRequest.RequestLevels();
             LevelLaunchContext.Clear();
-            SceneManager.LoadScene(menuSceneName);
+            try
+            {
+                SceneManager.LoadScene(menuSceneName);
+            }
+            catch (Exception)
+            {
+                MainMenuNavigationRequest.Clear();
+                throw;
+            }
         }
+
     }
 }

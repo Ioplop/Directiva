@@ -181,3 +181,7 @@
 [detail_instruction_local_context]: El rango de contexto local [{{1}}, {{2}}) no es válido.
 [detail_instruction_debug_line]: DebugLine no admite la línea negativa {{1}}.
 [detail_instruction_debug_span]: El rango de depuración [{{1}}, {{2}}) no es válido.
+
+[detail_unpack_invalid_target_count]: UNPACK_TUPLE requiere al menos dos variables de destino.
+[detail_unpack_requires_tuple]: Para desempaquetar se necesita una tupla, pero se recibio {{1}}.
+[detail_unpack_count_mismatch]: No se pueden desempaquetar {{1}} valores en {{2}} variables.

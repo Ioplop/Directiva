@@ -1,7 +1,9 @@
+using Directiva.Settings;
 using UnityEngine;
 
 /// <summary>
-/// Applies random pictch change to an audio source
+/// Keeps the prefab's pitch randomization and routes its existing 3D AudioSource
+/// to the Simulation mixer bus (attack, gather and death effects).
 /// </summary>
 public class SoundPitchRandomizer : MonoBehaviour
 {
@@ -10,6 +12,12 @@ public class SoundPitchRandomizer : MonoBehaviour
 
     private void Awake()
     {
+        if (source == null)
+            source = GetComponent<AudioSource>();
+        if (source == null) return;
+
+        // Do not override the prefab's volume, distance attenuation or spatial blend.
+        DirectivaAudio.Route(source, DirectivaAudioBus.Simulation);
         source.pitch *= 1.0f + Random.Range(-randomMagnitude, randomMagnitude);
     }
 }

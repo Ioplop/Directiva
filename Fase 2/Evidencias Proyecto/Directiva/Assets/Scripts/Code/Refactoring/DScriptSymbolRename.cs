@@ -381,7 +381,8 @@ namespace Directiva.CodeUI
                     foreach (var nested in loop.Body) WalkStatement(nested, expression, forTarget);
                     break;
                 case ForStatement iterator:
-                    forTarget(iterator);
+                    if (iterator.Target is NameExpression) forTarget(iterator);
+                    else WalkExpression(iterator.Target, expression);
                     WalkExpression(iterator.Iterable, expression);
                     foreach (var nested in iterator.Body) WalkStatement(nested, expression, forTarget);
                     break;

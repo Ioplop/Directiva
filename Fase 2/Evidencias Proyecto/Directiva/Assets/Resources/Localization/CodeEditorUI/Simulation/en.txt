@@ -1,6 +1,11 @@
 [editor]: Editor
 [main_menu]: Main menu
 [back_to_menu]: Return to main menu
+[levels_button]: Levels
+[leave_levels_title]: Return to levels
+[leave_levels_message]: Are you sure you want to leave the match and return to level selection?
+[leave_levels_cancel]: Cancel
+[leave_levels_confirm]: Yes, return
 [show_editor]: Open editor
 [hide_editor]: Hide editor
 [restore_editor]: Restore docked editor
@@ -55,3 +60,21 @@
 [level_world_too_small]: The world must be at least 16 × 16.
 [level_invalid_resources]: Invalid initial resource settings.
 [level_resource_bounds]: A resource is outside the safe world boundaries: {{1}}.
+
+[results_victory]: Victory
+[results_defeat]: Defeat
+[results_draw]: Draw
+[results_side_blue]: Blue player
+[results_side_red]: Red player
+[results_resources]: Resources gathered
+[results_errors]: Number of errors
+[results_built]: Units built
+[results_destroyed]: Entities destroyed
+[results_damage]: Damage dealt
+[results_time]: Elapsed time
+[results_orders_per_second]: Orders per second (units)
+[results_star_victory]: Win the match.
+[results_star_nexus]: Win without losing Nexus health. Shield damage does not count.
+[results_star_fast]: Win in less than {{1}} of simulated time.
+[results_return]: Return to match
+[results_levels]: View levels

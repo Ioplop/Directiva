@@ -11,6 +11,7 @@
 [lang_spanish]: Spanish
 [lang_english]: English
 [simulate_inactive]: Simulate while window is inactive
+[skip_levels_confirmation]: Skip confirmation when returning to levels
 [volume_master]: Master volume
 [volume_music]: Music volume
 [volume_ui]: Interface volume

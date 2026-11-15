@@ -61,6 +61,10 @@ namespace DSExecution.VirtualMachine
         public static Instruction Tuple(int count)
             => new(InstructionId.Tuple, operandA: count);
 
+        /// <summary>Replaces a tuple with count stack items, first element on top.</summary>
+        public static Instruction UnpackTuple(int count)
+            => new(InstructionId.UnpackTuple, operandA: count);
+
         /// <summary>
         /// Consumes count stack values and replaces them with one mutable heap list.
         /// </summary>
@@ -198,6 +202,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Cast => $"Cast {DataTypeOperand}",
                 InstructionId.Print => "Print",
                 InstructionId.Tuple => $"Tuple {OperandA}",
+                InstructionId.UnpackTuple => $"UnpackTuple {OperandA}",
                 InstructionId.List => $"List {OperandA}",
                 InstructionId.Set => $"Set {OperandA}",
                 InstructionId.Dict => $"Dict {OperandA}",

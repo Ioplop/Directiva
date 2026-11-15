@@ -400,6 +400,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Cast => ExecuteCast(frame, instruction.DataTypeOperand),
                 InstructionId.Print => ExecutePrint(frame),
                 InstructionId.Tuple => ExecuteTuple(frame, instruction.OperandA),
+                InstructionId.UnpackTuple => ExecuteUnpackTuple(frame, instruction.OperandA),
                 InstructionId.List => ExecuteList(frame, instruction.OperandA),
                 InstructionId.Set => ExecuteSet(frame, instruction.OperandA),
                 InstructionId.Dict => ExecuteDict(frame, instruction.OperandA),
@@ -500,6 +501,41 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.InternalVmError("TUPLE could not commit the stack replacement.", "detail_internal_tuple_could_not_commit_the_stack_replacement"));
             }
 
+            return AdvanceInstruction(frame);
+        }
+
+        /// <summary>
+        /// Tuple destructuring validates the runtime type and exact arity before
+        /// changing the stack or assigning any user-visible variable. No heap
+        /// allocations or simulation observations are needed.
+        /// </summary>
+        private VMAdvanceResult ExecuteUnpackTuple(CallFrame frame, int expected)
+        {
+            if (expected < 2)
+                return Fault(RuntimeError.InvalidInstruction(
+                    "UNPACK_TUPLE requires at least two targets.", "detail_unpack_invalid_target_count"));
+
+            if (!evaluationStack.TryPeekTop(frame.EvalStackBase, out DataValue value))
+                return Fault(RuntimeError.StackUnderflow());
+            if (value.dataType == DataTypeId.Uninitialized)
+                return Fault(RuntimeError.VariableUsedBeforeInitialization());
+            if (value.dataType != DataTypeId.Tuple)
+                return Fault(RuntimeError.InvalidOperation(
+                    $"Tuple unpacking needs a tuple, got {value.dataType}.",
+                    "detail_unpack_requires_tuple", value.dataType));
+
+            if (!value.TryGetHeapReference(out uint reference) ||
+                !Memory.TryGetHeap(reference, out HeapObject obj) ||
+                !(obj is TupleHeapObject tuple))
+                return Fault(RuntimeError.InvalidMemoryAccess(reference));
+
+            if (tuple.Count != expected)
+                return Fault(RuntimeError.InvalidOperation(
+                    $"Cannot unpack {tuple.Count} values into {expected} variables.",
+                    "detail_unpack_count_mismatch", tuple.Count, expected));
+
+            if (!evaluationStack.TryUnpackTuple(frame.EvalStackBase, tuple.Items))
+                return Fault(RuntimeError.StackOverflow());
             return AdvanceInstruction(frame);
         }
 

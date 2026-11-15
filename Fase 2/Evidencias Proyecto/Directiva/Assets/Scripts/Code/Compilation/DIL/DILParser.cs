@@ -843,6 +843,16 @@ namespace DSCompilation.DIL
                     return;
                 }
 
+                case "UNPACK_TUPLE":
+                {
+                    int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);
+                    if (count < 2)
+                        Throw(moduleName, lineNumber, "UNPACK_TUPLE requires at least two targets.",
+                            "unpack_tuple_count");
+                    instructions.Add(Instruction.UnpackTuple(count));
+                    return;
+                }
+
                 case "LIST":
                 {
                     int count = ParseIntOperand(moduleName, lineNumber, mnemonic, tokens, 1, symbols);

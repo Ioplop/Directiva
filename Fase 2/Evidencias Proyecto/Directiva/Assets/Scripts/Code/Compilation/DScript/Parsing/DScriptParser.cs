@@ -229,11 +229,24 @@ namespace DSCompilation.DScript.Parsing
         private Statement ReadFor()
         {
             var start = Advance();
-            var variable = Expect(TokenKind.Identifier, "For loop target must be a single variable.", "expected_for_target");
+            var first = Expect(TokenKind.Identifier, "Expected a for-loop variable.", "expected_for_target");
+            Expression target = new NameExpression(first.Text, first.Span);
+            if (Match(TokenKind.Comma))
+            {
+                var names = new List<Expression> { target };
+                do
+                {
+                    var next = Expect(TokenKind.Identifier,
+                        "Expected a variable after ',' in for-loop target.", "expected_unpack_name");
+                    names.Add(new NameExpression(next.Text, next.Span));
+                } while (Match(TokenKind.Comma) && !Is(TokenKind.In));
+                target = new CollectionExpression(CollectionKind.Tuple, names,
+                    Array.Empty<Expression>(), SourceSpan.Through(first.Span, names[names.Count - 1].Span));
+            }
             Expect(TokenKind.In, "Expected 'in' in for loop.", "expected_for_in");
             var iterable = ReadExpression();
             var body = ReadSuite();
-            return new ForStatement(variable.Text, variable.Span, iterable, body,
+            return new ForStatement(target, iterable, body,
                 SourceSpan.Through(start.Span, Previous.Span));
         }
 
@@ -257,6 +270,20 @@ namespace DSCompilation.DScript.Parsing
         private Statement ReadSimple()
         {
             Expression lhs = ReadExpression();
+            // Commas outside parentheses form an unpacking TARGET, not a
+            // general comma-expression. The RHS is evaluated only once.
+            if (Match(TokenKind.Comma))
+            {
+                var names = new List<Expression> { lhs };
+                do
+                {
+                    var next = Expect(TokenKind.Identifier,
+                        "Expected a variable after ',' in tuple assignment.", "expected_unpack_name");
+                    names.Add(new NameExpression(next.Text, next.Span));
+                } while (Match(TokenKind.Comma) && Is(TokenKind.Identifier));
+                lhs = new CollectionExpression(CollectionKind.Tuple, names,
+                    Array.Empty<Expression>(), SourceSpan.Through(lhs.Span, names[names.Count - 1].Span));
+            }
             string declaredType = null;
             if (lhs is NameExpression && Match(TokenKind.Colon))
             {
@@ -283,7 +310,18 @@ namespace DSCompilation.DScript.Parsing
                 kind == TokenKind.PercentEqual || kind == TokenKind.DoubleStarEqual)
             {
                 var op = Advance();
-                if (!(lhs is NameExpression || lhs is IndexExpression || lhs is AttributeExpression))
+                if (lhs is CollectionExpression unpack)
+                {
+                    // Only flat name targets are supported; no implicit indexed writes.
+                    if (op.Kind != TokenKind.Equals)
+                        Error("DS2025", "Tuple unpacking does not support augmented assignment.",
+                            op.Span, "unpack_augmented");
+                    if (unpack.Kind != CollectionKind.Tuple || unpack.Items.Count < 2 ||
+                        !AllUnpackNames(unpack))
+                        Error("DS2024", "Tuple unpacking requires two or more variable names.",
+                            lhs.Span, "unpack_target_names");
+                }
+                else if (!(lhs is NameExpression || lhs is IndexExpression || lhs is AttributeExpression))
                     Error("DS2004", "Assignment target must be a variable, index or attribute.", lhs.Span, "invalid_assignment_target");
                 Expression rhs = ReadExpression();
                 var end = Expect(TokenKind.Newline, "Expected end of assignment.", "end_assignment");
@@ -291,6 +329,13 @@ namespace DSCompilation.DScript.Parsing
             }
             Expect(TokenKind.Newline, "Expected end of expression statement.", "end_expression");
             return new ExpressionStatement(lhs, lhs.Span);
+        }
+
+        private static bool AllUnpackNames(CollectionExpression collection)
+        {
+            foreach (Expression item in collection.Items)
+                if (!(item is NameExpression)) return false;
+            return true;
         }
 
         private Expression ReadExpression()

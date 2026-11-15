@@ -154,6 +154,7 @@ namespace Directiva.EditorTests
             OrchestrationTests.OrchestratorTests.Register(tests);
             OrchestrationTests.FullMatchDeterminismTests.Register(tests);
             SimulationFrontendTests.SimulationFrontendTests.Register(tests);
+            SimulationFrontendTests.SimulationResultsTests.Register(tests);
             SimulationFrontendTests.PlayerNexusSelectionTests.Register(tests);
             LevelTests.DirectivaLevelTests.Register(tests);
             LevelTests.LevelProgressTests.Register(tests);

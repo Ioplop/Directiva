@@ -54,6 +54,12 @@ namespace Directiva.UI
         public Sprite unearnedStar;
         public Sprite requiredStar;
         public Sprite lockedLevel;
+
+        [Header("Match results")]
+        [Tooltip("Earned objective icon on the results screen. Defaults to the level-selection earnedStar sprite if unassigned.")]
+        public Sprite resultObjectiveEarned;
+        [Tooltip("Unearned objective icon on the results screen. Defaults to the level-selection unearnedStar sprite if unassigned.")]
+        public Sprite resultObjectiveUnearned;
     }
 
     /// <summary>
@@ -108,6 +114,14 @@ namespace Directiva.UI
         [Min(0f)] public float mainMenuLogoHeight = 140f;
         [Tooltip("Maximum width of the logo's bounding box in UI Toolkit points. Zero uses the stylesheet default.")]
         [Min(0f)] public float mainMenuLogoMaxWidth = 720f;
+
+        [Header("Match results sound (Music volume)")]
+        [Tooltip("Played once when a victory result screen opens. Optional.")]
+        public AudioClip resultVictoryClip;
+        [Tooltip("Played once when a defeat result screen opens. Optional.")]
+        public AudioClip resultDefeatClip;
+        [Tooltip("Played once when a draw result screen opens. Optional.")]
+        public AudioClip resultDrawClip;
 
         [Header("Icons (None means transparent / no glyph)")]
         public DirectivaUIIcons icons = new DirectivaUIIcons();

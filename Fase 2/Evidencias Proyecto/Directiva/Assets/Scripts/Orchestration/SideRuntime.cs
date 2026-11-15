@@ -27,6 +27,7 @@ namespace DOrchestration
         internal DScriptInitializationReport Initialization { get; }
         internal IEnumerable<EntityVMBinding> Bindings => bindings.Values;
         internal int PendingBuildCount => buildEntries.Count;
+        internal long AcceptedUnitOrders => bridge.AcceptedUnitOrders;
 
         internal event Action<int, string> Printed;
         internal event Action<int, string> Warning;

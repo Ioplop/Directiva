@@ -63,6 +63,18 @@ namespace Directiva.EditorTests.CodeUITests
                     "value", "first",
                     "def a():\n    first = 1\n    return first\ndef b():\n    value = 2\n    return value\n"));
 
+            Add("TupleAssignmentTarget", "Rename one destructured local independently of its partner", t =>
+                ExpectRename(t,
+                    "def f():\n    x, y = (1, 2)\n    return x + y\n",
+                    "x", "left",
+                    "def f():\n    left, y = (1, 2)\n    return left + y\n"));
+
+            Add("TupleForTarget", "Rename a variable bound through tuple-for destructuring", t =>
+                ExpectRename(t,
+                    "def f(items):\n    for x, y in items:\n        print(x, y)\n",
+                    "y", "right",
+                    "def f(items):\n    for x, right in items:\n        print(x, right)\n"));
+
             Add("ForTarget", "Rename a for-loop target and its body uses", t =>
                 ExpectRename(t,
                     "def f(items):\n    for item in items:\n        print(item)\n",

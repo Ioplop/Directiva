@@ -73,3 +73,5 @@
 [symbol_requires_integer]: Parse symbol '{{1}}' must contain exactly one integer number.
 [annotation_requires_value]: # {{1}} requires a value after ':'.
 [operand_count]: {{1}} expects {{2}} operand(s), but received {{3}}.
+
+[unpack_tuple_count]: UNPACK_TUPLE requires at least two target variables.

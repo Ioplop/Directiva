@@ -43,7 +43,8 @@ namespace Directiva.Settings
                 general = new GeneralSettings
                 {
                     language = general.language,
-                    simulateWhenInactive = general.simulateWhenInactive
+                    simulateWhenInactive = general.simulateWhenInactive,
+                    skipReturnToLevelsConfirmation = general.skipReturnToLevelsConfirmation
                 },
                 audio = new AudioSettings
                 {
@@ -78,7 +79,10 @@ namespace Directiva.Settings
     {
         // Explicit strings, rather than numeric enums, keep the JSON easy to edit manually.
         public string language = "es";
-        public bool simulateWhenInactive = false;
+        public bool simulateWhenInactive = true;
+        // Ask before leaving a match unless the player explicitly opts out.
+        // Existing settings.json files keep an explicitly saved preference.
+        public bool skipReturnToLevelsConfirmation = false;
     }
 
     [Serializable]

@@ -106,3 +106,7 @@
 [end_vm_global_declaration]: Expected the end of the global declaration.
 [vm_global_scope_binder]: VM-private 'global' variables must be declared at module scope.
 [parameter_vm_global_collision]: Parameter '{{1}}' conflicts with a VM-private global variable.
+
+[expected_unpack_name]: Expected a variable name after the comma.
+[unpack_target_names]: Tuple unpacking requires two or more variable names.
+[unpack_augmented]: Tuple unpacking does not support augmented assignment.

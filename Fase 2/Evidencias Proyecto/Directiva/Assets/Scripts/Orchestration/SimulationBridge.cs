@@ -71,6 +71,9 @@ namespace DOrchestration
         private readonly SimulationObserver observer;
         private readonly SimulationController controller;
 
+        /// <summary>Accepted script orders issued to units, never to nexuses.</summary>
+        internal long AcceptedUnitOrders { get; private set; }
+
         /// <summary>Creates a bridge bound to the APIs of one simulation.</summary>
         internal SimulationBridge(Simulation simulation)
         {
@@ -107,7 +110,11 @@ namespace DOrchestration
             // Also accept move((x,y)) as a position tuple without adding a CLR overload.
             if (name == "move" && arguments.Length == 1 && arguments[0] is FixedVector2 point)
                 arguments = new object[] { point.X, point.Y };
-            return Invoke(operations, controller, receiverId, arguments);
+            SimulationCallResult result = Invoke(operations, controller, receiverId, arguments);
+            if (result.Status == SimulationCallStatus.Success && result.Value is bool accepted &&
+                accepted && observer.GetEntityType(receiverId) == SimulationEntityType.Unit)
+                AcceptedUnitOrders++;
+            return result;
         }
 
         /// <summary>

@@ -373,14 +373,11 @@ namespace DSCompilation.DScript.Semantics
         {
             foreach (var statement in statements)
             {
-                if (statement is AssignmentStatement assignment && assignment.Target is NameExpression name)
-                {
-                    if (name.Name != "self" && !currentModule.GlobalsInternal.ContainsKey(name.Name)) AddLocal(name.Name, SymbolKind.Local);
-                }
+                if (statement is AssignmentStatement assignment)
+                    CollectTargetNames(assignment.Target);
                 else if (statement is ForStatement iterator)
                 {
-                    if (iterator.Variable != "self" && !currentModule.GlobalsInternal.ContainsKey(iterator.Variable))
-                        AddLocal(iterator.Variable, SymbolKind.Local);
+                    CollectTargetNames(iterator.Target);
                     CollectLocalAssignments(iterator.Body);
                 }
                 else if (statement is IfStatement conditional)
@@ -390,6 +387,17 @@ namespace DSCompilation.DScript.Semantics
                 }
                 else if (statement is WhileStatement loop) CollectLocalAssignments(loop.Body);
             }
+        }
+
+        private void CollectTargetNames(Expression target)
+        {
+            if (target is NameExpression name)
+            {
+                if (name.Name != "self" && !currentModule.GlobalsInternal.ContainsKey(name.Name))
+                    AddLocal(name.Name, SymbolKind.Local);
+            }
+            else if (target is CollectionExpression collection && collection.Kind == CollectionKind.Tuple)
+                foreach (Expression item in collection.Items) CollectTargetNames(item);
         }
 
         private void AddLocal(string name, SymbolKind kind)
@@ -443,11 +451,18 @@ namespace DSCompilation.DScript.Semantics
             else if (statement is ForStatement iterator)
             {
                 VisitExpression(iterator.Iterable);
-                if (iterator.Variable == "self")
-                    Error("DS4031", "'self' is a read-only contextual value.",
-                        iterator.VariableSpan, "self_reserved");
-                DScriptSymbol target = FindName(iterator.Variable, iterator.VariableSpan, true);
-                if (target != null) forTargets[iterator] = target;
+                if (iterator.Target is NameExpression simple)
+                {
+                    VisitTarget(simple, false);
+                    if (bindings.TryGetValue(simple, out DScriptSymbol symbol))
+                    {
+                        // Keep the historical side table for simple for targets.
+                        // The name is not duplicated in ExpressionSymbols.
+                        bindings.Remove(simple);
+                        forTargets[iterator] = symbol;
+                    }
+                }
+                else VisitTarget(iterator.Target, false);
                 loopDepth++;
                 foreach (var nested in iterator.Body) VisitStatement(nested);
                 loopDepth--;
@@ -469,7 +484,14 @@ namespace DSCompilation.DScript.Semantics
 
         private void VisitTarget(Expression target, bool readBeforeWrite)
         {
-            if (target is NameExpression variable)
+            if (target is CollectionExpression unpack && unpack.Kind == CollectionKind.Tuple)
+            {
+                if (readBeforeWrite || unpack.Items.Count < 2)
+                    Error("DS4024", "Invalid tuple assignment target.", target.Span, "unpack_target_names");
+                foreach (Expression child in unpack.Items)
+                    VisitTarget(child, false);
+            }
+            else if (target is NameExpression variable)
             {
                 if (variable.Name == "self")
                 {

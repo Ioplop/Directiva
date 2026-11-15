@@ -44,6 +44,30 @@ namespace Directiva.EditorTests.OrchestrationTests
 
             });
 
+            Add("AcceptedUnitOrderCount",
+                "Counts accepted unit orders, not failed orders, observations or Nexus builds", t =>
+            {
+                World world = SimulationTestHarness.NewWorld();
+                var unit = SimulationTestHarness.AddUnit(world, 1, 5, 5, 0);
+                var nexus = new SBNexus(world.GetSide(1), SimulationTestHarness.P(3, 8));
+                world.EnqueueCreation(nexus);
+                world.Start();
+                var bridge = new SimulationBridge(world);
+                t.Equal(0L, bridge.AcceptedUnitOrders, "no initial orders");
+                t.Equal(SimulationCallStatus.Success,
+                    bridge.Order(unit.id, unit.id, "move", 7, 7).Status,
+                    "valid movement order");
+                t.Equal(1L, bridge.AcceptedUnitOrders, "successful move counted");
+                bridge.Order(unit.id, unit.id, "move", 999, 7);
+                bridge.Order(unit.id, unit.id, "attack", new SimulationEntityReference(99999));
+                bridge.Observe(unit.id, "position");
+                t.Equal(1L, bridge.AcceptedUnitOrders,
+                    "rejected and observation calls are not orders");
+                bridge.Order(unit.id, unit.id, "stop_move");
+                t.Equal(2L, bridge.AcceptedUnitOrders, "accepted stop order counted");
+                t.Equal(0L, world.Tick, "counting never advances physics");
+            });
+
             Add("PerspectivesAndSnapshots", "Queries on an enemy use its perspective; lists are independent", t =>
             {
                 World world = SimulationTestHarness.NewWorld();

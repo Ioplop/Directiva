@@ -123,6 +123,21 @@ namespace Directiva.CodeUI
             return resolved;
         }
 
+        private static SourceSpan? GetBoundTargetSpan(Expression expression,
+            DScriptSymbol symbol, DScriptAnalysis analysis)
+        {
+            if (expression is NameExpression name &&
+                analysis.ExpressionSymbols.TryGetValue(name, out var bound) &&
+                ReferenceEquals(bound, symbol)) return name.Span;
+            if (expression is CollectionExpression tuple)
+                foreach (Expression item in tuple.Items)
+                {
+                    SourceSpan? found = GetBoundTargetSpan(item, symbol, analysis);
+                    if (found.HasValue) return found;
+                }
+            return null;
+        }
+
         private static bool FindDeclaration(DScriptAnalysis analysis, IDScriptSourceProvider provider,
             string currentModule, DScriptSymbol target, out Location destination)
         {
@@ -148,15 +163,17 @@ namespace Directiva.CodeUI
                     WalkStatement(statement, nested =>
                     {
                         SourceSpan? candidate = null;
-                        if (nested is AssignmentStatement assignment &&
-                            assignment.Target is NameExpression name &&
-                            analysis.ExpressionSymbols.TryGetValue(name, out var symbol) &&
-                            ReferenceEquals(symbol, target))
-                            candidate = name.Span;
-                        else if (nested is ForStatement loop &&
-                            analysis.ForTargetSymbols.TryGetValue(loop, out symbol) &&
-                            ReferenceEquals(symbol, target))
-                            candidate = loop.VariableSpan;
+                        if (nested is AssignmentStatement assignment)
+                            candidate = GetBoundTargetSpan(assignment.Target, target, analysis);
+                        else if (nested is ForStatement loop)
+                        {
+                            if (loop.Target is NameExpression &&
+                                analysis.ForTargetSymbols.TryGetValue(loop, out var symbol) &&
+                                ReferenceEquals(symbol, target))
+                                candidate = loop.VariableSpan;
+                            else if (loop.Target is CollectionExpression)
+                                candidate = GetBoundTargetSpan(loop.Target, target, analysis);
+                        }
                         if (candidate.HasValue && (!first.HasValue ||
                             candidate.Value.Start < first.Value.Start)) first = candidate;
                     }, _ => { });
@@ -304,6 +321,7 @@ namespace Directiva.CodeUI
                     foreach (var child in loop.Body) WalkStatement(child, statement, expression);
                     break;
                 case ForStatement iterator:
+                    WalkExpression(iterator.Target, expression);
                     WalkExpression(iterator.Iterable, expression);
                     foreach (var child in iterator.Body) WalkStatement(child, statement, expression);
                     break;

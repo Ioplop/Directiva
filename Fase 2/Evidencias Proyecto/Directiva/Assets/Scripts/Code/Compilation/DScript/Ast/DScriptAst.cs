@@ -141,13 +141,19 @@ namespace DSCompilation.DScript.Ast
 
     public sealed class ForStatement : Statement
     {
-        public string Variable { get; }
-        public SourceSpan VariableSpan { get; }
+        // A plain name or a flat tuple of names. The old single-name accessors
+        // remain available for existing editor/refactoring consumers.
+        public Expression Target { get; }
+        public string Variable => (Target as NameExpression)?.Name;
+        public SourceSpan VariableSpan => Target.Span;
         public Expression Iterable { get; }
         public IReadOnlyList<Statement> Body { get; }
-        public ForStatement(string variable, SourceSpan variableSpan, Expression iterable,
+        public ForStatement(Expression target, Expression iterable,
             IReadOnlyList<Statement> body, SourceSpan span) : base(span)
-        { Variable = variable; VariableSpan = variableSpan; Iterable = iterable; Body = body; }
+        { Target = target; Iterable = iterable; Body = body; }
+        public ForStatement(string variable, SourceSpan variableSpan, Expression iterable,
+            IReadOnlyList<Statement> body, SourceSpan span)
+            : this(new NameExpression(variable, variableSpan), iterable, body, span) { }
     }
 
     public sealed class ReturnStatement : Statement

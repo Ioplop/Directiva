@@ -110,7 +110,6 @@ namespace Directiva.MainMenu
         [SerializeField] private string languageSettingLabel = "Idioma";
         [SerializeField] private string masterVolumeSettingLabel = "Volumen general";
         [SerializeField] private string musicVolumeSettingLabel = "Volumen de la música";
-        [SerializeField] private string uiVolumeSettingLabel = "Volumen de la interfaz";
         [SerializeField] private string simulationVolumeSettingLabel = "Volumen de la partida / simulación";
         [SerializeField] private string resolutionSettingLabel = "Resolución";
         [SerializeField] private string mouseCaptureSettingLabel = "Atrapar el mouse";
@@ -149,6 +148,7 @@ namespace Directiva.MainMenu
         private Label starTotal;
         private Button fullScreenButton;
         private Button simulateInactiveButton;
+        private Button skipReturnConfirmationButton;
         private Button editorCompletionButton;
         private Button editorErrorsButton;
         private Button editorSuggestionsButton;
@@ -303,7 +303,8 @@ namespace Directiva.MainMenu
             BuildHome();
             BuildOptions();
             BuildLevels();
-            Show(home);
+            if (MainMenuNavigationRequest.ConsumeLevels()) ShowLevelsScreen();
+            else Show(home);
             if (root.resolvedStyle.width > 1f)
                 ApplyOptionsLayout(root.resolvedStyle.width, root.resolvedStyle.height);
             SettingsManager.SettingsChanged += OnSettingsChanged;
@@ -496,22 +497,26 @@ namespace Directiva.MainMenu
                 new List<string> { T("lang_spanish"), T("lang_english") },
                 values.general.language == "en" ? T("lang_english") : T("lang_spanish"),
                 label => SettingsManager.SetLanguage(label == T("lang_english") ? "en" : "es"));
-            simulateInactiveButton = AddBooleanButton(general, "",
+            simulateInactiveButton = AddBooleanButton(general,
+                MenuButtonText(buttons?.simulateWhenInactive, "Simular en ventana inactiva", "simulate_inactive"),
                 buttons?.simulateWhenInactive,
                 () => SettingsManager.SetSimulateWhenInactive(!SettingsManager.Current.general.simulateWhenInactive));
+            skipReturnConfirmationButton = AddBooleanButton(general, T("skip_levels_confirmation"), null,
+                () => SettingsManager.SetSkipReturnToLevelsConfirmation(
+                    !SettingsManager.Current.general.skipReturnToLevelsConfirmation));
 
             var sound = AddOptionsSection(SectionTitle(audioSectionTitle, null, "Sonido", "sound"));
             AddVolume(sound, "master", DefaultLabel(masterVolumeSettingLabel, "Volumen general", "volume_master"),
                 values.audio.masterVolume, SettingsManager.SetMasterVolume);
             AddVolume(sound, "music", DefaultLabel(musicVolumeSettingLabel, "Volumen de la música", "volume_music"),
                 values.audio.musicVolume, SettingsManager.SetMusicVolume);
-            AddVolume(sound, "ui", DefaultLabel(uiVolumeSettingLabel, "Volumen de la interfaz", "volume_ui"),
-                values.audio.uiVolume, SettingsManager.SetUiVolume);
             AddVolume(sound, "simulation", DefaultLabel(simulationVolumeSettingLabel, "Volumen de la partida / simulación", "volume_simulation"),
                 values.audio.simulationVolume, SettingsManager.SetSimulationVolume);
 
             var graphics = AddOptionsSection(SectionTitle(graphicsSectionTitle, buttons?.graphicsTab, "Gráficos", "graphics"));
-            fullScreenButton = AddBooleanButton(graphics, "", buttons?.fullScreen,
+            fullScreenButton = AddBooleanButton(graphics,
+                MenuButtonText(buttons?.fullScreen, "Pantalla completa", "fullscreen"),
+                buttons?.fullScreen,
                 () => SettingsManager.SetFullscreen(!SettingsManager.Current.graphics.fullscreen));
             resolutionDropdown = AddDropdown(graphics, DefaultLabel(resolutionSettingLabel, "Resolución", "resolution"),
                 new List<string> { "..." }, "...", RequestResolutionChange);
@@ -591,16 +596,6 @@ namespace Directiva.MainMenu
             return button;
         }
 
-        private void SetBooleanButton(Button button, MainMenuButtonAction action, string fallback, bool enabled)
-        {
-            if (button == null) return;
-            string key = button == fullScreenButton ? "fullscreen" : "simulate_inactive";
-            string originalSpanish = button == fullScreenButton ? "Pantalla completa" : "Simular en ventana inactiva";
-            button.text = MenuButtonText(action, originalSpanish, key) + (enabled ? ": " + T("yes") : ": " + T("no"));
-            button.EnableInClassList("dm-active", enabled);
-            SetButtonColor(button, ButtonVisualState.Normal);
-        }
-
         private void AddVolume(VisualElement section, string key, string caption, int initialValue, Action<int> onChanged)
         {
             var row = Container("dm-volume-row");
@@ -669,9 +664,9 @@ namespace Directiva.MainMenu
             GameSettings values = SettingsManager.Current;
             languageDropdown?.SetValueWithoutNotify(values.general.language == "en" ? T("lang_english") : T("lang_spanish"));
             mouseCaptureDropdown?.SetValueWithoutNotify(MouseCaptureLabel(values.controls.mouseCapture));
-            SetBooleanButton(fullScreenButton, buttons?.fullScreen, "Pantalla completa", values.graphics.fullscreen);
-            SetBooleanButton(simulateInactiveButton, buttons?.simulateWhenInactive, "Simular en ventana inactiva",
-                values.general.simulateWhenInactive);
+            SetPreference(fullScreenButton, values.graphics.fullscreen);
+            SetPreference(simulateInactiveButton, values.general.simulateWhenInactive);
+            SetPreference(skipReturnConfirmationButton, values.general.skipReturnToLevelsConfirmation);
 
             SetPreference(editorCompletionButton, values.editor.showCompletion);
             SetPreference(editorErrorsButton, values.editor.showLiveErrors);
@@ -688,7 +683,6 @@ namespace Directiva.MainMenu
 
             SetVolume("master", values.audio.masterVolume);
             SetVolume("music", values.audio.musicVolume);
-            SetVolume("ui", values.audio.uiVolume);
             SetVolume("simulation", values.audio.simulationVolume);
 
             if (!pendingResolution.HasValue)

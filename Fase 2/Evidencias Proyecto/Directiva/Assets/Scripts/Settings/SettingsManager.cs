@@ -162,6 +162,8 @@ namespace Directiva.Settings
 
         public static void SetLanguage(string language) => Change(next => next.general.language = language);
         public static void SetSimulateWhenInactive(bool value) => Change(next => next.general.simulateWhenInactive = value);
+        public static void SetSkipReturnToLevelsConfirmation(bool value) =>
+            Change(next => next.general.skipReturnToLevelsConfirmation = value);
         public static void SetMasterVolume(int value) => Change(next => next.audio.masterVolume = value);
         public static void SetMusicVolume(int value) => Change(next => next.audio.musicVolume = value);
         public static void SetUiVolume(int value) => Change(next => next.audio.uiVolume = value);

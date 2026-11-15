@@ -3,9 +3,8 @@ using UnityEngine;
 namespace Directiva.Settings
 {
     /// <summary>
-    /// Applies only the supported runtime settings: display mode/resolution,
-    /// background execution, and mouse confinement. Exists once across all scenes.
-    /// Audio and language are intentionally not applied here.
+    /// Applies display, background, cursor and mixer settings across scenes.
+    /// The mixer is updated from Start onward, after Unity initializes AudioMixer.
     /// </summary>
     public sealed class SettingsRuntimeApplier : MonoBehaviour
     {
@@ -23,6 +22,7 @@ namespace Directiva.Settings
         private int appliedHeight;
         private bool appliedFullscreen;
         private bool backgroundInitialized;
+        private bool audioInitialized;
         private bool appliedBackground;
         private string appliedMouseCapture;
 
@@ -59,6 +59,13 @@ namespace Directiva.Settings
             lastFullscreen = Screen.fullScreen;
             SettingsManager.SettingsChanged += ApplySettings;
             ApplySettings(SettingsManager.Current);
+        }
+
+        private void Start()
+        {
+            // Unity does not support AudioMixer.SetFloat in Awake/OnEnable.
+            audioInitialized = true;
+            DirectivaAudio.ApplyVolumes(SettingsManager.Current.audio);
         }
 
         private void OnDestroy()
@@ -121,6 +128,8 @@ namespace Directiva.Settings
             if (fullscreenSettingChanged || appliedMouseCapture != settings.controls.mouseCapture)
                 ApplyMouseCapture(settings);
             appliedMouseCapture = settings.controls.mouseCapture;
+            if (audioInitialized)
+                DirectivaAudio.ApplyVolumes(settings.audio);
         }
 
         private void ApplyDisplay(int width, int height, bool fullscreen)

@@ -52,7 +52,7 @@ namespace Directiva.EditorTests.DScript
                 ("MissingComma", "def f():\n    return [1 2]\n", "DS2000"),
                 ("BadDict", "def f():\n    return {1:}\n", "DS2005"),
                 ("UnsupportedKeywordArgs", "def f():\n    return f(x=2)\n", "DS2000"),
-                ("TupleAssignmentUnsupported", "def f():\n    a, b = 1, 2\n", "DS2000"),
+                ("UnparenthesizedRhsTupleUnsupported", "def f():\n    a, b = 1, 2\n", "DS2000"),
                 ("NestedShared", "def f():\n    shared x\n", "DS2014"),
                 ("NestedSharedInIf", "def f():\n    if True:\n        shared x = 7\n", "DS2014"),
                 ("ModuleAssignment", "x = 1\n", "DS2013"),

@@ -178,15 +178,20 @@ namespace Directiva.CodeUI
                 }
                 else if (statement is ForStatement forLoop)
                 {
-                    if (seenLocals.Add(forLoop.Variable) &&
-                        !(analysis.ModuleSymbols.TryGetValue(module, out var symbols) &&
-                          symbols.Globals.ContainsKey(forLoop.Variable)))
+                    void CheckTargetName(NameExpression name)
                     {
-                        string existing = ExistingName(forLoop.Variable);
+                        if (!seenLocals.Add(name.Name) ||
+                            (analysis.ModuleSymbols.TryGetValue(module, out var symbols) &&
+                             symbols.Globals.ContainsKey(name.Name))) return;
+                        string existing = ExistingName(name.Name);
                         if (existing != null)
-                            Warn("DS6201", "Loop variable shadows " + existing, forLoop.VariableSpan,
-                                "hint_shadow", forLoop.Variable, existing);
+                            Warn("DS6201", "Loop variable shadows " + existing, name.Span,
+                                "hint_shadow", name.Name, existing);
                     }
+                    if (forLoop.Target is NameExpression single) CheckTargetName(single);
+                    else if (forLoop.Target is CollectionExpression tuple)
+                        foreach (Expression item in tuple.Items)
+                            if (item is NameExpression name) CheckTargetName(name);
                     InspectExpression(forLoop.Iterable, function);
                     foreach (Statement child in forLoop.Body)
                         InspectStatement(child, function, declared, seenLocals);

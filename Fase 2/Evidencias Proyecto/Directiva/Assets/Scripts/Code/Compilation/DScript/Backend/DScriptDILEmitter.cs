@@ -203,7 +203,8 @@ namespace DSCompilation.DScript.Backend
             }
             else if (statement is ForStatement iterate)
             {
-                if (!analysis.ForTargetSymbols.TryGetValue(iterate, out DScriptSymbol symbol))
+                if (iterate.Target is NameExpression &&
+                    !analysis.ForTargetSymbols.TryGetValue(iterate, out _))
                     throw Failure(iterate.VariableSpan, "Missing for-target symbol.");
                 string next = Label();
                 string cleanup = Label();
@@ -212,7 +213,9 @@ namespace DSCompilation.DScript.Backend
                 Op("ITER_INIT", iterate.Iterable.Span);
                 Mark(next);
                 Op("ITER_NEXT " + exhausted, iterate.Span);
-                Store(symbol, iterate.VariableSpan);
+                if (iterate.Target is NameExpression)
+                    Store(analysis.ForTargetSymbols[iterate], iterate.VariableSpan);
+                else EmitUnpackTarget(iterate.Target);
                 loops.Push(new LoopLabels(next, cleanup));
                 foreach (Statement nested in iterate.Body) EmitStatement(nested);
                 loops.Pop();
@@ -228,6 +231,16 @@ namespace DSCompilation.DScript.Backend
         private void Assign(AssignmentStatement assignment)
         {
             Expression target = assignment.Target;
+            if (target is CollectionExpression)
+            {
+                // One RHS evaluation, then an atomic tuple shape/arity check before
+                // any destination is modified. UNPACK_TUPLE pushes the first item last.
+                if (assignment.Operator != "=")
+                    throw Failure(target.Span, "Tuple unpacking does not support augmented assignment.");
+                EmitExpression(assignment.Value);
+                EmitUnpackTarget(target);
+                return;
+            }
             bool augmented = assignment.Operator != "=";
             string operation = null;
             if (augmented)
@@ -310,6 +323,22 @@ namespace DSCompilation.DScript.Backend
                 return;
             }
             throw Failure(assignment.Span, "Invalid assignment target.");
+        }
+
+        private void EmitUnpackTarget(Expression target)
+        {
+            if (!(target is CollectionExpression tuple) || tuple.Kind != CollectionKind.Tuple ||
+                tuple.Items.Count < 2)
+                throw Failure(target.Span, "Invalid tuple unpacking target.");
+
+            foreach (Expression item in tuple.Items)
+                if (!(item is NameExpression) || !analysis.ExpressionSymbols.ContainsKey(item))
+                    throw Failure(item.Span, "Tuple unpacking requires bound variable names.");
+
+            Op("UNPACK_TUPLE " + tuple.Items.Count, target.Span);
+            // The first value is at the top of the stack, so stores run left-to-right.
+            foreach (Expression item in tuple.Items)
+                Store(Bound(item), item.Span);
         }
 
         private void EmitExpression(Expression expression)

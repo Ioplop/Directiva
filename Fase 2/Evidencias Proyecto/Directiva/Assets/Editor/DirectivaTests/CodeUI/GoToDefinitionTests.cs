@@ -78,6 +78,16 @@ namespace Directiva.EditorTests.CodeUITests
                     ["main"] = "def run():\n    print(value)\n    value = 4\n"
                 }, "main", "value", 0, "main", "value", 1));
 
+            Add("UnpackedAssignmentTarget", "Ctrl+click resolves locals created by tuple assignment", t =>
+                Expect(t, new Dictionary<string, string> {
+                    ["main"] = "def run():\n    x, y = (1, 2)\n    return y\n"
+                }, "main", "y", 1, "main", "y"));
+
+            Add("UnpackedForTarget", "Ctrl+click resolves tuple targets of a for loop", t =>
+                Expect(t, new Dictionary<string, string> {
+                    ["main"] = "def run(items):\n    for x, y in items:\n        print(x, y)\n"
+                }, "main", "x", 1, "main", "x"));
+
             Add("ForLoopTarget", "A loop variable use navigates to the for target", t =>
                 Expect(t, new Dictionary<string, string> {
                     ["main"] = "def run(items):\n    for item in items:\n        print(item)\n"
