@@ -343,13 +343,9 @@ namespace Directiva.MainMenu
         private void RefreshOptionsFrameBackground()
         {
             if (options == null || appearance == null) return;
-            Color color = appearance.frameBackground;
-            // On a compact screen, translucent panels make controls compete
-            // with the animated 3D backdrop. Preserve the chosen tint, but
-            // keep its text and controls readable while navigating settings.
-            if (optionsLayout == OptionsLayout.Compact || optionsLayout == OptionsLayout.Small)
-                color.a = Mathf.Max(color.a, 0.92f);
-            options.style.backgroundColor = color;
+            // Responsive layouts can rearrange controls, but must never change
+            // the Inspector-configured background tint/transparency of the menu.
+            options.style.backgroundColor = appearance.frameBackground;
         }
 
         private void OnSettingsChanged(GameSettings _)

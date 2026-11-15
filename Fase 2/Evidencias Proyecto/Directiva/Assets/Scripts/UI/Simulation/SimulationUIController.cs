@@ -241,8 +241,8 @@ namespace Directiva.SimulationUI
             _resizeHandle = new SimulationEditorResizeHandle(ResizeDockedEditor);
             _editorPane.Add(_resizeHandle);
 
-            // Match information sits at the top, leaving the bottom edge for
-            // simulation controls. Its editor button shares exactly the same row.
+            // Editor, match information and Levels occupy one centered row.
+            // Their widths shrink together after the outer free margins are gone.
             var topInfoRow = new VisualElement { name = "simulation-top-info-row" };
             topInfoRow.AddToClassList("sim-top-info-row");
             topInfoRow.pickingMode = PickingMode.Ignore;
@@ -316,11 +316,13 @@ namespace Directiva.SimulationUI
             _statusLabel.pickingMode = PickingMode.Ignore;
             controlsCluster.Add(_statusLabel);
 
-            // This button remains accessible above the fullscreen editor. It is
-            // owned by the simulation UI, never by the reusable code editor.
+            // All three top controls share one centered flex row. Keeping Levels
+            // next to the statistics (rather than absolutely positioned on the
+            // overlay) makes their heights and horizontal compression consistent.
+            // The row is above the editor, including when it is fullscreen.
             _mainMenuButton = new Button(RequestReturnToLevels) { text = T("levels_button") };
             _mainMenuButton.AddToClassList("sim-menu-button");
-            overlay.Add(_mainMenuButton);
+            topInfoRow.Add(_mainMenuButton);
             // Inside this UIDocument, the picker inserts itself behind all other
             // panels, so an overlapping code editor always receives the click.
             _nexusPicker = new SimulationNexusProgramPicker(overlay);

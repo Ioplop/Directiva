@@ -24,8 +24,11 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 "Narrow viewports reflow the HUD and options, while Full HD and 4K retain readable sizes", t =>
             {
                 t.Equal(Directiva.UI.SimulationHudLayout.Stacked,
+                    Directiva.UI.ResponsiveUILayout.ForSimulation(1024f, 768f),
+                    "1024 x 768 shrinks the centered HUD without changing its row");
+                t.Equal(Directiva.UI.SimulationHudLayout.Narrow,
                     Directiva.UI.ResponsiveUILayout.ForSimulation(800f, 600f),
-                    "800 x 600 uses two top HUD rows, avoiding collisions with Main Menu");
+                    "800 x 600 wraps match data inside the same top strip");
                 t.Equal(Directiva.UI.SimulationHudLayout.Standard,
                     Directiva.UI.ResponsiveUILayout.ForSimulation(1920f, 1080f),
                     "Full HD retains the existing horizontal HUD layout");
@@ -44,11 +47,16 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 t.Equal(Directiva.UI.OptionsLayout.Large,
                     Directiva.UI.ResponsiveUILayout.ForOptions(3840f, 2160f),
                     "4K settings use larger labels and targets");
-                t.Check(Directiva.UI.ResponsiveUILayout.EditorTopInset(
-                    Directiva.UI.SimulationHudLayout.Stacked) >
+                t.Equal(Directiva.UI.ResponsiveUILayout.EditorTopInset(
+                        Directiva.UI.SimulationHudLayout.Standard),
                     Directiva.UI.ResponsiveUILayout.EditorTopInset(
-                    Directiva.UI.SimulationHudLayout.Standard),
-                    "code editor never covers the second HUD row");
+                        Directiva.UI.SimulationHudLayout.Stacked),
+                    "compact HUD remains one row high");
+                t.Check(Directiva.UI.ResponsiveUILayout.EditorTopInset(
+                    Directiva.UI.SimulationHudLayout.Narrow) >
+                    Directiva.UI.ResponsiveUILayout.EditorTopInset(
+                    Directiva.UI.SimulationHudLayout.Stacked),
+                    "code editor clears the taller two-line match data panel");
             });
 
             Add("CameraBoundsMatchSimulationProjection",

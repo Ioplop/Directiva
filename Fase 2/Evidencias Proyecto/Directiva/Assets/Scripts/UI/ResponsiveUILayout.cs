@@ -25,7 +25,9 @@ namespace Directiva.UI
     {
         public static SimulationHudLayout ForSimulation(float width, float height)
         {
-            if (width < 710f) return SimulationHudLayout.Narrow;
+            // The three HUD panels now stay side by side at all supported widths.
+            // Only the central stats use two internal rows on narrow screens.
+            if (width < 860f) return SimulationHudLayout.Narrow;
             if (width < 1190f) return SimulationHudLayout.Stacked;
             if (width >= 2600f && height >= 1400f) return SimulationHudLayout.Large;
             return SimulationHudLayout.Standard;
@@ -43,8 +45,8 @@ namespace Directiva.UI
         {
             switch (layout)
             {
-                case SimulationHudLayout.Narrow: return 160f;
-                case SimulationHudLayout.Stacked: return 124f;
+                case SimulationHudLayout.Narrow: return 104f;
+                case SimulationHudLayout.Stacked: return 76f;
                 case SimulationHudLayout.Large: return 106f;
                 default: return 76f;
             }

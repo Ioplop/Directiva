@@ -36,7 +36,15 @@
 .dm-section-title { font-size: 28px; -unity-font-style: bold; margin-bottom: 18px; }
 .dm-muted { color: rgb(147, 157, 177); font-size: 16px; }
 .dm-option-row { flex-direction: row; align-items: center; min-height: 67px; }
-.dm-option-name { width: 42%; font-size: 19px; }
+/* Long setting names (including localized strings) wrap within their own
+   left column instead of painting over the adjacent Yes/No control. */
+.dm-option-name {
+    width: 42%;
+    min-width: 0;
+    flex-shrink: 0;
+    white-space: normal;
+    font-size: 19px;
+}
 .dm-dropdown { flex-grow: 1; min-height: 39px; font-size: 17px; }
 .dm-dropdown .unity-base-popup-field__input { min-height: 38px; background-color: rgb(49, 61, 83); color: rgb(232, 240, 252); border-top-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-right-width: 1px; border-top-color: rgb(91, 109, 143); border-bottom-color: rgb(91, 109, 143); border-left-color: rgb(91, 109, 143); border-right-color: rgb(91, 109, 143); border-top-left-radius: 7px; border-top-right-radius: 7px; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px; }
 .dm-option-toggle-button { min-width: 220px; height: 44px; font-size: 17px; }
