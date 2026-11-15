@@ -11,3 +11,5 @@
 [new_script_here]: New script
 [new_folder_here]: New folder
 [open_scripts_folder]: Open scripts folder in file manager
+[no_script_open_title]: No script open
+[no_script_open_message]: To start writing code, create a new script or open one from the explorer.

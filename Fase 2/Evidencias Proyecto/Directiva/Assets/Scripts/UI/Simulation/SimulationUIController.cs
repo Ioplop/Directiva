@@ -147,7 +147,10 @@ namespace Directiva.SimulationUI
                     codeEditor.SetTheme(_theme);
                 codeEditor.Mount(_editorMount);
                 codeEditor.SetHosted(true);
-                codeEditor.SetExplorerCollapsed(true);
+                // First-time users must see where scripts are created/opened.
+                // Do not force this state again when the editor is hidden/reopened:
+                // a manual collapse should remain the user's choice.
+                codeEditor.SetExplorerCollapsed(false);
                 _editorMounted = true;
             }
             else

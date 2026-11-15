@@ -1157,3 +1157,43 @@ Toggle {
     margin: 0;
     padding: 0;
 }
+
+
+/* Empty script state: keep the message visible while the code TextField is disabled. */
+.editor-document-area {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.editor-empty-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+    align-items: center;
+    justify-content: center;
+}
+
+.editor-empty-title {
+    font-size: 17px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    color: rgb(207, 216, 229);
+    margin-bottom: 8px;
+}
+
+.editor-empty-description {
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    color: rgb(155, 168, 186);
+    max-width: 480px;
+}

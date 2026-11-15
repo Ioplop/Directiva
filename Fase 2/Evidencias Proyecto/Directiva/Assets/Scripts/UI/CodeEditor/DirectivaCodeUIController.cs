@@ -133,6 +133,9 @@ namespace Directiva.CodeUI
         private TopBarView _topBar;
         private OutputPanel _outputPanel;
         private ModalLayer _modal;
+        private VisualElement _emptyEditorOverlay;
+        private Label _emptyEditorTitle;
+        private Label _emptyEditorDescription;
 
         private VisualElement _popupLayer;
         private VisualElement _tooltipLayer;
@@ -299,6 +302,7 @@ namespace Directiva.CodeUI
         private void OnGlobalLanguageChanged(string locale)
         {
             Localization?.SetLocale(locale);
+            RelocalizeEmptyEditorMessage();
             if (_editor != null)
                 _editor.RenameSymbolMenuLabel = Localization.Get("Dialogs", "rename_symbol_action");
             SetExplorerCollapsed(_explorerCollapsed);
@@ -575,8 +579,27 @@ namespace Directiva.CodeUI
             _editor.CaretMoved += ScheduleLiveDiagnostics;
             ApplyEditorPreferences(SettingsManager.Current.editor);
 
+            // Keep the empty-document notice outside CodeEditorView: the editor
+            // itself is disabled until a script is opened, but the notice must
+            // remain fully visible and never intercept pointer input.
+            var editorArea = new VisualElement();
+            editorArea.AddToClassList("editor-document-area");
+            editorArea.Add(_editor);
+
+            _emptyEditorOverlay = new VisualElement { pickingMode = PickingMode.Ignore };
+            _emptyEditorOverlay.AddToClassList("editor-empty-overlay");
+            _emptyEditorTitle = new Label { pickingMode = PickingMode.Ignore };
+            _emptyEditorTitle.AddToClassList("editor-empty-title");
+            _emptyEditorDescription = new Label { pickingMode = PickingMode.Ignore };
+            _emptyEditorDescription.AddToClassList("editor-empty-description");
+            _emptyEditorOverlay.Add(_emptyEditorTitle);
+            _emptyEditorOverlay.Add(_emptyEditorDescription);
+            editorArea.Add(_emptyEditorOverlay);
+            RelocalizeEmptyEditorMessage();
+            SetEmptyEditorOverlayState(_emptyEditorOverlay, _workspace.Active?.RelativePath);
+
             right.Add(_topBar);
-            right.Add(_editor);
+            right.Add(editorArea);
 
             var explorerResizeHandle = new HorizontalPaneResizeHandle(
                 _explorer,
@@ -770,6 +793,23 @@ namespace Directiva.CodeUI
                 Output.Write(Localization.Get("Common", "options_not_implemented"));
         }
 
+        private void RelocalizeEmptyEditorMessage()
+        {
+            if (_emptyEditorTitle != null)
+                _emptyEditorTitle.text = Localization.Get("ScriptExplorer", "no_script_open_title");
+            if (_emptyEditorDescription != null)
+                _emptyEditorDescription.text = Localization.Get("ScriptExplorer", "no_script_open_message");
+        }
+
+        // The document path, not text contents, determines whether the editor is empty:
+        // an intentionally blank script is still an open, editable document.
+        internal static void SetEmptyEditorOverlayState(VisualElement overlay, string documentPath)
+        {
+            if (overlay != null)
+                overlay.style.display = string.IsNullOrWhiteSpace(documentPath)
+                    ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
         private void OnActiveChanged(ScriptWorkspace.ActiveDocument doc)
         {
             var nextPath = doc?.RelativePath;
@@ -789,6 +829,7 @@ namespace Directiva.CodeUI
                 _editor.SetReadOnly(false);
                 _topBar.SetEntryFunctionName(string.Empty);
                 _topBar.SetDocument(null, false);
+                SetEmptyEditorOverlayState(_emptyEditorOverlay, null);
                 return;
             }
 
@@ -819,6 +860,7 @@ namespace Directiva.CodeUI
             ScheduleAnalysis();
             ScheduleLiveDiagnostics();
             RefreshDScriptDebugHighlight();
+            SetEmptyEditorOverlayState(_emptyEditorOverlay, doc.RelativePath);
         }
 
         private void OnPathChanged(string oldPath, string newPath)

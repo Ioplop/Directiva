@@ -11,3 +11,5 @@
 [new_script_here]: Nuevo script
 [new_folder_here]: Nueva carpeta
 [open_scripts_folder]: Abrir carpeta de scripts en explorador
+[no_script_open_title]: Ningún script abierto
+[no_script_open_message]: Para escribir código, crea un script nuevo o abre uno desde el explorador.

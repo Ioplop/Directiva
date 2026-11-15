@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Directiva.CodeUI;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Directiva.EditorTests.CodeUITests
 {
@@ -14,6 +15,36 @@ namespace Directiva.EditorTests.CodeUITests
                 tests.Add(new DirectivaTestCase("CodeUI", "ExplorerActions", id, description, run));
 
             string SamplePath() => Path.GetFullPath(Path.Combine(Path.GetTempPath(), "Directiva Scripts"));
+
+            Add("EmptyDocumentHintVisibility",
+                "An unopened editor displays its hint; opening even an empty script hides it", t =>
+            {
+                var hint = new VisualElement();
+                DirectivaCodeUIController.SetEmptyEditorOverlayState(hint, null);
+                t.Equal(DisplayStyle.Flex, hint.style.display.value, "no selected script");
+                DirectivaCodeUIController.SetEmptyEditorOverlayState(hint, "");
+                t.Equal(DisplayStyle.Flex, hint.style.display.value, "blank path");
+                DirectivaCodeUIController.SetEmptyEditorOverlayState(hint, "main.dscript");
+                t.Equal(DisplayStyle.None, hint.style.display.value, "open empty file is still a file");
+                DirectivaCodeUIController.SetEmptyEditorOverlayState(hint, null);
+                t.Equal(DisplayStyle.Flex, hint.style.display.value, "hint returns when script is closed");
+            });
+
+            Add("EmptyDocumentHintLocalized", "The no-script hint is available in Spanish and English", t =>
+            {
+                var locale = new LocalizationService("es");
+                string spanishTitle = locale.Get("ScriptExplorer", "no_script_open_title");
+                string spanishMessage = locale.Get("ScriptExplorer", "no_script_open_message");
+                t.Contains("script", spanishTitle, "Spanish title");
+                t.Contains("explorador", spanishMessage, "Spanish guidance");
+                locale.SetLocale("en");
+                string englishTitle = locale.Get("ScriptExplorer", "no_script_open_title");
+                string englishMessage = locale.Get("ScriptExplorer", "no_script_open_message");
+                t.Contains("script", englishTitle, "English title");
+                t.Contains("explorer", englishMessage, "English guidance");
+                t.Check(spanishTitle != englishTitle, "title changes with selected language");
+                t.Check(spanishMessage != englishMessage, "instruction changes with selected language");
+            });
 
             Add("ScriptNamesHideExtension", "Script labels omit .dscript without changing the stored path", t =>
             {
