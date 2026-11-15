@@ -333,7 +333,7 @@ namespace Directiva.CodeUI
         {
             _hasDocument = !string.IsNullOrWhiteSpace(path);
             _documentLocked = isLocked;
-            _title.text = _hasDocument ? System.IO.Path.GetFileName(path) : "-";
+            _title.text = _hasDocument ? ScriptDisplayNames.ForScript(path) : "-";
             _save.SetEnabled(_hasDocument && isDirty);
             _revert.SetEnabled(_hasDocument && isDirty && !isLocked);
             _revert.tooltip = isLocked

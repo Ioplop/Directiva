@@ -15,6 +15,22 @@ namespace Directiva.EditorTests.CodeUITests
 
             string SamplePath() => Path.GetFullPath(Path.Combine(Path.GetTempPath(), "Directiva Scripts"));
 
+            Add("ScriptNamesHideExtension", "Script labels omit .dscript without changing the stored path", t =>
+            {
+                t.Equal("main", ScriptDisplayNames.ForScript("main.dscript"), "root script");
+                t.Equal("utils", ScriptDisplayNames.ForScript("lib/utils.dscript"), "nested script");
+                t.Equal("MY_SCRIPT", ScriptDisplayNames.ForScript("lib/MY_SCRIPT.DSCRIPT"), "case-insensitive extension");
+                t.Equal("file.v1", ScriptDisplayNames.ForScript("lib/file.v1.dscript"), "preserve other dots");
+                t.Equal("other.txt", ScriptDisplayNames.ForScript("other.txt"), "do not strip unrelated extensions");
+            });
+
+            Add("FolderNamesStayIntact", "Folder labels preserve their full names, including dots", t =>
+            {
+                t.Equal("scripts.v2", ScriptDisplayNames.ForNode("lib/scripts.v2", true), "folder with a dot");
+                t.Equal("scripts.dscript", ScriptDisplayNames.ForNode("lib/scripts.dscript", true), "folder named like an extension");
+                t.Equal("scripts", ScriptDisplayNames.ForNode("lib/scripts.dscript", false), "script node");
+            });
+
             Add("WindowsPlayerUsesShell", "Windows opens the directory with its configured shell", t =>
             {
                 var info = ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.WindowsPlayer);

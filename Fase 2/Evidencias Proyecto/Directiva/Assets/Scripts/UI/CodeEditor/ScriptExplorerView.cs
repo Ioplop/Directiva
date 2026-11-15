@@ -524,7 +524,8 @@ namespace Directiva.CodeUI
                 ? _locale.Get("ScriptExplorer", "locked_during_execution")
                 : _locale.Get("ScriptExplorer", isFolder ? "folder" : "script");
 
-            var label = new Label(Path.GetFileName(path));
+            // Only the visual label omits .dscript; node identity stays the full path.
+            var label = new Label(ScriptDisplayNames.ForNode(path, isFolder));
             label.AddToClassList("tree-label");
             label.style.fontSize = _fontSize;
             if (locked)
