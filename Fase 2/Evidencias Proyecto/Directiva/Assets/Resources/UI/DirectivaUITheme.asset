@@ -32,6 +32,9 @@ MonoBehaviour:
   mainMenuLogo: {fileID: -5313765715294466809, guid: 2fa66eee8ad7e8d4eb8fdd78e3e8ce69, type: 3}
   mainMenuLogoHeight: 150
   mainMenuLogoMaxWidth: 720
+  resultVictoryClip: {fileID: 8300000, guid: 96b30f075b7d91b409e404821582cc5d, type: 3}
+  resultDefeatClip: {fileID: 8300000, guid: eec26eeb2b4f9004d964a59c4d5c6b32, type: 3}
+  resultDrawClip: {fileID: 8300000, guid: eec26eeb2b4f9004d964a59c4d5c6b32, type: 3}
   icons:
     play: {fileID: 21300000, guid: c1da2773ec4b5c74c83309188c9c2efe, type: 3}
     stop: {fileID: 21300000, guid: 79a610169c338f44c88e6f1891827adf, type: 3}
@@ -67,3 +70,5 @@ MonoBehaviour:
     unearnedStar: {fileID: 21300000, guid: df410db4b09efa347af780203cd59318, type: 3}
     requiredStar: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
     lockedLevel: {fileID: 0}
+    resultObjectiveEarned: {fileID: 21300000, guid: f47c6e5916c67d24b9d1444bb4e59bef, type: 3}
+    resultObjectiveUnearned: {fileID: 21300000, guid: efac4e67ed2118b4f8e985b8c825af32, type: 3}
