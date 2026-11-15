@@ -63,7 +63,8 @@ namespace Directiva.EditorTests.DScript
                 t.Check(Complete("sha").Items.Any(i => i.Name == "shared"), "shared is offered at root");
                 t.Check(Complete("imp").Items.Any(i => i.Name == "import"), "import is offered at root");
                 t.Check(Complete("fro").Items.Any(i => i.Name == "from"), "from is offered at root");
-                t.Equal(0, Complete("glo").Items.Count, "global is not yet supported in DScript");
+                t.Check(Complete("glo").Items.Any(i => i.Name == "global" && i.Kind == "keyword"),
+                    "global is offered at root as a declaration keyword");
                 t.Equal(0, Complete("pri").Items.Count, "print is not a valid top-level statement");
                 t.Equal(0, Complete("self.cl").Items.Count, "self members cannot be used at root");
             });
