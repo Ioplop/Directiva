@@ -41,3 +41,12 @@
 [editor_errors]: Highlight errors while typing
 [editor_error_suggestions]: Suggestions for highlighted errors
 [editor_delay]: Delay before highlighting errors
+
+[example_scripts_label]: Example scripts
+[example_scripts_regenerate]: Regenerate examples
+[example_scripts_question]: Regenerate example scripts?
+[example_scripts_warning]: This restores examples in the current language. If you edited them, the existing folder will be backed up before replacing it.
+[example_scripts_cancel]: Cancel
+[example_scripts_success]: Example scripts regenerated successfully.
+[example_scripts_backup]: Examples restored. Your previous files were preserved in {{1}}.
+[example_scripts_failed]: Could not regenerate the examples. Check the game log.

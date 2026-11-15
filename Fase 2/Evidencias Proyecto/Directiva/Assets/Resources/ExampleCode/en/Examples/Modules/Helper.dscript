@@ -1,0 +1,5 @@
+# This module is used by Imports.dscript.
+# It contains a reusable function without external dependencies.
+
+def greet():
+    print("Imported helper running!")

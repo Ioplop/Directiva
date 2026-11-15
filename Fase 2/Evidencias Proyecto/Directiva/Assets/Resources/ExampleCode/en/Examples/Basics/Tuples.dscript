@@ -1,0 +1,11 @@
+# Positions are usually tuples (x, y).
+# You can unpack tuples inside a for loop as well.
+
+def main():
+    position = (10, 20)
+    # Unpack the two values of the tuple.
+    x, y = position
+    print("Position:", x, y)
+    positions = [(1, 2), (3, 4)]
+    for a, b in positions:
+        print(a, b)

@@ -1,0 +1,17 @@
+# Asigna nexus_main al nexo para construir atacantes.
+# La unidad prioriza enemigos cercanos; si no hay, busca el nexo rival.
+# move y attack crean órdenes; la simulación las resuelve con el tiempo.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 3:
+        build(fighter)
+
+def fighter():
+    # Buscamos primero una unidad enemiga.
+    enemy = closest_enemy(Type.Unit)
+    if enemy == None:
+        # Si no hay unidades, atacamos el nexo rival.
+        enemy = enemy_nexus()
+    if enemy != None:
+        move(enemy)
+        attack(enemy)

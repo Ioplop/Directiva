@@ -1,0 +1,19 @@
+# Assign nexus_main to the Nexus: it will create a gathering unit.
+# The unit alternates between gathering and returning to its Nexus.
+# Cargo unloads automatically when the unit arrives at the Nexus.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 2:
+        build(gatherer)
+
+def gatherer():
+    # Return to the Nexus after collecting enough cargo.
+    if self.cargo >= 5:
+        stop_action()
+        move(self.nexus)
+    else:
+        # None means no resource is currently available.
+        deposit = closest_resource()
+        if deposit != None:
+            move(deposit)
+            gather(deposit)

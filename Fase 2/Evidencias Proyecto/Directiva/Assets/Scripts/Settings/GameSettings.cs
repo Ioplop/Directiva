@@ -78,7 +78,7 @@ namespace Directiva.Settings
     public sealed class GeneralSettings
     {
         // Explicit strings, rather than numeric enums, keep the JSON easy to edit manually.
-        public string language = "es";
+        public string language = "en";
         public bool simulateWhenInactive = true;
         // Ask before leaving a match unless the player explicitly opts out.
         // Existing settings.json files keep an explicitly saved preference.

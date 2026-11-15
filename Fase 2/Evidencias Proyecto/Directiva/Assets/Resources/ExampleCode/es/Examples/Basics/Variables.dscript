@@ -1,0 +1,13 @@
+# Las variables locales pertenecen a la funcion actual.
+# global conserva el valor dentro de la VM; shared lo comparte con el bando.
+
+global calls = 0
+shared team_calls = 0
+
+def main():
+    # Solo esta VM recuerda calls.
+    calls += 1
+    # Todo el equipo comparte team_calls.
+    team_calls += 1
+    message = "Calls"
+    print(message, calls, team_calls)

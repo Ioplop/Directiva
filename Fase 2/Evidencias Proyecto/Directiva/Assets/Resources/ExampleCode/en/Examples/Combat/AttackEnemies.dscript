@@ -1,0 +1,17 @@
+# Assign nexus_main to the Nexus to build attacking units.
+# Units prioritize nearby enemies, then the opposing Nexus.
+# move and attack issue orders; the simulation resolves them over time.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 3:
+        build(fighter)
+
+def fighter():
+    # First, look for an enemy unit.
+    enemy = closest_enemy(Type.Unit)
+    if enemy == None:
+        # Without enemy units, target the opposing Nexus.
+        enemy = enemy_nexus()
+    if enemy != None:
+        move(enemy)
+        attack(enemy)

@@ -1,0 +1,11 @@
+# Una posición suele ser una tupla (x, y).
+# Puedes desempaquetar tuplas tambien dentro de un for.
+
+def main():
+    position = (10, 20)
+    # Desempaquetamos los dos valores de la tupla.
+    x, y = position
+    print("Position:", x, y)
+    positions = [(1, 2), (3, 4)]
+    for a, b in positions:
+        print(a, b)

@@ -1,0 +1,10 @@
+# for recorre una secuencia; if selecciona una rama.
+# Cambia el rango y observa el resultado.
+
+def main():
+    total = 0
+    # range(1, 5) recorre 1, 2, 3 y 4.
+    for number in range(1, 5):
+        if number > 2:
+            total += number
+    print("Sum:", total)

@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Events;
 using UnityEngine.UIElements;
 using Directiva.Settings;
+using Directiva.Examples;
 using Directiva.Localization;
 using Directiva.UI;
 using Directiva.Levels;
@@ -149,6 +150,9 @@ namespace Directiva.MainMenu
         private Button fullScreenButton;
         private Button simulateInactiveButton;
         private Button skipReturnConfirmationButton;
+        private Button regenerateExamplesButton;
+        private Label examplesStatusLabel;
+        private VisualElement examplesConfirmation;
         private Button editorCompletionButton;
         private Button editorErrorsButton;
         private Button editorSuggestionsButton;
@@ -286,6 +290,7 @@ namespace Directiva.MainMenu
             // A newly opened main menu must not inherit a previously played level.
             LevelLaunchContext.Clear();
             SettingsManager.Initialize();
+            ExampleCodeManager.EnsureInitialized();
             builtLocale = DirectivaLocalization.CurrentLocale;
             pendingResolution = null;
             resolutionTimer = null;
@@ -501,6 +506,19 @@ namespace Directiva.MainMenu
                 () => SettingsManager.SetSkipReturnToLevelsConfirmation(
                     !SettingsManager.Current.general.skipReturnToLevelsConfirmation));
 
+            // Restore starter programs on demand. An explicit confirmation explains
+            // that modified examples are preserved in a separate backup folder.
+            var examplesRow = Container("dm-option-row");
+            examplesRow.Add(Label(T("example_scripts_label"), "dm-option-name"));
+            regenerateExamplesButton = CreateButton(T("example_scripts_regenerate"),
+                ShowExamplesConfirmation, "dm-option-toggle-button");
+            regenerateExamplesButton.AddToClassList("dm-option-toggle-inline");
+            examplesRow.Add(regenerateExamplesButton);
+            general.Add(examplesRow);
+            examplesStatusLabel = Label("", "dm-muted");
+            examplesStatusLabel.style.display = DisplayStyle.None;
+            general.Add(examplesStatusLabel);
+
             var sound = AddOptionsSection(SectionTitle(audioSectionTitle, null, "Sonido", "sound"));
             AddVolume(sound, "master", DefaultLabel(masterVolumeSettingLabel, "Volumen general", "volume_master"),
                 values.audio.masterVolume, SettingsManager.SetMasterVolume);
@@ -545,6 +563,7 @@ namespace Directiva.MainMenu
             editorSection.Add(editorDelayRow);
 
             BuildResolutionConfirmation();
+            BuildExamplesConfirmation();
             RefreshResolutionChoices();
             RefreshOptionValues();
             RefreshOptionsFrameBackground();
@@ -700,6 +719,50 @@ namespace Directiva.MainMenu
         {
             if (volumeSliders.TryGetValue(key, out Slider slider)) slider.SetValueWithoutNotify(value);
             if (volumeLabels.TryGetValue(key, out Label label)) label.text = value.ToString();
+        }
+
+        private void BuildExamplesConfirmation()
+        {
+            examplesConfirmation = Container("dm-resolution-overlay");
+            examplesConfirmation.style.display = DisplayStyle.None;
+            var dialog = Container("dm-resolution-dialog");
+            dialog.Add(Label(T("example_scripts_question"), "dm-resolution-question"));
+            dialog.Add(Label(T("example_scripts_warning"), "dm-muted"));
+            var actions = Container("dm-resolution-actions");
+            actions.Add(CreateButton(T("example_scripts_cancel"),
+                HideExamplesConfirmation, "dm-resolution-button"));
+            actions.Add(CreateButton(T("example_scripts_regenerate"),
+                RegenerateExamples, "dm-resolution-button"));
+            dialog.Add(actions);
+            examplesConfirmation.Add(dialog);
+            options.Add(examplesConfirmation);
+        }
+
+        private void ShowExamplesConfirmation()
+        {
+            if (examplesConfirmation != null)
+                examplesConfirmation.style.display = DisplayStyle.Flex;
+        }
+
+        private void HideExamplesConfirmation()
+        {
+            if (examplesConfirmation != null)
+                examplesConfirmation.style.display = DisplayStyle.None;
+        }
+
+        private void RegenerateExamples()
+        {
+            HideExamplesConfirmation();
+            ExampleInstallResult result = ExampleCodeManager.Regenerate(out string backupPath);
+            if (examplesStatusLabel == null) return;
+            string key = result == ExampleInstallResult.Installed ||
+                         result == ExampleInstallResult.Updated
+                ? (string.IsNullOrEmpty(backupPath)
+                    ? "example_scripts_success" : "example_scripts_backup")
+                : "example_scripts_failed";
+            examplesStatusLabel.text = string.IsNullOrEmpty(backupPath)
+                ? T(key) : T(key, System.IO.Path.GetFileName(backupPath));
+            examplesStatusLabel.style.display = DisplayStyle.Flex;
         }
 
         private void BuildResolutionConfirmation()

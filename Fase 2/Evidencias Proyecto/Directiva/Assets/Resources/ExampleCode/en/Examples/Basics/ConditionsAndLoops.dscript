@@ -1,0 +1,10 @@
+# for iterates over a sequence; if chooses a branch.
+# Change the range and watch the result.
+
+def main():
+    total = 0
+    # range(1, 5) yields 1, 2, 3 and 4.
+    for number in range(1, 5):
+        if number > 2:
+            total += number
+    print("Sum:", total)

@@ -1,0 +1,19 @@
+# Asigna nexus_main al nexo: creará una recolectora.
+# La unidad alterna entre extraer recursos y regresar al nexo.
+# Cuando llega al nexo, su carga se descarga automáticamente.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 2:
+        build(gatherer)
+
+def gatherer():
+    # Al llevar suficiente carga, volvemos para descargar.
+    if self.cargo >= 5:
+        stop_action()
+        move(self.nexus)
+    else:
+        # None significa que no hay un recurso disponible.
+        deposit = closest_resource()
+        if deposit != None:
+            move(deposit)
+            gather(deposit)

@@ -1,0 +1,5 @@
+# Your first Directiva program.
+# You can run main in the standalone editor.
+
+def main():
+    print("Hello, Directiva!")

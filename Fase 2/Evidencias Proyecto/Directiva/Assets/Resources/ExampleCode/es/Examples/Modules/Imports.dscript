@@ -1,0 +1,9 @@
+# Los imports usan la ruta de módulo desde DirectivaScripts.
+# Aquí importamos una función definida en otra carpeta/archivo.
+# Prueba cambiar el comentario de Helper: el nombre de la funcion no cambia.
+
+# El archivo Helper contiene la función greet.
+from Examples.Modules.Helper import greet
+
+def main():
+    greet()

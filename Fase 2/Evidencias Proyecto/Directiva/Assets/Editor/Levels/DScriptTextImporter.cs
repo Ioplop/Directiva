@@ -1,22 +1,42 @@
+using System;
 using System.IO;
+using Directiva.Examples;
 using UnityEditor.AssetImporters;
 using UnityEngine;
 
 namespace Directiva.Editor.Levels
 {
     /// <summary>
-    /// Preserves the .dscript extension while making its contents available as a
-    /// TextAsset in a Unity build (including through Resources.Load<TextAsset>).
+    /// Level programs remain TextAssets; example scripts carry their relative paths
+    /// so Resources.LoadAll can reproduce a nested folder tree in player storage.
     /// </summary>
-    [ScriptedImporter(1, "dscript")]
+    [ScriptedImporter(2, "dscript")]
     public sealed class DScriptTextImporter : ScriptedImporter
     {
+        private const string ExampleRoot = "Assets/Resources/ExampleCode/";
+
         public override void OnImportAsset(AssetImportContext context)
         {
-            var text = new TextAsset(File.ReadAllText(context.assetPath))
+            string path = context.assetPath.Replace('\\', '/');
+            string contents = File.ReadAllText(context.assetPath);
+            if (path.StartsWith(ExampleRoot, StringComparison.Ordinal))
             {
-                name = Path.GetFileNameWithoutExtension(context.assetPath)
-            };
+                string afterRoot = path.Substring(ExampleRoot.Length);
+                int languageSeparator = afterRoot.IndexOf('/');
+                if (languageSeparator > 0 && languageSeparator < afterRoot.Length - 1)
+                {
+                    string relative = afterRoot.Substring(languageSeparator + 1);
+                    var example = ScriptableObject.CreateInstance<ExampleCodeAsset>();
+                    example.name = Path.GetFileNameWithoutExtension(path);
+                    example.InitializeForImport(relative, contents);
+                    context.AddObjectToAsset("ExampleDScript", example);
+                    context.SetMainObject(example);
+                    return;
+                }
+            }
+
+            // Preserve Resources/Levels scripts' historical TextAsset contract.
+            var text = new TextAsset(contents) { name = Path.GetFileNameWithoutExtension(path) };
             context.AddObjectToAsset("DScript", text);
             context.SetMainObject(text);
         }

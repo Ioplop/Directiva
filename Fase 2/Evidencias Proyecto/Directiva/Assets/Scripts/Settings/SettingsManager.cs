@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace Directiva.Settings
@@ -63,7 +64,7 @@ namespace Directiva.Settings
             }
 
             Vector2Int native = NativeResolution();
-            var defaults = GameSettings.CreateDefaults(native.x, native.y);
+            var defaults = CreatePlatformDefaults(native);
             var state = storage.Load(defaults, out GameSettings loaded);
             current = loaded;
             bool repaired = Normalize(current, native, GetSupportedResolutions());
@@ -93,7 +94,7 @@ namespace Directiva.Settings
         {
             Initialize();
             Vector2Int native = NativeResolution();
-            var defaults = GameSettings.CreateDefaults(native.x, native.y);
+            var defaults = CreatePlatformDefaults(native);
             var result = storage.Load(defaults, out GameSettings loaded);
             if (result == SettingsLoadResult.NewerVersion)
             {
@@ -115,7 +116,7 @@ namespace Directiva.Settings
         {
             Initialize();
             var native = NativeResolution();
-            current = GameSettings.CreateDefaults(native.x, native.y);
+            current = CreatePlatformDefaults(native);
             Persist();
             SettingsChanged?.Invoke(current.Copy());
         }
@@ -229,10 +230,8 @@ namespace Directiva.Settings
             data.editor.liveErrorDelaySeconds = Mathf.Clamp(data.editor.liveErrorDelaySeconds, 0.1f, 3f);
 
             data.version = GameSettings.CurrentVersion;
-            if (string.Equals(data.general.language, "en", StringComparison.OrdinalIgnoreCase))
-                data.general.language = "en";
-            else
-                data.general.language = "es";
+            data.general.language = string.Equals(data.general.language, "es",
+                StringComparison.OrdinalIgnoreCase) ? "es" : "en";
 
             data.audio.masterVolume = Mathf.Clamp(data.audio.masterVolume, 0, 100);
             data.audio.musicVolume = Mathf.Clamp(data.audio.musicVolume, 0, 100);
@@ -254,6 +253,30 @@ namespace Directiva.Settings
             }
 
             return before != JsonUtility.ToJson(data);
+        }
+
+        private static GameSettings CreatePlatformDefaults(Vector2Int native)
+        {
+            var defaults = GameSettings.CreateDefaults(native.x, native.y);
+            defaults.general.language = PreferredLanguage(CultureInfo.CurrentUICulture.Name,
+                Application.systemLanguage);
+            return defaults;
+        }
+
+        /// <summary>
+        /// Prefer Spanish for ANY system locale whose language is es (es-CL,
+        /// es-ES, es-MX, etc.); English for every other system language.
+        /// The saved preference always takes priority over this first-run choice.
+        /// </summary>
+        public static string PreferredLanguage(string systemCulture, SystemLanguage unityLanguage)
+        {
+            if (string.Equals(systemCulture, "es", StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(systemCulture) &&
+                 (systemCulture.StartsWith("es-", StringComparison.OrdinalIgnoreCase) ||
+                  systemCulture.StartsWith("es_", StringComparison.OrdinalIgnoreCase))) ||
+                unityLanguage == SystemLanguage.Spanish)
+                return SettingsValues.Spanish;
+            return SettingsValues.English;
         }
 
         private static Vector2Int NativeResolution()

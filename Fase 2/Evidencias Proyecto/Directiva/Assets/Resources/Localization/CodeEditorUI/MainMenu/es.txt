@@ -41,3 +41,12 @@
 [editor_errors]: Destacado de errores
 [editor_error_suggestions]: Sugerencias al destacar errores
 [editor_delay]: Espera antes de destacar errores
+
+[example_scripts_label]: Scripts de ejemplo
+[example_scripts_regenerate]: Regenerar ejemplos
+[example_scripts_question]: ¿Regenerar los scripts de ejemplo?
+[example_scripts_warning]: Se restaurarán los ejemplos en el idioma actual. Si modificaste alguno, se guardará una copia de toda la carpeta antes de reemplazarla.
+[example_scripts_cancel]: Cancelar
+[example_scripts_success]: Los ejemplos se regeneraron correctamente.
+[example_scripts_backup]: Ejemplos restaurados. Tus archivos anteriores se conservaron en {{1}}.
+[example_scripts_failed]: No se pudieron regenerar los ejemplos. Consulta el registro del juego.

@@ -172,6 +172,7 @@ namespace Directiva.EditorTests
             CodeUITests.GoToDefinitionTests.Register(tests);
             CodeUITests.CodeEditorDeadKeyTests.Register(tests);
             CodeUITests.ScriptExplorerActionsTests.Register(tests);
+            CodeUITests.ExampleCodeTests.Register(tests);
             DirectivaTupleSmokeTests.Register(tests);
             Directiva_TupleCompletionSmokeTests.Register(tests);
             var unique = new HashSet<string>(StringComparer.Ordinal);

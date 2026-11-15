@@ -1,0 +1,12 @@
+# Assign nexus_main as the Nexus entry function.
+# build takes the function the new unit will execute.
+# The Nexus calls this function again on later turns.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 3:
+        # Pass the function reference, without parentheses.
+        build(worker)
+
+def worker():
+    # Replace pass with orders to give your unit a behavior.
+    pass

@@ -1,0 +1,5 @@
+# Primer programa de Directiva.
+# Puedes ejecutar main desde el editor independiente.
+
+def main():
+    print("Hello, Directiva!")

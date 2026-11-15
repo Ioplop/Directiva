@@ -34,7 +34,7 @@ namespace Directiva.Localization
         {
             if (initialized) return;
             SettingsManager.Initialize();
-            service = new LocalizationService("es");
+            service = new LocalizationService("en");
             service.SetLocale(SettingsManager.Current.general.language);
             SettingsManager.SettingsChanged += OnSettingsChanged;
             initialized = true;

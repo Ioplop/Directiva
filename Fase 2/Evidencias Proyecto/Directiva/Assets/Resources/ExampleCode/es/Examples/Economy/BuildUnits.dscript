@@ -1,0 +1,12 @@
+# Asigna nexus_main como función de entrada del nexo.
+# build recibe una referencia a la función que ejecutará la nueva unidad.
+# El nexo vuelve a invocar esta función en sus turnos.
+
+def nexus_main():
+    if self.can_build and len(self.units()) < 3:
+        # Pasamos la función, sin paréntesis.
+        build(worker)
+
+def worker():
+    # Sustituye pass por órdenes para darle un comportamiento.
+    pass
