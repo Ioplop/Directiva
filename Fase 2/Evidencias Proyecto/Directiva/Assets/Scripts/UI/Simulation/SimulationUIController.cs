@@ -80,6 +80,9 @@ namespace Directiva.SimulationUI
         private SimulationEditorResizeHandle _resizeHandle;
         private Label _statusLabel;
         private Label _editorTabLabel;
+        private Label _levelNameInEditor;
+        private Label _levelNameInArena;
+        private VisualElement _levelNameBanner;
         private readonly System.Collections.Generic.Dictionary<string, Button> _controlButtons =
             new System.Collections.Generic.Dictionary<string, Button>();
         private int _playbackState = 1;
@@ -124,6 +127,7 @@ namespace Directiva.SimulationUI
                 _editorTabLabel.text = string.IsNullOrWhiteSpace(editorButtonLabel) || editorButtonLabel == "Editor"
                     ? T("editor") : editorButtonLabel;
             if (_mainMenuButton != null) _mainMenuButton.text = T("levels_button");
+            RefreshLevelName();
             _leaveConfirmation?.Relocalize();
             foreach (var entry in _controlButtons)
                 entry.Value.tooltip = T(entry.Key);
@@ -168,11 +172,9 @@ namespace Directiva.SimulationUI
                 Debug.LogError("[Directiva] Simulation UI requires a DirectivaCodeUIController child.", this);
             }
 
-            // Keep the level name available without reserving permanent HUD space.
-            // The status readout can expose it as hover text.
-            _statusLabel.tooltip = string.IsNullOrWhiteSpace(LevelLaunchContext.CurrentLevelName)
-                ? defaultLevelTitle
-                : LevelLaunchContext.CurrentLevelName;
+            // Both captions use the same level title as the results screen.
+            // The arena caption is hidden whenever the editor is open.
+            RefreshLevelName();
 
             float rootWidth = _root.resolvedStyle.width;
             if (rootWidth > 1f)
@@ -205,9 +207,8 @@ namespace Directiva.SimulationUI
             overlay.pickingMode = PickingMode.Ignore;
             _root.Add(overlay);
 
-            // The window header belongs to the host: only presentation controls
-            // live there. The main menu button remains separate so it can later
-            // evolve independently from the match HUD layout.
+            // The embedded editor header belongs to the simulation host: it
+            // displays the level name and window controls above the code editor.
             _editorPane = new VisualElement();
             _editorPane.AddToClassList("sim-editor-pane");
             _editorPane.pickingMode = PickingMode.Position;
@@ -217,10 +218,13 @@ namespace Directiva.SimulationUI
             editorHeader.AddToClassList("sim-editor-header");
             _editorPane.Add(editorHeader);
 
-            var spacer = new VisualElement();
-            spacer.style.flexGrow = 1;
-            spacer.pickingMode = PickingMode.Ignore;
-            editorHeader.Add(spacer);
+            // The editor header's unused left space holds the level name. Its
+            // flex item can shrink without moving the two buttons on the right;
+            // USS adds an ellipsis when the name cannot fit on one line.
+            _levelNameInEditor = new Label { name = "simulation-editor-level-name" };
+            _levelNameInEditor.AddToClassList("sim-editor-level-name");
+            _levelNameInEditor.pickingMode = PickingMode.Ignore;
+            editorHeader.Add(_levelNameInEditor);
 
             _minimizeButton = new Button(() => SetEditorMode(EditorDisplayMode.Hidden));
             _minimizeButton.AddToClassList("sim-editor-header-button");
@@ -323,6 +327,20 @@ namespace Directiva.SimulationUI
             _mainMenuButton = new Button(RequestReturnToLevels) { text = T("levels_button") };
             _mainMenuButton.AddToClassList("sim-menu-button");
             topInfoRow.Add(_mainMenuButton);
+
+            // Anchor the arena caption to the actual match-stats element, not
+            // to an independently measured offset from the screen top. This
+            // keeps it touching the stats even as the HUD changes row height.
+            // An absolutely positioned child does not affect the stats layout.
+            _levelNameBanner = new VisualElement { name = "simulation-level-name-banner" };
+            _levelNameBanner.AddToClassList("sim-level-name-banner");
+            _levelNameBanner.pickingMode = PickingMode.Ignore;
+            _levelNameInArena = new Label { name = "simulation-arena-level-name" };
+            _levelNameInArena.AddToClassList("sim-level-name-caption");
+            _levelNameInArena.pickingMode = PickingMode.Ignore;
+            _levelNameBanner.Add(_levelNameInArena);
+            _matchStats.Root.Add(_levelNameBanner);
+
             // Inside this UIDocument, the picker inserts itself behind all other
             // panels, so an overlapping code editor always receives the click.
             _nexusPicker = new SimulationNexusProgramPicker(overlay);
@@ -511,6 +529,10 @@ namespace Directiva.SimulationUI
             bool fullscreen = mode == EditorDisplayMode.Fullscreen;
             if (fullscreen) _nexusPicker?.Hide();
             _editorPane.style.display = hidden ? DisplayStyle.None : DisplayStyle.Flex;
+            // Never show two copies of the title: arena caption when the editor
+            // is closed, header caption when it is docked or fullscreen.
+            if (_levelNameBanner != null)
+                _levelNameBanner.style.display = hidden ? DisplayStyle.Flex : DisplayStyle.None;
             // The editor button stays in the top statistics row in every mode.
             _openEditorTab.EnableInClassList("sim-editor-tab-active", !hidden);
             _openEditorTab.tooltip = hidden ? T("show_editor") : T("hide_editor");
@@ -555,6 +577,22 @@ namespace Directiva.SimulationUI
                 if (focused != null && _editorMount.Contains(focused))
                     focused.Blur();
             }
+        }
+
+        private string GetCurrentLevelName() =>
+            string.IsNullOrWhiteSpace(LevelLaunchContext.CurrentLevelName)
+                ? defaultLevelTitle : LevelLaunchContext.CurrentLevelName;
+
+        private void RefreshLevelName()
+        {
+            string title = GetCurrentLevelName();
+            if (_levelNameInEditor != null)
+                _levelNameInEditor.text = title;
+            if (_levelNameInArena != null)
+                _levelNameInArena.text = title;
+            // Preserve the existing status-tooltip fallback for long titles.
+            if (_statusLabel != null)
+                _statusLabel.tooltip = title;
         }
 
         private void ResizeDockedEditor(float width)
@@ -618,9 +656,8 @@ namespace Directiva.SimulationUI
         {
             _nexusPicker?.Hide();
             _hudTooltips?.Hide();
-            string title = string.IsNullOrWhiteSpace(LevelLaunchContext.CurrentLevelName)
-                ? defaultLevelTitle : LevelLaunchContext.CurrentLevelName;
-            _resultsPanel?.Show(result, title);
+            RefreshLevelName();
+            _resultsPanel?.Show(result, GetCurrentLevelName());
             PlayResultSound(result.Outcome);
         }
 

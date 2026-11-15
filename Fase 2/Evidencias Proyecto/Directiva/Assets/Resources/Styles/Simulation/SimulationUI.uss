@@ -115,6 +115,8 @@
     min-width: 128px;
     min-height: 50px;
     height: 50px;
+    margin-top: 0;
+    margin-bottom: 0;
     margin-right: 8px;
     flex-shrink: 1;
     padding-left: 12px;
@@ -159,6 +161,64 @@
     border-bottom-width: 1px;
     border-bottom-color: rgb(90, 106, 128);
 }
+/* Level name in the editor header. It uses the left flex space but never
+   expands the header or pushes minimize/maximize out of view. */
+.sim-editor-level-name {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    -unity-text-overflow-position: end;
+    -unity-text-align: middle-left;
+    font-size: 14px;
+    color: rgb(185, 199, 218);
+    padding-left: 3px;
+    padding-right: 8px;
+}
+
+/* Child of the match-stats layer; always attached to the real lower edge,
+   including when statistics reflow into two rows on narrow screens. */
+.sim-level-name-banner {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+.sim-level-name-caption {
+    max-width: 70%;
+    min-width: 0;
+    /* Unity's built-in Label margins put a small visible gap between the
+       caption and its parent, even though the banner is anchored at top:100%. */
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    background-color: rgba(23, 30, 43, 0.56);
+    border-width: 1px;
+    border-top-width: 0;
+    border-color: rgba(85, 107, 136, 0.44);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+    color: rgb(192, 203, 220);
+    font-size: 13px;
+    -unity-text-align: middle-center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    -unity-text-overflow-position: end;
+}
+
 .sim-editor-header-button {
     height: 27px;
     margin-left: 5px;
@@ -172,6 +232,7 @@
 }
 .sim-editor-header-button {
     width: 34px;
+    flex-shrink: 0;
     padding-left: 0;
     padding-right: 0;
     -unity-text-align: middle-center;
@@ -199,6 +260,8 @@
     min-width: 128px;
     min-height: 50px;
     height: 50px;
+    margin-top: 0;
+    margin-bottom: 0;
     margin-left: 8px;
     flex-shrink: 1;
     padding-left: 12px;
@@ -341,6 +404,8 @@
 
 /* Readable RTS-style match data panel, 20% thinner than the first pass. */
 .sim-match-stats-layer {
+    position: relative;
+    overflow: visible;
     width: 820px;
     max-width: 820px;
     min-width: 0;
@@ -455,6 +520,7 @@
     justify-content: center;
     align-items: stretch;
 }
+.sim-ui-root.sim-hud-stacked .sim-level-name-caption { font-size: 12px; }
 .sim-ui-root.sim-hud-stacked .sim-editor-tab {
     width: 148px;
     min-width: 116px;
@@ -510,6 +576,7 @@
    Both adjacent buttons stretch to that same height, keeping the top edges
    and bottoms perfectly aligned. No extra HUD row is introduced. */
 .sim-ui-root.sim-hud-narrow .sim-top-info-row { height: 80px; }
+.sim-ui-root.sim-hud-narrow .sim-level-name-caption { font-size: 12px; }
 .sim-ui-root.sim-hud-narrow .sim-editor-tab {
     width: 112px;
     min-width: 100px;
@@ -571,6 +638,14 @@
     right: 24px;
     height: 72px;
 }
+.sim-ui-root.sim-hud-large .sim-level-name-caption {
+    font-size: 19px;
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+.sim-ui-root.sim-hud-large .sim-editor-level-name { font-size: 20px; }
 .sim-ui-root.sim-hud-large .sim-editor-tab {
     width: 224px;
     min-width: 180px;
