@@ -302,7 +302,7 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     RuntimeError.InternalVmError(
-                        $"{ex.GetType().Name}: {ex.Message}"
+                        $"{ex.GetType().Name}: {ex.Message}", "detail_internal_vm_exception", ex.GetType().Name
                     )
                 );
             }
@@ -355,9 +355,7 @@ namespace DSExecution.VirtualMachine
             if (callStack.Count == 0)
             {
                 return Fault(
-                    RuntimeError.InternalVmError(
-                        "VM is Running without a call frame."
-                    )
+                    RuntimeError.InternalVmError("VM is Running without a call frame.", "detail_internal_vm_is_running_without_a_call_frame")
                 );
             }
 
@@ -370,7 +368,8 @@ namespace DSExecution.VirtualMachine
                 return Fault(
                     RuntimeError.InvalidInstruction(
                         $"Instruction pointer {frame.InstructionPointer} is outside function " +
-                        $"'{frame.Function.Name}'. A function must terminate with Return."
+                        $"'{frame.Function.Name}'. A function must terminate with Return.",
+                        "detail_instruction_pointer", frame.InstructionPointer, frame.Function.Name
                     )
                 );
             }
@@ -385,8 +384,7 @@ namespace DSExecution.VirtualMachine
                           (pending.Kind == InstructionId.CallMethod &&
                            instruction.OperandA != pending.MemberArgumentCount)))
                 {
-                    return Fault(RuntimeError.InternalVmError(
-                        "Pending operation no longer matches the current instruction."));
+                    return Fault(RuntimeError.InternalVmError("Pending operation no longer matches the current instruction.", "detail_internal_pending_operation_no_longer_matches_the_current_instruction"));
                 }
 
                 return pending.Kind == InstructionId.Operation
@@ -427,7 +425,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.Call => ExecuteCall(frame, instruction.OperandA),
                 InstructionId.PushFunction => ExecutePushFunction(frame, instruction.OperandA),
                 InstructionId.PushSelf => HostContext == null
-                    ? Fault(RuntimeError.InvalidOperation("self requires an entity-bound VM."))
+                    ? Fault(RuntimeError.InvalidOperation("self requires an entity-bound VM.", "detail_self_requires_an_entity_bound_vm"))
                     : ExecutePush(frame, HostContext.Self),
                 InstructionId.CallIndirect => ExecuteCallIndirect(frame, instruction.OperandA),
                 InstructionId.Return => ExecuteReturn(frame),
@@ -438,7 +436,7 @@ namespace DSExecution.VirtualMachine
                 InstructionId.DebugSpan => ExecuteDebugSpan(frame, instruction.OperandA, instruction.OperandB),
                 _ => Fault(
                     RuntimeError.InvalidInstruction(
-                        $"Unknown instruction id {(int)instruction.Id}."
+                        $"Unknown instruction id {(int)instruction.Id}.", "detail_instruction_unknown_id", (int)instruction.Id
                     )
                 )
             };
@@ -455,7 +453,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecutePushString(CallFrame frame, string? value)
         {
             if (value == null)
-                return Fault(RuntimeError.InvalidInstruction("PushString requires a string literal."));
+                return Fault(RuntimeError.InvalidInstruction("PushString requires a string literal.", "detail_instruction_pushstring_requires_a_string_literal"));
 
             var heapObject = new StringHeapObject(value);
             if (!Memory.TryAllocHeap(heapObject, out uint memoryReference))
@@ -474,7 +472,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteTuple(CallFrame frame, int count)
         {
             if (count < 0)
-                return Fault(RuntimeError.InvalidInstruction($"TUPLE requires a non-negative count ({count})."));
+                return Fault(RuntimeError.InvalidInstruction($"TUPLE requires a non-negative count ({count}).", "detail_instruction_tuple_count", count));
 
             if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
                 return Fault(RuntimeError.StackUnderflow());
@@ -483,7 +481,7 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.StackOverflow());
 
             if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] elements))
-                return Fault(RuntimeError.InternalVmError("TUPLE failed to peek validated stack values."));
+                return Fault(RuntimeError.InternalVmError("TUPLE failed to peek validated stack values.", "detail_internal_tuple_failed_to_peek_validated_stack_values"));
 
             foreach (DataValue element in elements)
             {
@@ -499,7 +497,7 @@ namespace DSExecution.VirtualMachine
                     frame.EvalStackBase, count, DataValue.FromTupleReference(tupleReference)))
             {
                 Memory.FreeHeap(tupleReference);
-                return Fault(RuntimeError.InternalVmError("TUPLE could not commit the stack replacement."));
+                return Fault(RuntimeError.InternalVmError("TUPLE could not commit the stack replacement.", "detail_internal_tuple_could_not_commit_the_stack_replacement"));
             }
 
             return AdvanceInstruction(frame);
@@ -509,7 +507,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteList(CallFrame frame, int count)
         {
             if (count < 0)
-                return Fault(RuntimeError.InvalidInstruction("LIST requires a non-negative count."));
+                return Fault(RuntimeError.InvalidInstruction("LIST requires a non-negative count.", "detail_instruction_list_requires_a_non_negative_count"));
             if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
                 return Fault(RuntimeError.StackUnderflow());
             if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, count))
@@ -525,7 +523,7 @@ namespace DSExecution.VirtualMachine
                 return Fault(RuntimeError.OutOfMemory());
             if (!evaluationStack.TryReplaceTopWithOne(
                     frame.EvalStackBase, count, DataValue.FromListReference(reference)))
-                return Fault(RuntimeError.InternalVmError("LIST stack replacement failed after validation."));
+                return Fault(RuntimeError.InternalVmError("LIST stack replacement failed after validation.", "detail_internal_list_stack_replacement_failed_after_validation"));
             return AdvanceInstruction(frame);
         }
 
@@ -536,7 +534,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteSet(CallFrame frame, int count)
         {
             if (count < 0)
-                return Fault(RuntimeError.InvalidInstruction("SET requires a non-negative count."));
+                return Fault(RuntimeError.InvalidInstruction("SET requires a non-negative count.", "detail_instruction_set_requires_a_non_negative_count"));
             if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
                 return Fault(RuntimeError.StackUnderflow());
             if (!evaluationStack.CanReplaceTopWithOne(frame.EvalStackBase, count))
@@ -552,7 +550,7 @@ namespace DSExecution.VirtualMachine
                     frame.EvalStackBase, count, DataValue.FromSetReference(reference)))
             {
                 Memory.FreeHeap(reference);
-                return Fault(RuntimeError.InternalVmError("SET stack replacement failed after validation."));
+                return Fault(RuntimeError.InternalVmError("SET stack replacement failed after validation.", "detail_internal_set_stack_replacement_failed_after_validation"));
             }
             return AdvanceInstruction(frame);
         }
@@ -565,7 +563,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteDict(CallFrame frame, int count)
         {
             if (count < 0 || count > int.MaxValue / 2)
-                return Fault(RuntimeError.InvalidInstruction("DICT needs a valid non-negative pair count."));
+                return Fault(RuntimeError.InvalidInstruction("DICT needs a valid non-negative pair count.", "detail_instruction_dict_needs_a_valid_non_negative_pair_count"));
             int stackCount = count * 2;
             if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, stackCount))
                 return Fault(RuntimeError.StackUnderflow());
@@ -581,7 +579,7 @@ namespace DSExecution.VirtualMachine
                     frame.EvalStackBase, stackCount, DataValue.FromDictReference(reference)))
             {
                 Memory.FreeHeap(reference);
-                return Fault(RuntimeError.InternalVmError("DICT stack replacement failed after validation."));
+                return Fault(RuntimeError.InternalVmError("DICT stack replacement failed after validation.", "detail_internal_dict_stack_replacement_failed_after_validation"));
             }
             return AdvanceInstruction(frame);
         }
@@ -593,7 +591,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteRange(CallFrame frame, int count)
         {
             if (count < 1 || count > 3)
-                return Fault(RuntimeError.InvalidInstruction("RANGE expects 1, 2 or 3 arguments."));
+                return Fault(RuntimeError.InvalidInstruction("RANGE expects 1, 2 or 3 arguments.", "detail_instruction_range_expects_1_2_or_3_arguments"));
             if (!evaluationStack.HasValuesAbove(frame.EvalStackBase, count))
                 return Fault(RuntimeError.StackUnderflow());
             if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, count, out DataValue[] args))
@@ -603,20 +601,20 @@ namespace DSExecution.VirtualMachine
                 if (argument.dataType == DataTypeId.Uninitialized)
                     return Fault(RuntimeError.VariableUsedBeforeInitialization());
                 if (argument.dataType != DataTypeId.Int && argument.dataType != DataTypeId.Bool)
-                    return Fault(RuntimeError.InvalidOperation("RANGE requires Int/Bool arguments."));
+                    return Fault(RuntimeError.InvalidOperation("RANGE requires Int/Bool arguments.", "detail_opcode_range_requires_int_bool_arguments"));
             }
             long start = count > 1 ? unchecked((long)args[0].value) : 0L;
             long stop = count > 1 ? unchecked((long)args[1].value) : unchecked((long)args[0].value);
             long step = count == 3 ? unchecked((long)args[2].value) : 1L;
             if (step == 0)
-                return Fault(RuntimeError.InvalidOperation("RANGE step cannot be zero."));
+                return Fault(RuntimeError.InvalidOperation("RANGE step cannot be zero.", "detail_opcode_range_step_cannot_be_zero"));
             if (!Memory.TryAllocHeap(new RangeHeapObject(start, stop, step), out uint reference))
                 return Fault(RuntimeError.OutOfMemory());
             if (!evaluationStack.TryReplaceTopWithOne(
                     frame.EvalStackBase, count, DataValue.FromRangeReference(reference)))
             {
                 Memory.FreeHeap(reference);
-                return Fault(RuntimeError.InternalVmError("RANGE stack replacement failed."));
+                return Fault(RuntimeError.InternalVmError("RANGE stack replacement failed.", "detail_internal_range_stack_replacement_failed"));
             }
             return AdvanceInstruction(frame);
         }
@@ -660,7 +658,7 @@ namespace DSExecution.VirtualMachine
                 _ => false
             };
             if (!matching)
-                return Fault(RuntimeError.InvalidOperation("Iterable reference has the wrong heap object type."));
+                return Fault(RuntimeError.InvalidOperation("Iterable reference has the wrong heap object type.", "detail_iterable_reference_has_the_wrong_heap_object_type"));
             var cursor = new IteratorHeapObject(sourceValue.dataType, sourceReference, source);
             if (!Memory.TryAllocHeap(cursor, out uint iteratorReference))
                 return Fault(RuntimeError.OutOfMemory());
@@ -668,7 +666,7 @@ namespace DSExecution.VirtualMachine
                     frame.EvalStackBase, 1, DataValue.FromIteratorReference(iteratorReference)))
             {
                 Memory.FreeHeap(iteratorReference);
-                return Fault(RuntimeError.InternalVmError("ITER_INIT could not commit its cursor."));
+                return Fault(RuntimeError.InternalVmError("ITER_INIT could not commit its cursor.", "detail_internal_iter_init_could_not_commit_its_cursor"));
             }
             return AdvanceInstruction(frame);
         }
@@ -701,7 +699,7 @@ namespace DSExecution.VirtualMachine
             if (!available)
             {
                 if (!evaluationStack.TryPop(frame.EvalStackBase, out _))
-                    return Fault(RuntimeError.InternalVmError("ITER_NEXT exhausted but stack lost cursor."));
+                    return Fault(RuntimeError.InternalVmError("ITER_NEXT exhausted but stack lost cursor.", "detail_internal_iter_next_exhausted_but_stack_lost_cursor"));
                 frame.InstructionPointer = endTarget;
                 return VMAdvanceResult.Running();
             }
@@ -711,9 +709,9 @@ namespace DSExecution.VirtualMachine
             if (error != null)
                 return Fault(error);
             if (!hasValue)
-                return Fault(RuntimeError.InternalVmError("Iterator became exhausted during a single VM step."));
+                return Fault(RuntimeError.InternalVmError("Iterator became exhausted during a single VM step.", "detail_internal_iterator_became_exhausted_during_a_single_vm_step"));
             if (!evaluationStack.TryPush(item))
-                return Fault(RuntimeError.InternalVmError("ITER_NEXT failed after capacity check."));
+                return Fault(RuntimeError.InternalVmError("ITER_NEXT failed after capacity check.", "detail_internal_iter_next_failed_after_capacity_check"));
             return AdvanceInstruction(frame);
         }
 
@@ -735,7 +733,8 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     cast.Error ?? RuntimeError.InternalVmError(
-                        $"Cast from {value.dataType} to {targetType} failed without RuntimeError."
+                        $"Cast from {value.dataType} to {targetType} failed without RuntimeError.",
+                        "detail_internal_cast_failed", value.dataType, targetType
                     )
                 );
             }
@@ -756,7 +755,8 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     cast.Error ?? RuntimeError.InternalVmError(
-                        $"PRINT failed to cast {value.dataType} to String without RuntimeError."
+                        $"PRINT failed to cast {value.dataType} to String without RuntimeError.",
+                        "detail_internal_print_cast_failed", value.dataType
                     )
                 );
             }
@@ -768,9 +768,7 @@ namespace DSExecution.VirtualMachine
                 if (!stringValue.TryGetHeapReference(out uint memoryReference))
                 {
                     return Fault(
-                        RuntimeError.InternalVmError(
-                            "CAST STRING returned a non-heap-backed value."
-                        )
+                        RuntimeError.InternalVmError("CAST STRING returned a non-heap-backed value.", "detail_internal_cast_string_returned_a_non_heap_backed_value")
                     );
                 }
 
@@ -781,7 +779,8 @@ namespace DSExecution.VirtualMachine
                 {
                     return Fault(
                         RuntimeError.InternalVmError(
-                            $"String reference {memoryReference} does not point to StringHeapObject."
+                            $"String reference {memoryReference} does not point to StringHeapObject.",
+                        "detail_internal_bad_string_reference", memoryReference
                         )
                     );
                 }
@@ -933,7 +932,7 @@ namespace DSExecution.VirtualMachine
             string? name, int argumentCount)
         {
             if (string.IsNullOrEmpty(name) || argumentCount < 0 || argumentCount == int.MaxValue)
-                return Fault(RuntimeError.InvalidInstruction("Invalid member invocation operands."));
+                return Fault(RuntimeError.InvalidInstruction("Invalid member invocation operands.", "detail_instruction_invalid_member_invocation_operands"));
 
             int total = argumentCount + 1;
             if (!evaluationStack.TryPopArguments(frame.EvalStackBase, total, out DataValue[] arguments))
@@ -1034,7 +1033,7 @@ namespace DSExecution.VirtualMachine
                     {
                         if (result.Value.dataType != DataTypeId.None)
                             return Fault(RuntimeError.InternalVmError(
-                                $"{label} setter returned a value instead of None."));
+                                $"{label} setter returned a value instead of None.", "detail_internal_setter_returned_value", label));
                     }
                     else if (!evaluationStack.TryPush(result.Value))
                         return Fault(RuntimeError.StackOverflow());
@@ -1046,7 +1045,7 @@ namespace DSExecution.VirtualMachine
                     operationAuxPointer = 0;
                     return Fault(
                         result.Error ?? RuntimeError.InternalVmError(
-                            $"{label} returned Error without RuntimeError."
+                            $"{label} returned Error without RuntimeError.", "detail_internal_missing_error", label
                         )
                     );
 
@@ -1056,19 +1055,19 @@ namespace DSExecution.VirtualMachine
                         pendingOperation = null;
                         return Fault(
                             RuntimeError.InternalVmError(
-                                $"{label} returned Continued without state."
+                                $"{label} returned Continued without state.", "detail_internal_missing_state", label
                             )
                         );
                     }
 
                     if (result.AuxiliaryReference != operationAuxPointer && pendingOperation != null)
                         return Fault(RuntimeError.InternalVmError(
-                            $"{label} changed its auxiliary reference mid-continuation."));
+                            $"{label} changed its auxiliary reference mid-continuation.", "detail_internal_aux_changed", label));
 
                     if (result.AuxiliaryReference != 0 &&
                         !Memory.TryGetHeap(result.AuxiliaryReference, out _))
                         return Fault(RuntimeError.InternalVmError(
-                            $"{label} returned a missing auxiliary heap reference."));
+                            $"{label} returned a missing auxiliary heap reference.", "detail_internal_aux_reference_missing", label));
 
                     if (pendingOperation == null)
                     {
@@ -1076,7 +1075,7 @@ namespace DSExecution.VirtualMachine
                         {
                             return Fault(
                                 RuntimeError.InternalVmError(
-                                    $"{label} continued without a receiver."
+                                    $"{label} continued without a receiver.", "detail_internal_missing_receiver", label
                                 )
                             );
                         }
@@ -1104,7 +1103,8 @@ namespace DSExecution.VirtualMachine
                     pendingOperation = null;
                     return Fault(
                         RuntimeError.InternalVmError(
-                            $"Member/operation dispatcher leaked status {result.Status} for {label}."
+                            $"Member/operation dispatcher leaked status {result.Status} for {label}.",
+                        "detail_internal_dispatcher_status", result.Status, label
                         )
                     );
             }
@@ -1138,7 +1138,8 @@ namespace DSExecution.VirtualMachine
                 return Fault(
                     RuntimeError.InvalidOperation(
                         $"Conditional jump requires Bool but received {condition.dataType}. " +
-                        "Emit IsTruthy before the jump."
+                        "Emit IsTruthy before the jump.",
+                        "detail_conditional_type", condition.dataType
                     )
                 );
             }
@@ -1173,8 +1174,7 @@ namespace DSExecution.VirtualMachine
         private VMAdvanceResult ExecuteCallIndirect(CallFrame caller, int argumentCount)
         {
             if (argumentCount < 0 || argumentCount == int.MaxValue)
-                return Fault(RuntimeError.InvalidInstruction(
-                    "CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue."));
+                return Fault(RuntimeError.InvalidInstruction("CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.", "detail_instruction_call_indirect_requires_a_non_negative_argument_count_below_int32_maxvalue"));
 
             if (!evaluationStack.TryPeekArguments(
                     caller.EvalStackBase, argumentCount + 1, out DataValue[] operands))
@@ -1208,8 +1208,7 @@ namespace DSExecution.VirtualMachine
             // the Directiva heap, and arguments move directly into the callee frame.
             if (!evaluationStack.TryPopArguments(
                     caller.EvalStackBase, argumentCount + 1, out DataValue[] popped))
-                return Fault(RuntimeError.InternalVmError(
-                    "Validated CALL_INDIRECT arguments disappeared from the stack."));
+                return Fault(RuntimeError.InternalVmError("Validated CALL_INDIRECT arguments disappeared from the stack.", "detail_internal_validated_call_indirect_arguments_disappeared_from_the_stack"));
 
             DataValue[] arguments = new DataValue[argumentCount];
             Array.Copy(popped, 1, arguments, 0, argumentCount);
@@ -1227,7 +1226,8 @@ namespace DSExecution.VirtualMachine
             {
                 if (native.MinArguments != native.MaxArguments)
                     return Fault(RuntimeError.InvalidInstruction(
-                        $"Variadic native '{native.QualifiedName}' requires PUSH_FUNCTION + CALL_INDIRECT n."));
+                        $"Variadic native '{native.QualifiedName}' requires PUSH_FUNCTION + CALL_INDIRECT n.",
+                        "detail_instruction_variadic_native", native.QualifiedName));
                 return ExecuteNativeCall(caller, native, native.MinArguments, false);
             }
             if (!Code.TryGetFunction(functionId, out var function))
@@ -1269,7 +1269,8 @@ namespace DSExecution.VirtualMachine
             if (!native.Accepts(argumentCount))
                 return Fault(RuntimeError.InvalidOperation(
                     $"Native '{native.QualifiedName}' expects {native.MinArguments}..{native.MaxArguments} " +
-                    $"arguments, got {argumentCount}."));
+                    $"arguments, got {argumentCount}.", "detail_native_arity",
+                    native.QualifiedName, native.MinArguments, native.MaxArguments, argumentCount));
             int consumed = argumentCount + (indirect ? 1 : 0);
             if (!evaluationStack.TryPeekArguments(frame.EvalStackBase, consumed, out DataValue[] operands))
                 return Fault(RuntimeError.StackUnderflow());
@@ -1291,13 +1292,15 @@ namespace DSExecution.VirtualMachine
                 // An unexpected exception in trusted C# is a VM integration defect,
                 // never a script exception allowed to escape the simulation scheduler.
                 return Fault(RuntimeError.InternalVmError(
-                    $"Native '{native.QualifiedName}' raised {ex.GetType().Name}: {ex.Message}"));
+                    $"Native '{native.QualifiedName}' raised {ex.GetType().Name}: {ex.Message}",
+                    "detail_internal_native_exception", native.QualifiedName, ex.GetType().Name));
             }
             if (!result.IsSuccess)
                 return Fault(result.Error ?? RuntimeError.InternalVmError(
-                    $"Native '{native.QualifiedName}' failed without an error."));
+                    $"Native '{native.QualifiedName}' failed without an error.",
+                    "detail_internal_native_failed", native.QualifiedName));
             if (!evaluationStack.TryReplaceTopWithOne(frame.EvalStackBase, consumed, result.Value))
-                return Fault(RuntimeError.InternalVmError("Validated native stack replacement failed."));
+                return Fault(RuntimeError.InternalVmError("Validated native stack replacement failed.", "detail_internal_validated_native_stack_replacement_failed"));
             return AdvanceInstruction(frame);
         }
 
@@ -1346,7 +1349,8 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     RuntimeError.InvalidInstruction(
-                        $"Invalid local context range [{firstLocal}, {firstLocal + localCount})."
+                        $"Invalid local context range [{firstLocal}, {firstLocal + localCount}).",
+                        "detail_instruction_local_context", firstLocal, firstLocal + localCount
                     )
                 );
             }
@@ -1359,9 +1363,7 @@ namespace DSExecution.VirtualMachine
             if (!frame.TryExitContext())
             {
                 return Fault(
-                    RuntimeError.InvalidInstruction(
-                        "ContextEnd has no matching ContextStart."
-                    )
+                    RuntimeError.InvalidInstruction("ContextEnd has no matching ContextStart.", "detail_instruction_contextend_has_no_matching_contextstart")
                 );
             }
 
@@ -1373,9 +1375,7 @@ namespace DSExecution.VirtualMachine
             if (string.IsNullOrWhiteSpace(fileName))
             {
                 return Fault(
-                    RuntimeError.InvalidInstruction(
-                        "DebugFile requires a non-empty file name."
-                    )
+                    RuntimeError.InvalidInstruction("DebugFile requires a non-empty file name.", "detail_instruction_debugfile_requires_a_non_empty_file_name")
                 );
             }
 
@@ -1389,7 +1389,7 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     RuntimeError.InvalidInstruction(
-                        $"DebugLine cannot use negative line {line}."
+                        $"DebugLine cannot use negative line {line}.", "detail_instruction_debug_line", line
                     )
                 );
             }
@@ -1404,7 +1404,7 @@ namespace DSExecution.VirtualMachine
             {
                 return Fault(
                     RuntimeError.InvalidInstruction(
-                        $"Invalid debug span [{start}, {end})."
+                        $"Invalid debug span [{start}, {end}).", "detail_instruction_debug_span", start, end
                     )
                 );
             }

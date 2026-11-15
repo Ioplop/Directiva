@@ -22,7 +22,7 @@ namespace DSExecution.Native
             long start = 0, stop, step = 1;
             for (int i = 0; i < c.Count; i++)
                 if (!TryInteger(c[i], out _))
-                    return NativeResult.Failure(RuntimeError.InvalidOperation("range() needs Int/Bool arguments."));
+                    return NativeResult.Failure(RuntimeError.InvalidOperation("range() needs Int/Bool arguments.", "detail_range_needs_int_bool_arguments"));
             stop = unchecked((long)c[c.Count - 1].value);
             if (c.Count >= 2)
             {
@@ -31,7 +31,7 @@ namespace DSExecution.Native
             }
             if (c.Count == 3) step = unchecked((long)c[2].value);
             if (step == 0)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("range() step cannot be zero."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("range() step cannot be zero.", "detail_range_step_cannot_be_zero"));
             if (!c.Memory.TryAllocHeap(new RangeHeapObject(start, stop, step), out uint id))
                 return NativeResult.Failure(RuntimeError.OutOfMemory());
             return NativeResult.Success(DataValue.FromRangeReference(id));
@@ -72,7 +72,7 @@ namespace DSExecution.Native
         {
             DataValue x = c[0];
             if (x.dataType != DataTypeId.Int && x.dataType != DataTypeId.Decimal && x.dataType != DataTypeId.Bool)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("abs() needs a numeric argument."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("abs() needs a numeric argument.", "detail_abs_needs_a_numeric_argument"));
             long raw = unchecked((long)x.value);
             if (raw == long.MinValue) return NativeResult.Failure(RuntimeError.Overflow());
             long magnitude = raw < 0 ? -raw : raw;
@@ -88,7 +88,7 @@ namespace DSExecution.Native
         private static NativeResult Extremum(NativeCallContext c, bool minimum)
         {
             if (!TryNumericRaw(c[0], out BigInteger a) || !TryNumericRaw(c[1], out BigInteger b))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("min()/max() require numeric arguments."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("min()/max() require numeric arguments.", "detail_min_max_require_numeric_arguments"));
             int compare = a.CompareTo(b);
             // Consistent with Python, equal values preserve the first argument's identity/type.
             return NativeResult.Success((minimum ? compare <= 0 : compare >= 0) ? c[0] : c[1]);
@@ -113,9 +113,9 @@ namespace DSExecution.Native
             if (!TryNumericRaw(c[0], out BigInteger x) ||
                 !TryNumericRaw(c[1], out BigInteger low) ||
                 !TryNumericRaw(c[2], out BigInteger high))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("clamp() requires numeric arguments."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("clamp() requires numeric arguments.", "detail_clamp_requires_numeric_arguments"));
             if (low > high)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("clamp() minimum exceeds maximum."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("clamp() minimum exceeds maximum.", "detail_clamp_minimum_exceeds_maximum"));
             return NativeResult.Success(x < low ? c[1] : x > high ? c[2] : c[0]);
         }
 

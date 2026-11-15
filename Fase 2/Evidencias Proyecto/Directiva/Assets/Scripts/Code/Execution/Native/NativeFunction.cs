@@ -94,9 +94,10 @@ namespace DSExecution.Native
             if (result.Status == OperationStatus.Success)
                 return NativeResult.Success(result.Value);
             if (result.Status == OperationStatus.Error)
-                return NativeResult.Failure(result.Error ?? RuntimeError.InternalVmError("Native operation failed without an error."));
+                return NativeResult.Failure(result.Error ?? RuntimeError.InternalVmError("Native operation failed without an error.", "detail_internal_native_operation_failed_without_an_error"));
             return NativeResult.Failure(RuntimeError.InvalidOperation(
-                $"Native operation {operation} cannot be continued in a single step."));
+                $"Native operation {operation} cannot be continued in a single step.",
+                "detail_native_one_step", operation));
         }
 
         /// <summary>Formats all native call arguments as a single space-separated console event.</summary>
@@ -118,8 +119,7 @@ namespace DSExecution.Native
                 if (!converted.IsSuccess) return converted;
                 if (!converted.Value.TryGetHeapReference(out uint id) ||
                     !Memory.TryGetHeap(id, out HeapObject obj) || obj is not StringHeapObject str)
-                    return NativeResult.Failure(RuntimeError.InvalidOperation(
-                        "print() did not produce a valid String."));
+                    return NativeResult.Failure(RuntimeError.InvalidOperation("print() did not produce a valid String.", "detail_print_did_not_produce_a_valid_string"));
                 if (i > 0) text.Append(' ');
                 text.Append(str.Value);
             }

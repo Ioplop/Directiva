@@ -94,7 +94,7 @@ namespace DSExecution.VirtualMachine
                     hasValue = !rangeExhausted;
                     break;
                 default:
-                    error = RuntimeError.InvalidOperation("Iterator source has an unexpected heap object type.");
+                    error = RuntimeError.InvalidOperation("Iterator source has an unexpected heap object type.", "detail_iterator_source_has_an_unexpected_heap_object_type");
                     break;
             }
             return error == null;
@@ -165,8 +165,7 @@ namespace DSExecution.VirtualMachine
                     break;
 
                 default:
-                    error = RuntimeError.InvalidOperation(
-                        "Iterator source has an unexpected heap object type.");
+                    error = RuntimeError.InvalidOperation("Iterator source has an unexpected heap object type.", "detail_iterator_source_has_an_unexpected_heap_object_type");
                     return false;
             }
 

@@ -69,8 +69,9 @@ namespace Directiva.CodeUI
                         {
                             if (!string.Equals(reader.ReadLine(), Marker, StringComparison.Ordinal))
                             {
-                                warnings.Add("No se reemplazó '" + relative.Replace('\\', '/') +
-                                    "': contiene DIL que no fue generado por Directiva.");
+                                // Return the protected relative path, not a rendered
+                                // warning: the UI chooses the user's current language.
+                                warnings.Add(relative.Replace('\\', '/'));
                                 continue;
                             }
                         }

@@ -41,7 +41,7 @@ namespace DSExecution.DataTypes
             if (!value.TryGetHeapReference(out uint reference))
             {
                 failure = OperationResult.OpError(
-                    RuntimeError.InvalidOperation("Tuple contains an invalid heap reference."));
+                    RuntimeError.InvalidOperation("Tuple contains an invalid heap reference.", "detail_tuple_contains_an_invalid_heap_reference"));
                 return false;
             }
 
@@ -218,8 +218,7 @@ namespace DSExecution.DataTypes
 
                     uint nestedReference = (uint)child.value;
                     if (active.Contains(nestedReference))
-                        return OperationResult.OpError(RuntimeError.InvalidOperation(
-                            "Cyclic tuples cannot be hashed."));
+                        return OperationResult.OpError(RuntimeError.InvalidOperation("Cyclic tuples cannot be hashed.", "detail_cyclic_tuples_cannot_be_hashed"));
 
                     if (nested.TryGetCachedHash(out long cachedChildHash))
                     {
@@ -254,14 +253,14 @@ namespace DSExecution.DataTypes
                     childHash.Value.dataType != DataTypeId.Int)
                 {
                     return OperationResult.OpError(RuntimeError.InternalVmError(
-                        $"Hash of {child.dataType} must return Int synchronously."));
+                        $"Hash of {child.dataType} must return Int synchronously.",
+                            "detail_internal_hash_return", child.dataType));
                 }
 
                 current.Combine(childHash.Value.value);
             }
 
-            return OperationResult.OpError(RuntimeError.InternalVmError(
-                "Tuple hash traversal completed without a result."));
+            return OperationResult.OpError(RuntimeError.InternalVmError("Tuple hash traversal completed without a result.", "detail_internal_tuple_hash_traversal_completed_without_a_result"));
         }
 
         private sealed class HashFrame

@@ -153,7 +153,8 @@ namespace DSExecution.DataTypes
             OperationResult result = handler(call);
             return result.Status == OperationStatus.NotImplemented
                 ? OperationResult.OpError(RuntimeError.InvalidOperation(
-                    $"Member '{name}' is not supported by {GetType().Name} for these arguments."))
+                    $"Member '{name}' is not supported by {GetType().Name} for these arguments.",
+                    "detail_member_unsupported", name, GetType().Name))
                 : result;
         }
     }

@@ -36,7 +36,7 @@ namespace DSExecution.DataTypes
             if (target == DataTypeId.String)
             {
                 if (!value.TryGetSimulationObjectId(out int id))
-                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid SimulationObject ID."));
+                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid SimulationObject ID.", "detail_invalid_simulationobject_id"));
                 return DTString.CreateValue("<entity #" + id + ">", memory);
             }
             return base.CastTo(target, value, memory);
@@ -45,10 +45,9 @@ namespace DSExecution.DataTypes
         public override OperationResult InvokeMember(DScriptMemberKind kind, string name, OperationCall call)
         {
             if (!call.Arguments[0].TryGetSimulationObjectId(out _))
-                return OperationResult.OpError(RuntimeError.InvalidOperation("Invalid SimulationObject ID."));
+                return OperationResult.OpError(RuntimeError.InvalidOperation("Invalid SimulationObject ID.", "detail_invalid_simulationobject_id"));
             if (call.HostContext == null)
-                return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "SimulationObject members require an entity-bound VM."));
+                return OperationResult.OpError(RuntimeError.InvalidOperation("SimulationObject members require an entity-bound VM.", "detail_simulationobject_members_require_an_entity_bound_vm"));
             return call.HostContext.InvokeSimulationMember(kind, name, call);
         }
     }

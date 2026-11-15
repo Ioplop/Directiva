@@ -29,7 +29,7 @@ namespace DOrchestration
         public OperationResult InvokeSimulationMember(DScriptMemberKind kind, string name, OperationCall call)
         {
             if (!call.Arguments[0].TryGetSimulationObjectId(out int receiverId))
-                return OperationResult.OpError(RuntimeError.InvalidOperation("Invalid entity reference."));
+                return OperationResult.OpError(RuntimeError.InvalidOperation("Invalid entity reference.", "bridge_invalid_entity_reference"));
             bool knownObservation = SimulationApiCatalog.TryGetObservation(name, out var observations);
             bool knownOrder = SimulationApiCatalog.TryGetOrder(name, out _);
 
@@ -63,7 +63,7 @@ namespace DOrchestration
             if (knownOrder && name == "move" && args.Length == 1 &&
                 call.Arguments[1].dataType == DataTypeId.Tuple && args[0] is not DMath.FixedVector2)
                 return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "move(position) only accepts positions inside world bounds and the safe Fixed numeric range."));
+                    "move(position) only accepts positions inside world bounds and the safe Fixed numeric range.", "bridge_move_tuple_range"));
             return ToVM(knownOrder
                 ? bridge.Order(controlledId, receiverId, name, args)
                 : bridge.Observe(receiverId, name, args), call.Memory);
@@ -73,12 +73,12 @@ namespace DOrchestration
         {
             if (receiverId != controlledId)
                 return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "A script cannot issue orders to an entity other than itself."));
+                    "A script cannot issue orders to an entity other than itself.", "bridge_foreign_order"));
             if (call.Arguments.Length != 2 ||
                 !call.Arguments[1].TryGetFunctionId(out int functionId) ||
                 !side.IsValidUnitEntry(functionId))
                 return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "build(entry_function) requires a compiled, zero-argument DScript function."));
+                    "build(entry_function) requires a compiled, zero-argument DScript function.", "bridge_build_entry_required"));
             SimulationCallResult result = bridge.RequestBuild(controlledId, receiverId, out UnitBuildRequest request);
             if (result.Status == SimulationCallStatus.Success && result.Value is bool accepted && accepted)
                 side.RememberBuild(request.requestId, functionId);
@@ -88,10 +88,12 @@ namespace DOrchestration
         private OperationResult ToVM(SimulationCallResult result, IMemContext memory)
         {
             if (result.Status == SimulationCallStatus.Error)
-                return OperationResult.OpError(RuntimeError.InvalidOperation(result.Message));
+                return OperationResult.OpError(RuntimeError.InvalidOperation(result.Message,
+                    result.LocalizationKey, result.LocalizationArguments));
             if (result.Status == SimulationCallStatus.Warning)
             {
-                side.ReportWarning(controlledId, result.Message);
+                side.ReportWarning(controlledId, result.Message,
+                    result.LocalizationKey, result.LocalizationArguments);
                 return OperationResult.Success(DataValue.None());
             }
             return SimulationValueConverter.FromHost(result.Value, memory);

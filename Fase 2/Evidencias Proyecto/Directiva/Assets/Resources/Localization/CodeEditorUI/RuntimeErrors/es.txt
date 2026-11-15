@@ -32,3 +32,152 @@
 [InvalidCast]: No se puede convertir {{1}} a {{2}}.
 [InvalidCastValue]: No se pudo convertir el valor de {{1}} a {{2}}. {{3}}
 [InternalVmError]: Error interno de la VM. {{1}}
+[technical_detail_unavailable]: Consulta los detalles técnicos del error en el registro de depuración.
+[bridge_unknown_observation]: Observación desconocida: {{1}}.
+[bridge_foreign_order]: Un script solo puede dar órdenes a su propia entidad.
+[bridge_unknown_order]: Orden desconocida: {{1}}.
+[bridge_unsupported_member]: {{1}}() no está disponible para este tipo de entidad.
+[bridge_move_fixed_range]: move(x, y) solo admite posiciones dentro del mundo; alguna coordenada excede el rango numérico seguro de Fixed.
+[bridge_manual_call]: {{1}}() requiere un tratamiento especial por el orquestador.
+[bridge_no_matching_arguments]: Los argumentos no coinciden con ninguna variante de {{1}}().
+[bridge_ambiguous_overload]: No se puede elegir una variante única de {{1}}(): llamada ambigua.
+[bridge_move_outside_world]: move(x, y) solo acepta posiciones dentro de los límites del mundo: 0 ≤ x ≤ {{1}} y 0 ≤ y ≤ {{2}}.
+[bridge_distance_limit]: {{1}}() exige una distancia que no supere la suma del ancho y el alto del mundo.
+[bridge_invalid_entity_reference]: La referencia a la entidad no es válida.
+[bridge_move_tuple_range]: move(position) solo admite posiciones dentro del mundo y del rango numérico seguro de Fixed.
+[bridge_build_entry_required]: build(entry_function) requiere una función DScript compilada sin parámetros.
+[detail_simulation_returned_an_invalid_entity_id]: La simulación devolvió un identificador de entidad inválido.
+[detail_simulation_returned_an_invalid_entity_id_in_a_list]: La simulación devolvió un identificador de entidad inválido dentro de una lista.
+[detail_too_many_consecutive_zero_cost_vm_debug_instructions]: Se ejecutaron demasiadas instrucciones consecutivas de depuración de costo cero.
+[detail_bound_entity_is_no_longer_active]: La entidad asociada ya no está activa.
+[detail_self_requires_an_entity_bound_vm]: self requiere una VM asociada a una entidad.
+[detail_opcode_range_requires_int_bool_arguments]: RANGE requiere argumentos Int o Bool.
+[detail_opcode_range_step_cannot_be_zero]: El paso de RANGE no puede ser cero.
+[detail_iterable_reference_has_the_wrong_heap_object_type]: La referencia iterable apunta a un objeto del heap de tipo incorrecto.
+[detail_print_did_not_produce_a_valid_string]: print() no produjo un String válido.
+[detail_math_result_is_not_finite]: El resultado matemático no es finito.
+[detail_math_function_expects_a_numeric_value]: La función matemática requiere un valor numérico.
+[detail_atan2_needs_two_numeric_arguments]: atan2() requiere dos argumentos numéricos.
+[detail_hypot_needs_two_numeric_arguments]: hypot() requiere dos argumentos numéricos.
+[detail_floor_ceil_need_numeric_input]: floor()/ceil() requieren un argumento numérico.
+[detail_range_needs_int_bool_arguments]: range() requiere argumentos de tipo Int o Bool.
+[detail_range_step_cannot_be_zero]: El paso de range() no puede ser cero.
+[detail_abs_needs_a_numeric_argument]: abs() requiere un argumento numérico.
+[detail_min_max_require_numeric_arguments]: min()/max() requieren argumentos numéricos.
+[detail_clamp_requires_numeric_arguments]: clamp() requiere argumentos numéricos.
+[detail_clamp_minimum_exceeds_maximum]: El mínimo de clamp() no puede superar el máximo.
+[detail_randint_requires_int_bool_bounds]: randint() requiere límites de tipo Int o Bool.
+[detail_randint_lower_bound_exceeds_upper_bound]: En randint(), el límite inferior supera el superior.
+[detail_uniform_requires_numeric_bounds]: uniform() requiere límites numéricos.
+[detail_uniform_lower_bound_exceeds_upper_bound]: En uniform(), el límite inferior supera el superior.
+[detail_set_contains_an_invalid_heap_reference]: El Set contiene una referencia inválida al heap.
+[detail_set_element_not_found]: No se encontró el elemento en el Set.
+[detail_cannot_pop_from_an_empty_set]: No se puede extraer un elemento de un Set vacío.
+[detail_set_changed_during_continued_relation]: El Set cambió durante una comparación de conjuntos en curso.
+[detail_string_contains_an_invalid_heap_reference]: El String contiene una referencia inválida al heap.
+[detail_tuple_contains_an_invalid_heap_reference]: La tupla contiene una referencia inválida al heap.
+[detail_cyclic_tuples_cannot_be_hashed]: No se puede calcular el hash de tuplas cíclicas.
+[detail_expected_a_valid_heap_backed_string]: Se esperaba un String válido almacenado en el heap.
+[detail_sequence_has_an_invalid_heap_reference]: La secuencia contiene una referencia inválida al heap.
+[detail_invalid_dictionary_reference]: La referencia al diccionario no es válida.
+[detail_dictionary_key_not_found]: No se encontró la clave en el diccionario.
+[detail_list_contains_an_invalid_heap_reference]: La List contiene una referencia inválida al heap.
+[detail_invalid_simulationobject_id]: El identificador de SimulationObject no es válido.
+[detail_simulationobject_members_require_an_entity_bound_vm]: Los miembros de SimulationObject requieren una VM asociada a una entidad.
+[detail_function_contains_an_invalid_compiled_function_id]: La función contiene un identificador de función compilada inválido.
+[detail_invalid_simulation_enum]: La enumeración de simulación no es válida.
+[detail_invalid_simulation_enum_value]: El valor de la enumeración de simulación no es válido.
+[detail_iterator_source_has_an_unexpected_heap_object_type]: El origen del iterador contiene un objeto del heap de tipo inesperado.
+[detail_initializer_budget]: El inicializador shared '{{1}}' excedió el límite de ejecución de {{2}} pasos.
+[detail_native_one_step]: La operación nativa {{1}} no puede continuar en un único paso.
+[detail_dict_changed]: El diccionario cambió durante la operación {{1}} en curso.
+[detail_list_changed_refuse]: La lista cambió durante {{1}}; se rechazó sobrescribir cambios simultáneos.
+[detail_list_changed]: La lista cambió durante la operación {{1}} en curso.
+[detail_set_changed_operation]: El Set cambió durante la operación {{1}} en curso.
+[detail_member_unsupported]: El miembro '{{1}}' no admite esos argumentos en {{2}}.
+[detail_conditional_type]: El salto condicional requiere Bool, pero recibió {{1}}. Usa IsTruthy antes del salto.
+[detail_native_arity]: La función nativa '{{1}}' acepta entre {{2}} y {{3}} argumentos, pero recibió {{4}}.
+[detail_unsupported_sim_result]: La simulación devolvió un tipo no compatible: {{1}}.
+[detail_unsupported_operation_types]: La operación {{1}} no admite operandos de los tipos ({{2}}).
+[detail_cast_signed_int]: Se esperaba un número entero con signo de 64 bits.
+[detail_cast_finite_decimal]: Se esperaba un número decimal finito.
+[detail_internal_vm_reported_faulted_without_a_runtimeerror]: La VM indicó un fallo sin proporcionar un RuntimeError.
+[detail_internal_vm_is_running_without_a_call_frame]: La VM está en ejecución sin un marco de llamada.
+[detail_internal_pending_operation_no_longer_matches_the_current_instruction]: La operación pendiente ya no coincide con la instrucción actual.
+[detail_instruction_pushstring_requires_a_string_literal]: PushString requiere un literal de cadena.
+[detail_internal_tuple_failed_to_peek_validated_stack_values]: TUPLE no pudo leer los valores validados de la pila.
+[detail_internal_tuple_could_not_commit_the_stack_replacement]: TUPLE no pudo confirmar el reemplazo de la pila.
+[detail_instruction_list_requires_a_non_negative_count]: LIST requiere una cantidad no negativa.
+[detail_internal_list_stack_replacement_failed_after_validation]: Falló el reemplazo de la pila de LIST después de la validación.
+[detail_instruction_set_requires_a_non_negative_count]: SET requiere una cantidad no negativa.
+[detail_internal_set_stack_replacement_failed_after_validation]: Falló el reemplazo de la pila de SET después de la validación.
+[detail_instruction_dict_needs_a_valid_non_negative_pair_count]: DICT requiere una cantidad válida y no negativa de pares.
+[detail_internal_dict_stack_replacement_failed_after_validation]: Falló el reemplazo de la pila de DICT después de validar los datos.
+[detail_instruction_range_expects_1_2_or_3_arguments]: RANGE requiere 1, 2 o 3 argumentos.
+[detail_internal_range_stack_replacement_failed]: Falló el reemplazo de la pila de RANGE.
+[detail_internal_iter_init_could_not_commit_its_cursor]: ITER_INIT no pudo confirmar su cursor.
+[detail_internal_iter_next_exhausted_but_stack_lost_cursor]: ITER_NEXT llegó al final, pero la pila perdió el cursor.
+[detail_internal_iterator_became_exhausted_during_a_single_vm_step]: El iterador se agotó durante un único paso de la VM.
+[detail_internal_iter_next_failed_after_capacity_check]: ITER_NEXT falló después de verificar la capacidad.
+[detail_internal_cast_string_returned_a_non_heap_backed_value]: CAST STRING devolvió un valor que no está respaldado por el heap.
+[detail_instruction_invalid_member_invocation_operands]: Los operandos de invocación del miembro no son válidos.
+[detail_instruction_call_indirect_requires_a_non_negative_argument_count_below_int32_maxvalue]: CALL_INDIRECT requiere una cantidad de argumentos no negativa y menor que Int32.MaxValue.
+[detail_internal_validated_call_indirect_arguments_disappeared_from_the_stack]: Los argumentos validados de CALL_INDIRECT desaparecieron de la pila.
+[detail_internal_validated_native_stack_replacement_failed]: Falló el reemplazo validado de la pila para la función nativa.
+[detail_instruction_contextend_has_no_matching_contextstart]: ContextEnd no tiene un ContextStart correspondiente.
+[detail_instruction_debugfile_requires_a_non_empty_file_name]: DebugFile requiere un nombre de archivo no vacío.
+[detail_internal_native_operation_failed_without_an_error]: La operación nativa falló sin proporcionar un error.
+[detail_internal_hash_failed_without_an_error]: El cálculo de hash falló sin proporcionar un error.
+[detail_internal_hash_must_finish_synchronously_and_return_int]: El cálculo de hash debe terminar de forma sincrónica y devolver Int.
+[detail_internal_set_shrink_failed]: No se pudo reducir el tamaño del Set.
+[detail_internal_invalid_continued_set_operation_state]: El estado de continuación de la operación de Set no es válido.
+[detail_internal_could_not_commit_setupdate]: No se pudo confirmar SetUpdate.
+[detail_internal_could_not_release_setupdate_buffer]: No se pudo liberar el búfer de SetUpdate.
+[detail_internal_tuple_hash_traversal_completed_without_a_result]: El recorrido de hash de la tupla terminó sin producir un resultado.
+[detail_internal_sequence_reference_has_incorrect_heap_type]: La referencia de secuencia apunta a un tipo incorrecto en el heap.
+[detail_internal_nested_continued_equality_is_not_yet_supported_in_sequence_equality]: La comparación de secuencias todavía no admite igualdad continuada anidada.
+[detail_internal_valueequals_returned_non_bool_while_comparing_sequences]: ValueEquals devolvió un resultado distinto de Bool al comparar secuencias.
+[detail_internal_sequence_heap_reference_does_not_match_its_datatypeid]: La referencia del heap de la secuencia no coincide con su DataTypeId.
+[detail_internal_dict_construction_requires_complete_pairs]: La construcción de DICT requiere pares completos.
+[detail_internal_dictionary_shrink_failed]: No se pudo reducir el tamaño del diccionario.
+[detail_internal_dictionary_clear_resize_failed]: No se pudo ajustar el tamaño del diccionario al vaciarlo.
+[detail_internal_invalid_dictionary_continuation_state]: El estado de continuación del diccionario no es válido.
+[detail_internal_lost_dictionary_auxiliary_buffer]: Se perdió el búfer auxiliar del diccionario.
+[detail_internal_dictionary_auxiliary_buffer_type_or_size_mismatch]: El búfer auxiliar del diccionario tiene un tipo o tamaño incorrecto.
+[detail_internal_cannot_commit_dictupdate]: No se pudo confirmar DictUpdate.
+[detail_internal_cannot_release_dictupdate_buffer]: No se pudo liberar el búfer de DictUpdate.
+[detail_internal_list_shrink_failed]: No se pudo reducir el tamaño de la lista.
+[detail_internal_nested_continued_equality_is_not_currently_supported_in_list_search]: La búsqueda en listas todavía no admite comparaciones de igualdad continuadas anidadas.
+[detail_internal_valueequals_returned_a_non_bool_result_during_list_search]: ValueEquals devolvió un resultado distinto de Bool durante una búsqueda en la lista.
+[detail_internal_set_member_equality_failed_without_error]: Falló la comparación de elementos del Set sin proporcionar un error.
+[detail_internal_set_member_equality_must_finish_synchronously_and_return_bool]: La comparación de elementos del Set debe terminar de forma sincrónica y devolver Bool.
+[detail_internal_dictionary_key_comparison_failed]: Falló la comparación de claves del diccionario.
+[detail_internal_dictionary_key_comparison_must_finish_synchronously_with_bool]: La comparación de claves del diccionario debe terminar de forma sincrónica y devolver Bool.
+[detail_internal_list_bad_state]: El estado de continuación de la operación {{1}} sobre List no es válido.
+[detail_internal_list_aux_missing]: La lista auxiliar de {{1}} se perdió o fue modificada inesperadamente.
+[detail_internal_list_commit]: No se pudo confirmar la operación continuada {{1}}.
+[detail_internal_list_release]: No se pudo liberar la lista auxiliar de {{1}}.
+[detail_internal_set_aux_missing]: Se perdió el Set auxiliar durante {{1}}.
+[detail_internal_hash_return]: El cálculo de hash de {{1}} debe devolver Int de forma sincrónica.
+[detail_internal_vm_exception]: Se produjo una excepción interna de tipo {{1}}. Consulta el registro técnico.
+[detail_internal_cast_failed]: La conversión de {{1}} a {{2}} falló sin proporcionar un RuntimeError.
+[detail_internal_print_cast_failed]: PRINT no pudo convertir {{1}} a String y no proporcionó un RuntimeError.
+[detail_internal_bad_string_reference]: La referencia {{1}} no apunta a un StringHeapObject.
+[detail_internal_setter_returned_value]: El setter de {{1}} devolvió un valor en lugar de None.
+[detail_internal_missing_error]: {{1}} devolvió Error sin RuntimeError.
+[detail_internal_missing_state]: {{1}} devolvió Continued sin estado.
+[detail_internal_aux_changed]: {{1}} cambió su referencia auxiliar durante la continuación.
+[detail_internal_aux_reference_missing]: {{1}} devolvió una referencia auxiliar inexistente en el heap.
+[detail_internal_missing_receiver]: {{1}} continuó sin una entidad receptora.
+[detail_internal_dispatcher_status]: El despachador de miembros u operaciones dejó escapar el estado {{1}} para {{2}}.
+[detail_internal_native_exception]: La función nativa '{{1}}' provocó una excepción de tipo {{2}}. Consulta el registro técnico.
+[detail_internal_native_failed]: La función nativa '{{1}}' falló sin proporcionar un error.
+[detail_internal_receiver_index]: La operación pendiente {{1}} tiene un índice de receptor inválido: {{2}}.
+[detail_internal_continued_notimplemented]: La operación continuada {{1}} pasó a estar sin implementar.
+[detail_instruction_pointer]: El puntero de instrucción {{1}} está fuera de la función '{{2}}'. La función debe terminar con Return.
+[detail_instruction_unknown_id]: ID de instrucción desconocido: {{1}}.
+[detail_instruction_tuple_count]: TUPLE requiere una cantidad no negativa ({{1}}).
+[detail_instruction_variadic_native]: La función nativa variádica '{{1}}' requiere PUSH_FUNCTION + CALL_INDIRECT n.
+[detail_instruction_local_context]: El rango de contexto local [{{1}}, {{2}}) no es válido.
+[detail_instruction_debug_line]: DebugLine no admite la línea negativa {{1}}.
+[detail_instruction_debug_span]: El rango de depuración [{{1}}, {{2}}) no es válido.

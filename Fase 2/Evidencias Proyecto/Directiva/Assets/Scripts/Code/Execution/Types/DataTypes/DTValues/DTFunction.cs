@@ -48,8 +48,7 @@ namespace DSExecution.DataTypes
             {
                 if (!value.TryGetFunctionId(out int functionId))
                     return CastResult.Failure(
-                        DSExecution.Errors.RuntimeError.InvalidOperation(
-                            "Function contains an invalid compiled function id."));
+                        DSExecution.Errors.RuntimeError.InvalidOperation("Function contains an invalid compiled function id.", "detail_function_contains_an_invalid_compiled_function_id"));
 
                 return DTString.CreateValue($"<function #{functionId}>", memory);
             }

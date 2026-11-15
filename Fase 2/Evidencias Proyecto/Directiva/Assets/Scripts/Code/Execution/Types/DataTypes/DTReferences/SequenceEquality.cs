@@ -39,13 +39,11 @@ namespace DSExecution.DataTypes
                     OperationResult result = OperationDispatcher.Start(OperationId.ValueEquals,
                         new[] { pair.Left, pair.Right }, memory).Result;
                     if (result.Status == OperationStatus.Continued)
-                        return OperationResult.OpError(RuntimeError.InternalVmError(
-                            "Nested continued equality is not yet supported in sequence equality."));
+                        return OperationResult.OpError(RuntimeError.InternalVmError("Nested continued equality is not yet supported in sequence equality.", "detail_internal_nested_continued_equality_is_not_yet_supported_in_sequence_equality"));
                     if (result.Status != OperationStatus.Success)
                         return result;
                     if (result.Value.dataType != DataTypeId.Bool)
-                        return OperationResult.OpError(RuntimeError.InternalVmError(
-                            "ValueEquals returned non-Bool while comparing sequences."));
+                        return OperationResult.OpError(RuntimeError.InternalVmError("ValueEquals returned non-Bool while comparing sequences.", "detail_internal_valueequals_returned_non_bool_while_comparing_sequences"));
                     if (result.Value.value == 0)
                         return OperationResult.Success(DataValue.FromBool(false));
                     continue;
@@ -53,8 +51,7 @@ namespace DSExecution.DataTypes
 
                 if (!pair.Left.TryGetHeapReference(out uint leftRef) ||
                     !pair.Right.TryGetHeapReference(out uint rightRef))
-                    return OperationResult.OpError(RuntimeError.InvalidOperation(
-                        "Sequence has an invalid heap reference."));
+                    return OperationResult.OpError(RuntimeError.InvalidOperation("Sequence has an invalid heap reference.", "detail_sequence_has_an_invalid_heap_reference"));
                 if (!memory.TryGetHeap(leftRef, out HeapObject first) ||
                     !memory.TryGetHeap(rightRef, out HeapObject second))
                     return OperationResult.OpError(RuntimeError.InvalidMemoryAccess(
@@ -97,8 +94,7 @@ namespace DSExecution.DataTypes
                 }
                 else
                 {
-                    return OperationResult.OpError(RuntimeError.InternalVmError(
-                        "Sequence heap reference does not match its DataTypeId."));
+                    return OperationResult.OpError(RuntimeError.InternalVmError("Sequence heap reference does not match its DataTypeId.", "detail_internal_sequence_heap_reference_does_not_match_its_datatypeid"));
                 }
             }
             return OperationResult.Success(DataValue.FromBool(true));

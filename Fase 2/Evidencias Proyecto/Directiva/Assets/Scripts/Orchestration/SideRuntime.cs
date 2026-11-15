@@ -18,7 +18,8 @@ namespace DOrchestration
         private readonly VMOptions vmOptions;
         private readonly SortedDictionary<int, EntityVMBinding> bindings = new();
         private readonly Dictionary<int, int> buildEntries = new();
-        private readonly Action<int?, VMOutputKind, string, VMDebugState> outputSink;
+        private readonly Action<int?, VMOutputKind, string, VMDebugState, RuntimeError,
+            string, object[]> outputSink;
 
         internal int SideId { get; }
         internal DScriptCompiledProgram Program { get; }
@@ -36,7 +37,8 @@ namespace DOrchestration
         /// </summary>
         internal SideRuntime(Simulation simulation, int sideId, DScriptCompiledProgram program,
             ulong randomSeed, VMOptions vmOptions = null, int initializerBudget = 100000,
-            Action<int?, VMOutputKind, string, VMDebugState> outputSink = null)
+            Action<int?, VMOutputKind, string, VMDebugState, RuntimeError,
+                string, object[]> outputSink = null)
         {
             this.simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
             if (sideId != 1 && sideId != 2)
@@ -51,7 +53,9 @@ namespace DOrchestration
                 initializerBudget, this.vmOptions,
                 onErrorWithDebug: (step, error, debug) =>
                     EmitOutput(null, VMOutputKind.Error,
-                        "shared " + step.Module + "." + step.Variable + ": " + error.Message, debug),
+                        "shared " + step.Module + "." + step.Variable + ": " + error.Message,
+                        debug, error, "shared_initializer_error",
+                        new object[] { step.Module, step.Variable }),
                 onOutputWithDebug: (text, debug) =>
                     EmitOutput(null, VMOutputKind.Print, text, debug));
         }
@@ -94,7 +98,7 @@ namespace DOrchestration
         {
             if (!bindings.TryGetValue(entityId, out EntityVMBinding binding)) return false;
             if (binding.VM.Status == VMExecutionStatus.Running)
-                binding.VM.Abort(RuntimeError.InvalidOperation("Bound entity is no longer active."));
+                binding.VM.Abort(RuntimeError.InvalidOperation("Bound entity is no longer active.", "detail_bound_entity_is_no_longer_active"));
             return bindings.Remove(entityId);
         }
 
@@ -117,22 +121,27 @@ namespace DOrchestration
             return false;
         }
 
-        internal void ReportWarning(int entityId, string message)
+        internal void ReportWarning(int entityId, string message,
+            string localizationKey = null, object[] localizationArguments = null)
         {
             Warning?.Invoke(entityId, message);
             VMDebugState debug = bindings.TryGetValue(entityId, out EntityVMBinding binding)
                 ? binding.VM.Debug.Snapshot() : null;
-            EmitOutput(entityId, VMOutputKind.Warning, message, debug);
+            EmitOutput(entityId, VMOutputKind.Warning, message, debug,
+                null, localizationKey, localizationArguments);
         }
 
         internal void ReportError(EntityVMBinding binding)
         {
             if (binding.VM.Error == null) return;
             EmitOutput(binding.EntityId, VMOutputKind.Error,
-                binding.VM.Error.Message, binding.VM.Debug.Snapshot());
+                binding.VM.Error.Message, binding.VM.Debug.Snapshot(), binding.VM.Error);
         }
 
-        private void EmitOutput(int? entityId, VMOutputKind kind, string text, VMDebugState debug) =>
-            outputSink?.Invoke(entityId, kind, text, debug);
+        private void EmitOutput(int? entityId, VMOutputKind kind, string text, VMDebugState debug,
+            RuntimeError error = null, string localizationKey = null,
+            object[] localizationArguments = null) =>
+            outputSink?.Invoke(entityId, kind, text, debug, error,
+                localizationKey, localizationArguments);
     }
 }

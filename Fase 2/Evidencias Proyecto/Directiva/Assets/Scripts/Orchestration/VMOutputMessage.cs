@@ -1,5 +1,6 @@
 using System;
 using DSExecution.VirtualMachine;
+using DSExecution.Errors;
 
 namespace DOrchestration
 {
@@ -24,13 +25,18 @@ namespace DOrchestration
         public int? EntityId { get; }
         public VMOutputKind Kind { get; }
         public string Text { get; }
+        public RuntimeError Error { get; }
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
         public string SourceFile { get; }
         public int SourceLine { get; }
         public int SpanStart { get; }
         public int SpanEnd { get; }
 
         internal VMOutputMessage(long sequence, long tick, int sideId, int? entityId,
-            VMOutputKind kind, string text, VMDebugState debug)
+            VMOutputKind kind, string text, VMDebugState debug,
+            RuntimeError error = null, string localizationKey = null,
+            object[] localizationArguments = null)
         {
             Sequence = sequence;
             Tick = tick;
@@ -38,6 +44,9 @@ namespace DOrchestration
             EntityId = entityId;
             Kind = kind;
             Text = text ?? string.Empty;
+            Error = error;
+            LocalizationKey = localizationKey;
+            LocalizationArguments = localizationArguments ?? Array.Empty<object>();
             SourceFile = debug?.File;
             SourceLine = debug?.Line ?? -1;
             SpanStart = debug?.SpanStart ?? -1;

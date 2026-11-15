@@ -74,7 +74,7 @@ namespace DSExecution.DataTypes
                     };
                     if (!valid)
                     {
-                        error = RuntimeError.InternalVmError("Sequence reference has incorrect heap type.");
+                        error = RuntimeError.InternalVmError("Sequence reference has incorrect heap type.", "detail_internal_sequence_reference_has_incorrect_heap_type");
                         text = null;
                         return false;
                     }
@@ -179,7 +179,7 @@ namespace DSExecution.DataTypes
                 !memory.TryGetHeap(reference, out HeapObject obj) ||
                 !(obj is StringHeapObject stringObject))
             {
-                error = RuntimeError.InvalidOperation("Expected a valid heap-backed String.");
+                error = RuntimeError.InvalidOperation("Expected a valid heap-backed String.", "detail_expected_a_valid_heap_backed_string");
                 return false;
             }
             result = stringObject.Value;

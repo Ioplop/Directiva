@@ -32,7 +32,7 @@ namespace DSExecution.Native
         private static NativeResult DecimalResult(double number)
         {
             if (double.IsNaN(number) || double.IsInfinity(number))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("Math result is not finite."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("Math result is not finite.", "detail_math_result_is_not_finite"));
             double scaled = Math.Round(number * DTDecimal.Scale, 0, MidpointRounding.AwayFromZero);
             if (scaled < long.MinValue || scaled >= 9223372036854775808d)
                 return NativeResult.Failure(RuntimeError.Overflow());
@@ -42,7 +42,7 @@ namespace DSExecution.Native
         private static NativeResult Unary(NativeCallContext c, Func<double, double> operation)
         {
             if (!Numeric(c[0], out double x))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("Math function expects a numeric value."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("Math function expects a numeric value.", "detail_math_function_expects_a_numeric_value"));
             return DecimalResult(operation(x));
         }
 
@@ -69,7 +69,7 @@ namespace DSExecution.Native
         public static NativeResult Atan2(NativeCallContext c)
         {
             if (!Numeric(c[0], out double y) || !Numeric(c[1], out double x))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("atan2() needs two numeric arguments."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("atan2() needs two numeric arguments.", "detail_atan2_needs_two_numeric_arguments"));
             return DecimalResult(Math.Atan2(y, x));
         }
 
@@ -77,7 +77,7 @@ namespace DSExecution.Native
         public static NativeResult Hypot(NativeCallContext c)
         {
             if (!Numeric(c[0], out double x) || !Numeric(c[1], out double y))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("hypot() needs two numeric arguments."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("hypot() needs two numeric arguments.", "detail_hypot_needs_two_numeric_arguments"));
             // Avoid unnecessary intermediate overflow.
             double magnitude = Math.Max(Math.Abs(x), Math.Abs(y));
             return magnitude == 0 ? DecimalResult(0) :
@@ -95,7 +95,7 @@ namespace DSExecution.Native
             if (value.dataType == DataTypeId.Int || value.dataType == DataTypeId.Bool)
                 return NativeResult.Success(DataValue.FromInt(unchecked((long)value.value)));
             if (value.dataType != DataTypeId.Decimal)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("floor()/ceil() need numeric input."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("floor()/ceil() need numeric input.", "detail_floor_ceil_need_numeric_input"));
             long raw = unchecked((long)value.value);
             long quotient = raw / DTDecimal.Scale;
             long remainder = raw % DTDecimal.Scale;

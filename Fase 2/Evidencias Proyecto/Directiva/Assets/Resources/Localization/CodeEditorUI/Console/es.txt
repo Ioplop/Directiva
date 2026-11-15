@@ -21,3 +21,4 @@
 [source_unavailable]: No se puede ir a la ubicación: el archivo '{{1}}' ya no existe.
 [source_open_failed]: No se pudo abrir '{{1}}' para mostrar la ubicación: {{2}}
 [invalid_module_path]: La ruta '{{1}}' no corresponde a un módulo DScript válido. Usa identificadores sin puntos en cada carpeta y nombre de archivo.
+[cache_protected]: [DScript] No se reemplazó '{{1}}': contiene DIL que no fue generado por Directiva.

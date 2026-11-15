@@ -27,9 +27,9 @@ namespace DSExecution.Native
         {
             if (!NativeBuiltins.TryInteger(c[0], out long low) ||
                 !NativeBuiltins.TryInteger(c[1], out long high))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("randint() requires Int/Bool bounds."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("randint() requires Int/Bool bounds.", "detail_randint_requires_int_bool_bounds"));
             if (low > high)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("randint() lower bound exceeds upper bound."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("randint() lower bound exceeds upper bound.", "detail_randint_lower_bound_exceeds_upper_bound"));
             // width=0 denotes the complete 2^64 interval.
             ulong width = unchecked((ulong)high - (ulong)low + 1UL);
             ulong offset = width == 0 ? c.Memory.NextRandomUInt64() : Sample(c.Memory, width);
@@ -41,9 +41,9 @@ namespace DSExecution.Native
         {
             if (!NativeBuiltins.TryNumericRaw(c[0], out BigInteger low) ||
                 !NativeBuiltins.TryNumericRaw(c[1], out BigInteger high))
-                return NativeResult.Failure(RuntimeError.InvalidOperation("uniform() requires numeric bounds."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("uniform() requires numeric bounds.", "detail_uniform_requires_numeric_bounds"));
             if (low > high)
-                return NativeResult.Failure(RuntimeError.InvalidOperation("uniform() lower bound exceeds upper bound."));
+                return NativeResult.Failure(RuntimeError.InvalidOperation("uniform() lower bound exceeds upper bound.", "detail_uniform_lower_bound_exceeds_upper_bound"));
             // The result is fixed-point in [a,b); one deterministic UInt64 draw.
             ulong sample = c.Memory.NextRandomUInt64();
             BigInteger raw = low + (((high - low) * sample) >> 64);

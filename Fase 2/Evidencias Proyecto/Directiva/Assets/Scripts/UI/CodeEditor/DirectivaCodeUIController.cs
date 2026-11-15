@@ -416,9 +416,10 @@ namespace Directiva.CodeUI
         {
             string prefix = DirectivaLocalization.Get("Simulation", "debug_output_prefix",
                 message.SideId,
-                message.EntityId.HasValue ? message.EntityId.Value.ToString(CultureInfo.InvariantCulture) : "shared",
+                message.EntityId.HasValue ? message.EntityId.Value.ToString(CultureInfo.InvariantCulture)
+                    : DirectivaLocalization.Get("Simulation", "debug_shared"),
                 message.Tick);
-            string text = prefix + " " + message.Text;
+            string text = prefix + " " + DirectivaLocalization.Format(message);
             OutputSourceLocation? source = null;
             if (message.SideId == 1 && message.SourceLine >= 0 &&
                 !string.IsNullOrWhiteSpace(message.SourceFile) &&
@@ -1415,7 +1416,7 @@ namespace Directiva.CodeUI
                 {
                     foreach (string warning in GeneratedDILCache.Write(
                         prepared.Program, _storage.RootPath))
-                        Output.WriteWarning(Localization.Get("Console", "cache_warning", warning));
+                        Output.WriteWarning(Localization.Get("Console", "cache_protected", warning));
                 }
                 catch (Exception ex)
                 {

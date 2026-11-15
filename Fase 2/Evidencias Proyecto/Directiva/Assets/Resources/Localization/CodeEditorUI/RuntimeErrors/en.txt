@@ -32,3 +32,152 @@
 [InvalidCast]: Cannot cast {{1}} to {{2}}.
 [InvalidCastValue]: Cannot cast value from {{1}} to {{2}}. {{3}}
 [InternalVmError]: Internal VM error. {{1}}
+[technical_detail_unavailable]: See the technical error details in the debug log.
+[bridge_unknown_observation]: Unknown observation: {{1}}.
+[bridge_foreign_order]: A script may only issue orders to its own entity.
+[bridge_unknown_order]: Unknown order: {{1}}.
+[bridge_unsupported_member]: {{1}}() is not supported by this entity type.
+[bridge_move_fixed_range]: move(x, y) only accepts positions inside world bounds; a coordinate exceeds the safe Fixed numeric range.
+[bridge_manual_call]: {{1}}() requires manual orchestration.
+[bridge_no_matching_arguments]: No matching arguments for {{1}}().
+[bridge_ambiguous_overload]: Ambiguous overload of {{1}}().
+[bridge_move_outside_world]: move(x, y) only accepts positions inside world bounds: 0 ≤ x ≤ {{1}} and 0 ≤ y ≤ {{2}}.
+[bridge_distance_limit]: {{1}}() requires a distance no greater than the world width plus height.
+[bridge_invalid_entity_reference]: Invalid entity reference.
+[bridge_move_tuple_range]: move(position) only accepts positions inside world bounds and the safe Fixed numeric range.
+[bridge_build_entry_required]: build(entry_function) requires a compiled, zero-argument DScript function.
+[detail_simulation_returned_an_invalid_entity_id]: Simulation returned an invalid entity ID.
+[detail_simulation_returned_an_invalid_entity_id_in_a_list]: Simulation returned an invalid entity ID in a list.
+[detail_too_many_consecutive_zero_cost_vm_debug_instructions]: Too many consecutive zero-cost VM debug instructions.
+[detail_bound_entity_is_no_longer_active]: Bound entity is no longer active.
+[detail_self_requires_an_entity_bound_vm]: self requires an entity-bound VM.
+[detail_opcode_range_requires_int_bool_arguments]: RANGE requires Int/Bool arguments.
+[detail_opcode_range_step_cannot_be_zero]: RANGE step cannot be zero.
+[detail_iterable_reference_has_the_wrong_heap_object_type]: Iterable reference has the wrong heap object type.
+[detail_print_did_not_produce_a_valid_string]: print() did not produce a valid String.
+[detail_math_result_is_not_finite]: Math result is not finite.
+[detail_math_function_expects_a_numeric_value]: Math function expects a numeric value.
+[detail_atan2_needs_two_numeric_arguments]: atan2() needs two numeric arguments.
+[detail_hypot_needs_two_numeric_arguments]: hypot() needs two numeric arguments.
+[detail_floor_ceil_need_numeric_input]: floor()/ceil() need numeric input.
+[detail_range_needs_int_bool_arguments]: range() needs Int/Bool arguments.
+[detail_range_step_cannot_be_zero]: range() step cannot be zero.
+[detail_abs_needs_a_numeric_argument]: abs() needs a numeric argument.
+[detail_min_max_require_numeric_arguments]: min()/max() require numeric arguments.
+[detail_clamp_requires_numeric_arguments]: clamp() requires numeric arguments.
+[detail_clamp_minimum_exceeds_maximum]: clamp() minimum exceeds maximum.
+[detail_randint_requires_int_bool_bounds]: randint() requires Int/Bool bounds.
+[detail_randint_lower_bound_exceeds_upper_bound]: randint() lower bound exceeds upper bound.
+[detail_uniform_requires_numeric_bounds]: uniform() requires numeric bounds.
+[detail_uniform_lower_bound_exceeds_upper_bound]: uniform() lower bound exceeds upper bound.
+[detail_set_contains_an_invalid_heap_reference]: Set contains an invalid heap reference.
+[detail_set_element_not_found]: Set element not found.
+[detail_cannot_pop_from_an_empty_set]: Cannot pop from an empty Set.
+[detail_set_changed_during_continued_relation]: Set changed during continued relation.
+[detail_string_contains_an_invalid_heap_reference]: String contains an invalid heap reference.
+[detail_tuple_contains_an_invalid_heap_reference]: Tuple contains an invalid heap reference.
+[detail_cyclic_tuples_cannot_be_hashed]: Cyclic tuples cannot be hashed.
+[detail_expected_a_valid_heap_backed_string]: Expected a valid heap-backed String.
+[detail_sequence_has_an_invalid_heap_reference]: Sequence has an invalid heap reference.
+[detail_invalid_dictionary_reference]: Invalid Dictionary reference.
+[detail_dictionary_key_not_found]: Dictionary key not found.
+[detail_list_contains_an_invalid_heap_reference]: List contains an invalid heap reference.
+[detail_invalid_simulationobject_id]: Invalid SimulationObject ID.
+[detail_simulationobject_members_require_an_entity_bound_vm]: SimulationObject members require an entity-bound VM.
+[detail_function_contains_an_invalid_compiled_function_id]: Function contains an invalid compiled function id.
+[detail_invalid_simulation_enum]: Invalid simulation enum.
+[detail_invalid_simulation_enum_value]: Invalid simulation enum value.
+[detail_iterator_source_has_an_unexpected_heap_object_type]: Iterator source has an unexpected heap object type.
+[detail_initializer_budget]: Shared initializer '{{1}}' exceeded its execution budget of {{2}} steps.
+[detail_native_one_step]: Native operation {{1}} cannot be continued in a single step.
+[detail_dict_changed]: Dictionary changed during continued {{1}}.
+[detail_list_changed_refuse]: List changed during continued {{1}}; refusing to overwrite concurrent changes.
+[detail_list_changed]: List changed during continued {{1}}.
+[detail_set_changed_operation]: Set changed during continued operation {{1}}.
+[detail_member_unsupported]: Member '{{1}}' is not supported by {{2}} for these arguments.
+[detail_conditional_type]: Conditional jump requires Bool but received {{1}}. Emit IsTruthy before the jump.
+[detail_native_arity]: Native '{{1}}' expects {{2}}..{{3}} arguments, got {{4}}.
+[detail_unsupported_sim_result]: Unsupported simulation result type: {{1}}.
+[detail_unsupported_operation_types]: {{1}} does not support operand types ({{2}}).
+[detail_cast_signed_int]: Expected a signed 64-bit integer.
+[detail_cast_finite_decimal]: Expected a finite decimal number.
+[detail_internal_vm_reported_faulted_without_a_runtimeerror]: VM reported Faulted without a RuntimeError.
+[detail_internal_vm_is_running_without_a_call_frame]: VM is Running without a call frame.
+[detail_internal_pending_operation_no_longer_matches_the_current_instruction]: Pending operation no longer matches the current instruction.
+[detail_instruction_pushstring_requires_a_string_literal]: PushString requires a string literal.
+[detail_internal_tuple_failed_to_peek_validated_stack_values]: TUPLE failed to peek validated stack values.
+[detail_internal_tuple_could_not_commit_the_stack_replacement]: TUPLE could not commit the stack replacement.
+[detail_instruction_list_requires_a_non_negative_count]: LIST requires a non-negative count.
+[detail_internal_list_stack_replacement_failed_after_validation]: LIST stack replacement failed after validation.
+[detail_instruction_set_requires_a_non_negative_count]: SET requires a non-negative count.
+[detail_internal_set_stack_replacement_failed_after_validation]: SET stack replacement failed after validation.
+[detail_instruction_dict_needs_a_valid_non_negative_pair_count]: DICT needs a valid non-negative pair count.
+[detail_internal_dict_stack_replacement_failed_after_validation]: DICT stack replacement failed after validation.
+[detail_instruction_range_expects_1_2_or_3_arguments]: RANGE expects 1, 2 or 3 arguments.
+[detail_internal_range_stack_replacement_failed]: RANGE stack replacement failed.
+[detail_internal_iter_init_could_not_commit_its_cursor]: ITER_INIT could not commit its cursor.
+[detail_internal_iter_next_exhausted_but_stack_lost_cursor]: ITER_NEXT exhausted but stack lost cursor.
+[detail_internal_iterator_became_exhausted_during_a_single_vm_step]: Iterator became exhausted during a single VM step.
+[detail_internal_iter_next_failed_after_capacity_check]: ITER_NEXT failed after capacity check.
+[detail_internal_cast_string_returned_a_non_heap_backed_value]: CAST STRING returned a non-heap-backed value.
+[detail_instruction_invalid_member_invocation_operands]: Invalid member invocation operands.
+[detail_instruction_call_indirect_requires_a_non_negative_argument_count_below_int32_maxvalue]: CALL_INDIRECT requires a non-negative argument count below Int32.MaxValue.
+[detail_internal_validated_call_indirect_arguments_disappeared_from_the_stack]: Validated CALL_INDIRECT arguments disappeared from the stack.
+[detail_internal_validated_native_stack_replacement_failed]: Validated native stack replacement failed.
+[detail_instruction_contextend_has_no_matching_contextstart]: ContextEnd has no matching ContextStart.
+[detail_instruction_debugfile_requires_a_non_empty_file_name]: DebugFile requires a non-empty file name.
+[detail_internal_native_operation_failed_without_an_error]: Native operation failed without an error.
+[detail_internal_hash_failed_without_an_error]: Hash failed without an error.
+[detail_internal_hash_must_finish_synchronously_and_return_int]: Hash must finish synchronously and return Int.
+[detail_internal_set_shrink_failed]: Set shrink failed.
+[detail_internal_invalid_continued_set_operation_state]: Invalid continued Set operation state.
+[detail_internal_could_not_commit_setupdate]: Could not commit SetUpdate.
+[detail_internal_could_not_release_setupdate_buffer]: Could not release SetUpdate buffer.
+[detail_internal_tuple_hash_traversal_completed_without_a_result]: Tuple hash traversal completed without a result.
+[detail_internal_sequence_reference_has_incorrect_heap_type]: Sequence reference has incorrect heap type.
+[detail_internal_nested_continued_equality_is_not_yet_supported_in_sequence_equality]: Nested continued equality is not yet supported in sequence equality.
+[detail_internal_valueequals_returned_non_bool_while_comparing_sequences]: ValueEquals returned non-Bool while comparing sequences.
+[detail_internal_sequence_heap_reference_does_not_match_its_datatypeid]: Sequence heap reference does not match its DataTypeId.
+[detail_internal_dict_construction_requires_complete_pairs]: DICT construction requires complete pairs.
+[detail_internal_dictionary_shrink_failed]: Dictionary shrink failed.
+[detail_internal_dictionary_clear_resize_failed]: Dictionary clear resize failed.
+[detail_internal_invalid_dictionary_continuation_state]: Invalid dictionary continuation state.
+[detail_internal_lost_dictionary_auxiliary_buffer]: Lost dictionary auxiliary buffer.
+[detail_internal_dictionary_auxiliary_buffer_type_or_size_mismatch]: Dictionary auxiliary buffer type or size mismatch.
+[detail_internal_cannot_commit_dictupdate]: Cannot commit DictUpdate.
+[detail_internal_cannot_release_dictupdate_buffer]: Cannot release DictUpdate buffer.
+[detail_internal_list_shrink_failed]: List shrink failed.
+[detail_internal_nested_continued_equality_is_not_currently_supported_in_list_search]: Nested continued equality is not currently supported in list search.
+[detail_internal_valueequals_returned_a_non_bool_result_during_list_search]: ValueEquals returned a non-Bool result during list search.
+[detail_internal_set_member_equality_failed_without_error]: Set member equality failed without error.
+[detail_internal_set_member_equality_must_finish_synchronously_and_return_bool]: Set member equality must finish synchronously and return Bool.
+[detail_internal_dictionary_key_comparison_failed]: Dictionary key comparison failed.
+[detail_internal_dictionary_key_comparison_must_finish_synchronously_with_bool]: Dictionary key comparison must finish synchronously with Bool.
+[detail_internal_list_bad_state]: Invalid continuation state for list operation {{1}}.
+[detail_internal_list_aux_missing]: Auxiliary list for {{1}} was lost or unexpectedly modified.
+[detail_internal_list_commit]: Could not commit continued {{1}}.
+[detail_internal_list_release]: Could not release auxiliary list for {{1}}.
+[detail_internal_set_aux_missing]: Lost auxiliary set during {{1}}.
+[detail_internal_hash_return]: Hash of {{1}} must return Int synchronously.
+[detail_internal_vm_exception]: An internal exception of type {{1}} occurred. See the technical log.
+[detail_internal_cast_failed]: Cast from {{1}} to {{2}} failed without RuntimeError.
+[detail_internal_print_cast_failed]: PRINT failed to cast {{1}} to String without RuntimeError.
+[detail_internal_bad_string_reference]: String reference {{1}} does not point to StringHeapObject.
+[detail_internal_setter_returned_value]: {{1}} setter returned a value instead of None.
+[detail_internal_missing_error]: {{1}} returned Error without RuntimeError.
+[detail_internal_missing_state]: {{1}} returned Continued without state.
+[detail_internal_aux_changed]: {{1}} changed its auxiliary reference mid-continuation.
+[detail_internal_aux_reference_missing]: {{1}} returned a missing auxiliary heap reference.
+[detail_internal_missing_receiver]: {{1}} continued without a receiver.
+[detail_internal_dispatcher_status]: Member/operation dispatcher leaked status {{1}} for {{2}}.
+[detail_internal_native_exception]: Native '{{1}}' raised an exception of type {{2}}. See the technical log.
+[detail_internal_native_failed]: Native '{{1}}' failed without an error.
+[detail_internal_receiver_index]: Pending operation {{1}} has invalid receiver index {{2}}.
+[detail_internal_continued_notimplemented]: Continued operation {{1}} became NotImplemented.
+[detail_instruction_pointer]: Instruction pointer {{1}} is outside function '{{2}}'. A function must terminate with Return.
+[detail_instruction_unknown_id]: Unknown instruction id {{1}}.
+[detail_instruction_tuple_count]: TUPLE requires a non-negative count ({{1}}).
+[detail_instruction_variadic_native]: Variadic native '{{1}}' requires PUSH_FUNCTION + CALL_INDIRECT n.
+[detail_instruction_local_context]: Invalid local context range [{{1}}, {{2}}).
+[detail_instruction_debug_line]: DebugLine cannot use negative line {{1}}.
+[detail_instruction_debug_span]: Invalid debug span [{{1}}, {{2}}).

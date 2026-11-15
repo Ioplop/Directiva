@@ -38,3 +38,20 @@
 
 [debug_output_prefix]: [Side {{1}} / Entity {{2}} / Tick {{3}}]
 [debug_breakpoint_hit]: Breakpoint: entity {{1}} at {{2}}:{{3}}.
+[debug_shared]: shared
+[shared_initializer_error]: Shared initializer {{1}}.{{2}}: {{3}}
+[nexus_missing_root]: The scripts root directory was not specified.
+[nexus_invalid_script_path]: Select a valid .dscript file using a relative path.
+[nexus_invalid_module]: Invalid DScript module path: {{1}}.
+[nexus_script_not_found]: Script not found: {{1}}.
+[nexus_select_function]: Select an entry function.
+[nexus_entry_invalid]: Entry function '{{1}}' does not exist or requires parameters in {{2}}.
+[nexus_entry_not_found]: Entry function not found: {{1}}.
+[nexus_compilation_failed]: The selected Nexus program could not be compiled.
+[level_entry_required]: Level '{{1}}' needs an entry script and function.
+[level_enemy_compile_failed]: Enemy program for level '{{1}}' failed to compile: {{2}}
+[level_enemy_entry_not_found]: Enemy entry function '{{1}}' was not found in level '{{2}}'.
+[level_view_missing]: Simulation view has not been assigned.
+[level_world_too_small]: The world must be at least 16 × 16.
+[level_invalid_resources]: Invalid initial resource settings.
+[level_resource_bounds]: A resource is outside the safe world boundaries: {{1}}.

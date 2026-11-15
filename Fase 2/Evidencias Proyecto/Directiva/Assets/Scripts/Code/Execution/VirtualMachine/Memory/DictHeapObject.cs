@@ -40,13 +40,12 @@ namespace DSExecution.VirtualMachine
                     new[] { keys[candidate], key }, memory).Result;
                 if (comparison.Status == OperationStatus.Error)
                 {
-                    error = comparison.Error ?? RuntimeError.InternalVmError("Dictionary key comparison failed.");
+                    error = comparison.Error ?? RuntimeError.InternalVmError("Dictionary key comparison failed.", "detail_internal_dictionary_key_comparison_failed");
                     return false;
                 }
                 if (comparison.Status != OperationStatus.Success || comparison.Value.dataType != DataTypeId.Bool)
                 {
-                    error = RuntimeError.InternalVmError(
-                        "Dictionary key comparison must finish synchronously with Bool.");
+                    error = RuntimeError.InternalVmError("Dictionary key comparison must finish synchronously with Bool.", "detail_internal_dictionary_key_comparison_must_finish_synchronously_with_bool");
                     return false;
                 }
                 if (comparison.Value.value != 0)

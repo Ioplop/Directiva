@@ -65,8 +65,7 @@ namespace DSExecution.DataTypes
             }
             if (!value.TryGetHeapReference(out uint reference))
             {
-                error = OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "List contains an invalid heap reference."));
+                error = OperationResult.OpError(RuntimeError.InvalidOperation("List contains an invalid heap reference.", "detail_list_contains_an_invalid_heap_reference"));
                 return false;
             }
             if (!memory.TryGetHeap(reference, out HeapObject heapObject) ||
@@ -193,7 +192,7 @@ namespace DSExecution.DataTypes
                 // Shrink first; no GC occurs for a reduction and the removed value
                 // remains inside the list until it can be returned.
                 if (!call.Memory.TryResizeHeap((uint)call.Arguments[0].value, list.Size - 1u))
-                    return OperationResult.OpError(RuntimeError.InternalVmError("List shrink failed."));
+                    return OperationResult.OpError(RuntimeError.InternalVmError("List shrink failed.", "detail_internal_list_shrink_failed"));
                 DataValue removed = list.RemoveLastAuthorized();
                 return OperationResult.Success(kind == OperationId.Pop ? removed : DataValue.None());
             }
@@ -264,15 +263,16 @@ namespace DSExecution.DataTypes
             if (!(call.State is ListBuildState progress) || progress.Kind != kind ||
                 call.AuxiliaryReference == 0)
                 return OperationResult.OpError(RuntimeError.InternalVmError(
-                    $"Invalid continuation state for list operation {kind}."));
+                    $"Invalid continuation state for list operation {kind}.", "detail_internal_list_bad_state", kind));
             if (left.Version != progress.LeftVersion || left.Count != progress.LeftCount ||
                 (right != null && (right.Version != progress.RightVersion || right.Count != progress.RightCount)))
                 return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    $"List changed during continued {kind}; refusing to overwrite concurrent changes."));
+                    $"List changed during continued {kind}; refusing to overwrite concurrent changes.",
+                    "detail_list_changed_refuse", kind));
             if (!call.Memory.TryGetHeap(call.AuxiliaryReference, out HeapObject obj) ||
                 !(obj is ListHeapObject aux) || aux.Count != progress.NextIndex)
                 return OperationResult.OpError(RuntimeError.InternalVmError(
-                    $"Auxiliary list for {kind} was lost or unexpectedly modified."));
+                    $"Auxiliary list for {kind} was lost or unexpectedly modified.", "detail_internal_list_aux_missing", kind));
 
             for (int count = 0; count < ItemsPerStep && progress.NextIndex < progress.FinalCount; count++)
             {
@@ -310,10 +310,10 @@ namespace DSExecution.DataTypes
             uint originalReference = (uint)call.Arguments[0].value;
             if (!call.Memory.TrySwapHeapContents(originalReference, call.AuxiliaryReference))
                 return OperationResult.OpError(RuntimeError.InternalVmError(
-                    $"Could not commit continued {kind}."));
+                    $"Could not commit continued {kind}.", "detail_internal_list_commit", kind));
             if (!call.Memory.FreeHeap(call.AuxiliaryReference))
                 return OperationResult.OpError(RuntimeError.InternalVmError(
-                    $"Could not release auxiliary list for {kind}."));
+                    $"Could not release auxiliary list for {kind}.", "detail_internal_list_release", kind));
             return OperationResult.Success(kind == OperationId.Pop ? popped : DataValue.None());
         }
 
@@ -331,7 +331,7 @@ namespace DSExecution.DataTypes
                 state = new ListSearchState(kind, list.Version);
             if (state.Kind != kind || state.Version != list.Version)
                 return OperationResult.OpError(RuntimeError.InvalidOperation(
-                    $"List changed during continued {kind}."));
+                    $"List changed during continued {kind}.", "detail_list_changed", kind));
 
             for (int checkedCount = 0; checkedCount < ItemsPerStep && state.NextIndex < list.Count;
                 checkedCount++, state.NextIndex++)
@@ -341,12 +341,10 @@ namespace DSExecution.DataTypes
                     new[] { item, call.Arguments[1] }, call.Memory).Result;
                 if (equality.Status != OperationStatus.Success)
                     return equality.Status == OperationStatus.Continued
-                        ? OperationResult.OpError(RuntimeError.InternalVmError(
-                            "Nested continued equality is not currently supported in list search."))
+                        ? OperationResult.OpError(RuntimeError.InternalVmError("Nested continued equality is not currently supported in list search.", "detail_internal_nested_continued_equality_is_not_currently_supported_in_list_search"))
                         : equality;
                 if (equality.Value.dataType != DataTypeId.Bool)
-                    return OperationResult.OpError(RuntimeError.InternalVmError(
-                        "ValueEquals returned a non-Bool result during list search."));
+                    return OperationResult.OpError(RuntimeError.InternalVmError("ValueEquals returned a non-Bool result during list search.", "detail_internal_valueequals_returned_a_non_bool_result_during_list_search"));
                 if (equality.Value.value != 0)
                     return OperationResult.Success(kind == OperationId.Contains
                         ? DataValue.FromBool(true) : DataValue.FromInt(state.NextIndex));

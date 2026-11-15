@@ -153,9 +153,7 @@ namespace Directiva.CodeUI
 
             if (result.Status == VMExecutionStatus.Faulted)
             {
-                RuntimeError error = result.Error ?? RuntimeError.InternalVmError(
-                    "VM reported Faulted without a RuntimeError."
-                );
+                RuntimeError error = result.Error ?? RuntimeError.InternalVmError("VM reported Faulted without a RuntimeError.", "detail_internal_vm_reported_faulted_without_a_runtimeerror");
 
                 LastFaultDebug = _vm.Debug.Snapshot();
                 _executionTimer.Stop();
@@ -203,9 +201,7 @@ namespace Directiva.CodeUI
 
                 if (result.Status == VMExecutionStatus.Faulted)
                 {
-                    RuntimeError error = result.Error ?? RuntimeError.InternalVmError(
-                        "VM reported Faulted without a RuntimeError."
-                    );
+                    RuntimeError error = result.Error ?? RuntimeError.InternalVmError("VM reported Faulted without a RuntimeError.", "detail_internal_vm_reported_faulted_without_a_runtimeerror");
 
                     LastFaultDebug = _vm.Debug.Snapshot();
                     _executionTimer.Stop();

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Directiva.SimulationFrontend;
 using Directiva.CodeUI;
 using Directiva.Localization;
 using DSCompilation.DIL;
@@ -121,6 +123,90 @@ namespace Directiva.EditorTests.LocalizationTests
                 t.Contains("Int", displayed, "destination type remains visible");
                 t.Contains("bad text", displayed, "value details remain visible");
                 t.Check(!displayed.Contains("[missing:"), "runtime key missing");
+            });
+
+            Add("NoUntranslatedDiagnosticMarkers",
+                "All Spanish/English resources have no TODO markers or missing placeholders", t =>
+            {
+                foreach (string component in Components)
+                {
+                    var spanish = Table(component, "es");
+                    var english = Table(component, "en");
+                    foreach (string key in spanish.Keys)
+                    {
+                        foreach (string language in new[] { "es", "en" })
+                        {
+                            string content = language == "es" ? spanish[key] : english[key];
+                            t.Check(!Regex.IsMatch(content, @"\b(TODO|TBD)\b|\[missing:",
+                                RegexOptions.IgnoreCase),
+                                "Untranslated marker in " + component + "." + key + "/" + language);
+                        }
+                        // Same slots in both languages; counts detect missing arguments
+                        // even when translated text orders them differently.
+                        string[] esArgs = Regex.Matches(spanish[key], @"\{\{[0-9]+\}\}")
+                            .Cast<Match>().Select(m => m.Value).OrderBy(x => x).ToArray();
+                        string[] enArgs = Regex.Matches(english[key], @"\{\{[0-9]+\}\}")
+                            .Cast<Match>().Select(m => m.Value).OrderBy(x => x).ToArray();
+                        t.Equal(string.Join("|", esArgs), string.Join("|", enArgs),
+                            "Template arguments differ in " + component + "." + key);
+                    }
+                }
+            });
+
+            Add("RuntimeErrorIdsCovered",
+                "Every runtime error ID resolves in both language tables", t =>
+            {
+                foreach (string locale in new[] { "es", "en" })
+                {
+                    var table = Table("RuntimeErrors", locale);
+                    foreach (string id in Enum.GetNames(typeof(RuntimeErrorId)))
+                        t.Check(table.ContainsKey(id), locale + ": missing RuntimeErrorId " + id);
+                }
+            });
+
+            Add("RuntimeDetailsTranslated",
+                "Known native/VM explanations use a structured key instead of an English suffix", t =>
+            {
+                var error = RuntimeError.InvalidOperation("range() step cannot be zero.",
+                    "detail_range_step_cannot_be_zero");
+                t.Contains("range() step cannot be zero.", error.Message,
+                    "Original technical detail remains stable");
+                t.Equal("detail_range_step_cannot_be_zero", error.DetailsKey,
+                    "Native error has detail translation key");
+                string expected = DirectivaLocalization.Get("RuntimeErrors", "InvalidOperation",
+                    DirectivaLocalization.Get("RuntimeErrors", "detail_range_step_cannot_be_zero"));
+                t.Equal(expected, DirectivaLocalization.Format(error), "Localized runtime explanation");
+                t.Check(!expected.Contains("[missing:"), "Detailed runtime key exists");
+            });
+
+            Add("NexusCatalogErrorsTranslated",
+                "Nexus selection failures retain original exception types and localize when shown", t =>
+            {
+                var error = new PlayerNexusArgumentException("Missing scripts root.", "root",
+                    "nexus_missing_root");
+                t.Check(error is ArgumentException, "Existing ArgumentException contract");
+                t.Contains("Missing scripts root.", error.Message,
+                    "Stable technical exception message");
+                t.Equal(DirectivaLocalization.Get("Simulation", "nexus_missing_root"),
+                    PlayerNexusErrorText.Format(error), "Localized Nexus selection error");
+            });
+
+            Add("CacheAndLocaleWarningsTranslated",
+                "Cache protection and missing translation arguments are localized", t =>
+            {
+                var locale = new LocalizationService("es");
+                t.Contains("No se reemplazó", locale.Get("Console", "cache_protected", "test.dil"),
+                    "Protected DIL cache in Spanish");
+                string warning = null;
+                locale.LocalizationWarning += text => warning = text;
+                locale.Get("Common", "saved"); // Deliberately omit required {{1}}.
+                t.Contains("Falta un argumento", warning, "Spanish translation warning");
+                locale.SetLocale("en");
+                t.Contains("Did not replace", locale.Get("Console", "cache_protected", "test.dil"),
+                    "Protected DIL cache in English");
+                warning = null;
+                locale.Get("Common", "saved");
+                t.Contains("Missing translation argument", warning, "English translation warning");
             });
 
             Add("DILParserStructuredError", "DIL errors preserve location, IDs and source values", t =>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using DMath;
 using DOrchestration;
 using DSimulation;
@@ -188,7 +189,7 @@ namespace Directiva.SimulationFrontend
             {
                 playerProgramHasErrors = true;
                 RefreshPlayAvailability();
-                error = exception.Message;
+                error = PlayerNexusErrorText.Format(exception);
                 diagnostics = exception.Diagnostics;
                 return false;
             }
@@ -196,7 +197,7 @@ namespace Directiva.SimulationFrontend
             {
                 playerProgramHasErrors = true;
                 RefreshPlayAvailability();
-                error = exception.Message;
+                error = PlayerNexusErrorText.Format(exception);
                 return false;
             }
         }
@@ -288,7 +289,8 @@ namespace Directiva.SimulationFrontend
                     ui?.CodeEditor?.PublishPlayerCompilationFailure(
                         compilationError.Message, compilationError.Diagnostics);
                 else
-                    ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                        PlayerNexusErrorText.Format(exception), null);
             }
             RefreshPlayAvailability();
         }
@@ -373,19 +375,17 @@ namespace Directiva.SimulationFrontend
             if (string.IsNullOrWhiteSpace(level.EntryModule) ||
                 string.IsNullOrWhiteSpace(level.EntryFunction))
                 throw new InvalidOperationException(
-                    "Level '" + level.LevelName + "' needs an entry script and function.");
+                    DirectivaLocalization.Get("Simulation", "level_entry_required", level.LevelName));
 
             var provider = new ResourcesLevelDScriptSourceProvider(level.CodeFolder);
             DScriptCompilationResult result = DScriptCompiler.Compile(
                 level.EntryModule, provider, SimulationDScriptProfile.Options);
             if (!result.Success)
-                throw new InvalidOperationException("Enemy program for level '" +
-                    level.LevelName + "' failed to compile:\n" +
-                    string.Join("\n", result.Diagnostics));
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_enemy_compile_failed", level.LevelName,
+                    string.Join("\n", result.Diagnostics.Select(diagnostic => DirectivaLocalization.Format(diagnostic)))));
             if (!result.Program.TryGetFunctionId(level.QualifiedEnemyEntry, out _))
-                throw new InvalidOperationException("Enemy entry function '" +
-                    level.QualifiedEnemyEntry + "' was not found in level '" +
-                    level.LevelName + "'.");
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_enemy_entry_not_found",
+                    level.QualifiedEnemyEntry, level.LevelName));
             return result.Program;
         }
 
@@ -439,7 +439,8 @@ namespace Directiva.SimulationFrontend
                     ui?.CodeEditor?.PublishPlayerCompilationFailure(
                         compilationError.Message, compilationError.Diagnostics);
                 else
-                    ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
+                    ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                        PlayerNexusErrorText.Format(exception), null);
                 Debug.LogException(exception, this);
                 running = false;
                 accumulatedTime = 0;
@@ -465,7 +466,7 @@ namespace Directiva.SimulationFrontend
         private void AttachStoppedWorld(DSimulation.Simulation world)
         {
             if (view == null)
-                throw new InvalidOperationException("SimulationSceneView is not assigned.");
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_view_missing"));
             running = false;
             accumulatedTime = 0;
             DetachOrchestrator();
@@ -485,9 +486,9 @@ namespace Directiva.SimulationFrontend
             if (selectedLevel != null)
                 return LevelWorldBuilder.Build(selectedLevel);
             if (worldWidth < 16 || worldHeight < 16)
-                throw new InvalidOperationException("World must be at least 16 x 16.");
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_world_too_small"));
             if (initialResourcesPerSide < 0 || resourcesPerDeposit <= 0 || depositRichness <= 0)
-                throw new InvalidOperationException("Invalid starting resource settings.");
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_invalid_resources"));
             var world = new DSimulation.Simulation(unchecked((ulong)(uint)seed),
                 new FixedVector2(worldWidth, worldHeight));
             world.GetSide(1).Resources = initialResourcesPerSide;
@@ -514,7 +515,7 @@ namespace Directiva.SimulationFrontend
         {
             if (point.x < 2 || point.y < 2 ||
                 point.x > worldWidth - 2 || point.y > worldHeight - 2)
-                throw new InvalidOperationException("Resource location is outside safe world bounds: " + point);
+                throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_resource_bounds", point));
         }
 
         /// <summary>
@@ -524,7 +525,7 @@ namespace Directiva.SimulationFrontend
         public void AttachOrchestrator(Orchestrator match)
         {
             if (match == null) throw new ArgumentNullException(nameof(match));
-            if (view == null) throw new InvalidOperationException("SimulationSceneView is not assigned.");
+            if (view == null) throw new InvalidOperationException(DirectivaLocalization.Get("Simulation", "level_view_missing"));
             DetachOrchestrator();
             orchestrator = match;
             orchestrator.OutputEmitted += HandleOutput;
@@ -756,9 +757,13 @@ namespace Directiva.SimulationFrontend
             // Keep diagnostics, but make ordinary print mirroring explicitly opt-in.
             if (!mirrorVmMessagesToUnityConsole ||
                 (output.Kind == VMOutputKind.Print && !mirrorPrintsToUnityConsole)) return;
-            string line = "[Directiva Side " + output.SideId + " / Entity " +
-                (output.EntityId.HasValue ? output.EntityId.Value.ToString() : "shared") +
-                " / Tick " + output.Tick + "] " + output.Text;
+            // Keep the optional Unity-console mirror in the same locale as the
+            // embedded editor (and preserve the raw print() text).
+            string prefix = DirectivaLocalization.Get("Simulation", "debug_output_prefix",
+                output.SideId,
+                output.EntityId.HasValue ? output.EntityId.Value.ToString() :
+                    DirectivaLocalization.Get("Simulation", "debug_shared"), output.Tick);
+            string line = prefix + " " + DirectivaLocalization.Format(output);
             switch (output.Kind)
             {
                 case VMOutputKind.Warning: Debug.LogWarning(line, this); break;

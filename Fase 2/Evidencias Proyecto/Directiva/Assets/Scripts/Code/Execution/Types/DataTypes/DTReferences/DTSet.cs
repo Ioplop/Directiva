@@ -62,12 +62,12 @@ namespace DSExecution.DataTypes
                 new[] { value }, memory).Result;
             if (answer.Status == OperationStatus.Error)
             {
-                error = answer.Error ?? RuntimeError.InternalVmError("Hash failed without an error.");
+                error = answer.Error ?? RuntimeError.InternalVmError("Hash failed without an error.", "detail_internal_hash_failed_without_an_error");
                 return false;
             }
             if (answer.Status != OperationStatus.Success || answer.Value.dataType != DataTypeId.Int)
             {
-                error = RuntimeError.InternalVmError("Hash must finish synchronously and return Int.");
+                error = RuntimeError.InternalVmError("Hash must finish synchronously and return Int.", "detail_internal_hash_must_finish_synchronously_and_return_int");
                 return false;
             }
             hash = unchecked((long)answer.Value.value);
@@ -86,8 +86,7 @@ namespace DSExecution.DataTypes
             }
             if (!value.TryGetHeapReference(out uint reference))
             {
-                failure = OperationResult.OpError(RuntimeError.InvalidOperation(
-                    "Set contains an invalid heap reference."));
+                failure = OperationResult.OpError(RuntimeError.InvalidOperation("Set contains an invalid heap reference.", "detail_set_contains_an_invalid_heap_reference"));
                 return false;
             }
             if (!memory.TryGetHeap(reference, out HeapObject heapObject) ||
@@ -136,9 +135,9 @@ namespace DSExecution.DataTypes
                 return Fault(error);
             if (index < 0)
                 return discard ? OperationResult.Success(DataValue.None()) :
-                    Fault(RuntimeError.InvalidOperation("Set element not found."));
+                    Fault(RuntimeError.InvalidOperation("Set element not found.", "detail_set_element_not_found"));
             if (!call.Memory.TryResizeHeap((uint)call.Arguments[0].value, set.Size - 1u))
-                return Fault(RuntimeError.InternalVmError("Set shrink failed."));
+                return Fault(RuntimeError.InternalVmError("Set shrink failed.", "detail_internal_set_shrink_failed"));
             set.RemoveAuthorized(index);
             return OperationResult.Success(DataValue.None());
         }
@@ -151,9 +150,9 @@ namespace DSExecution.DataTypes
             if (!Resolve(call.Memory, call.Arguments[0], out SetHeapObject set, out var failure))
                 return failure;
             if (set.Count == 0)
-                return Fault(RuntimeError.InvalidOperation("Cannot pop from an empty Set."));
+                return Fault(RuntimeError.InvalidOperation("Cannot pop from an empty Set.", "detail_cannot_pop_from_an_empty_set"));
             if (!call.Memory.TryResizeHeap((uint)call.Arguments[0].value, set.Size - 1u))
-                return Fault(RuntimeError.InternalVmError("Set shrink failed."));
+                return Fault(RuntimeError.InternalVmError("Set shrink failed.", "detail_internal_set_shrink_failed"));
             return OperationResult.Success(set.RemoveAuthorized(set.Count - 1));
         }
 
@@ -250,7 +249,7 @@ namespace DSExecution.DataTypes
             if (state.Kind != kind || state.LeftVersion != left.Version ||
                 state.RightVersion != right.Version || state.LeftCount != left.Count ||
                 state.RightCount != right.Count)
-                return Fault(RuntimeError.InvalidOperation("Set changed during continued relation."));
+                return Fault(RuntimeError.InvalidOperation("Set changed during continued relation.", "detail_set_changed_during_continued_relation"));
 
             SetHeapObject source = kind == OperationId.SetIsSuperset ? right : left;
             SetHeapObject target = kind == OperationId.SetIsSuperset ? left : right;
@@ -302,13 +301,14 @@ namespace DSExecution.DataTypes
 
             if (!(call.State is SetOperationState state) || state.Kind != kind ||
                 call.AuxiliaryReference == 0)
-                return Fault(RuntimeError.InternalVmError("Invalid continued Set operation state."));
+                return Fault(RuntimeError.InternalVmError("Invalid continued Set operation state.", "detail_internal_invalid_continued_set_operation_state"));
             if (state.LeftVersion != left.Version || state.LeftCount != left.Count ||
                 (right != null && (state.RightVersion != right.Version || state.RightCount != right.Count)))
-                return Fault(RuntimeError.InvalidOperation("Set changed during continued operation " + kind + "."));
+                return Fault(RuntimeError.InvalidOperation("Set changed during continued operation " + kind + ".",
+                    "detail_set_changed_operation", kind));
             if (!call.Memory.TryGetHeap(call.AuxiliaryReference, out HeapObject rawAux) ||
                 !(rawAux is SetHeapObject aux))
-                return Fault(RuntimeError.InternalVmError("Lost auxiliary set during " + kind + "."));
+                return Fault(RuntimeError.InternalVmError("Lost auxiliary set during " + kind + ".", "detail_internal_set_aux_missing", kind));
 
             bool needsRightPass = kind == OperationId.SetUnion ||
                 kind == OperationId.SetUpdate || kind == OperationId.SetSymmetricDifference;
@@ -350,9 +350,9 @@ namespace DSExecution.DataTypes
                 return OperationResult.Success(DataValue.FromSetReference(call.AuxiliaryReference));
 
             if (!call.Memory.TrySwapHeapContents((uint)call.Arguments[0].value, call.AuxiliaryReference))
-                return Fault(RuntimeError.InternalVmError("Could not commit SetUpdate."));
+                return Fault(RuntimeError.InternalVmError("Could not commit SetUpdate.", "detail_internal_could_not_commit_setupdate"));
             if (!call.Memory.FreeHeap(call.AuxiliaryReference))
-                return Fault(RuntimeError.InternalVmError("Could not release SetUpdate buffer."));
+                return Fault(RuntimeError.InternalVmError("Could not release SetUpdate buffer.", "detail_internal_could_not_release_setupdate_buffer"));
             return OperationResult.Success(DataValue.None());
         }
 

@@ -4,6 +4,7 @@ using Directiva.Settings;
 using DSExecution.Errors;
 using DSCompilation.DIL;
 using DSCompilation.DScript;
+using DOrchestration;
 using UnityEngine;
 
 namespace Directiva.Localization
@@ -110,7 +111,45 @@ namespace Directiva.Localization
                 return Get("RuntimeErrors", error.MessageKey, args[0],
                     string.IsNullOrEmpty(path) ? "" : Get("RuntimeErrors", "unhashable_path", path));
             }
+            // VM details are technical invariant strings. Translate known details
+            // separately; for unforeseen internal faults, never leak English text into
+            // the Spanish in-game console (the original remains in error.Message).
+            if (error.Id == RuntimeErrorId.InvalidOperation ||
+                error.Id == RuntimeErrorId.InvalidInstruction ||
+                error.Id == RuntimeErrorId.InternalVmError ||
+                error.Id == RuntimeErrorId.InvalidCastValue)
+            {
+                int detailIndex = error.Id == RuntimeErrorId.InvalidCastValue ? 2 : 0;
+                if (args.Length > detailIndex)
+                {
+                    object[] localizedArguments = (object[])args.Clone();
+                    localizedArguments[detailIndex] = !string.IsNullOrEmpty(error.DetailsKey)
+                        ? Get("RuntimeErrors", error.DetailsKey, error.DetailsArguments)
+                        // InvalidCastValue may hold an invalid user-supplied value,
+                        // not an English diagnostic: retain it verbatim.
+                        : error.Id == RuntimeErrorId.InvalidCastValue ||
+                            string.Equals(CurrentLocale, "en", StringComparison.OrdinalIgnoreCase)
+                            ? args[detailIndex]
+                            : Get("RuntimeErrors", "technical_detail_unavailable");
+                    return Get("RuntimeErrors", error.MessageKey, localizedArguments);
+                }
+            }
             return Get("RuntimeErrors", error.MessageKey, args);
+        }
+
+        /// <summary>
+        /// Render VM errors and simulation warnings only at the presentation boundary;
+        /// stored match output keeps the original, deterministic technical message.
+        /// User-authored print() content is never translated.
+        /// </summary>
+        public static string Format(VMOutputMessage message)
+        {
+            string details = message.Error == null ? message.Text : Format(message.Error);
+            if (string.IsNullOrEmpty(message.LocalizationKey)) return details;
+            if (message.Error != null && message.LocalizationKey == "shared_initializer_error")
+                return Get("Simulation", message.LocalizationKey,
+                    message.LocalizationArguments[0], message.LocalizationArguments[1], details);
+            return Get("RuntimeErrors", message.LocalizationKey, message.LocalizationArguments);
         }
     }
 }

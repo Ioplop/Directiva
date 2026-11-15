@@ -102,7 +102,7 @@ namespace DOrchestration
                 case SimulationEntityReference entity:
                     return entity.Id > 0
                         ? OperationResult.Success(DataValue.FromSimulationObject(entity.Id))
-                        : OperationResult.OpError(RuntimeError.InvalidOperation("Simulation returned an invalid entity ID."));
+                        : OperationResult.OpError(RuntimeError.InvalidOperation("Simulation returned an invalid entity ID.", "detail_simulation_returned_an_invalid_entity_id"));
                 case FixedVector2 vector:
                     return AllocateTuple(memory, new[]
                     {
@@ -115,8 +115,7 @@ namespace DOrchestration
                     for (int i = 0; i < entities.Count; i++)
                     {
                         if (entities[i].Id <= 0)
-                            return OperationResult.OpError(RuntimeError.InvalidOperation(
-                                "Simulation returned an invalid entity ID in a list."));
+                            return OperationResult.OpError(RuntimeError.InvalidOperation("Simulation returned an invalid entity ID in a list.", "detail_simulation_returned_an_invalid_entity_id_in_a_list"));
                         values[i] = DataValue.FromSimulationObject(entities[i].Id);
                     }
                     return memory.TryAllocHeap(new ListHeapObject(values), out uint reference)
@@ -133,7 +132,8 @@ namespace DOrchestration
                     return OperationResult.Success(DataValue.FromSimulationEnum(SimulationEnumKind.ActionMode, (int)action));
                 default:
                     return OperationResult.OpError(RuntimeError.InvalidOperation(
-                        "Unsupported simulation result type: " + value.GetType().Name));
+                        "Unsupported simulation result type: " + value.GetType().Name,
+                        "detail_unsupported_sim_result", value.GetType().Name));
             }
         }
 

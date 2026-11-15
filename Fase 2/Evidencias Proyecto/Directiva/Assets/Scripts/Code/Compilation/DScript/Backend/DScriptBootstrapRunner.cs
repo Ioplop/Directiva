@@ -80,7 +80,8 @@ namespace DSCompilation.DScript.Backend
                 {
                     error = RuntimeError.InvalidOperation(
                         "Shared initializer '" + step.Variable + "' exceeded the execution budget of " +
-                        logicalBudgetPerInitializer + " steps.");
+                        logicalBudgetPerInitializer + " steps.", "detail_initializer_budget",
+                        step.Variable, logicalBudgetPerInitializer);
                     vm.Abort(error); // Release GC roots from abandoned call stacks.
                 }
                 if (error != null)

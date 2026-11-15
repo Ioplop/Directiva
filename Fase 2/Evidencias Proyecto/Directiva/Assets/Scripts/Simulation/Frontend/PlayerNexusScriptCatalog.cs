@@ -9,6 +9,8 @@ using DSCompilation.DScript.Lexing;
 using DSCompilation.DScript.Modules;
 using DSCompilation.DScript.Parsing;
 using DOrchestration;
+using Directiva.Localization;
+using Directiva.CodeUI;
 
 namespace Directiva.SimulationFrontend
 {
@@ -28,6 +30,77 @@ namespace Directiva.SimulationFrontend
         }
     }
 
+    /// <summary>Known Nexus catalog failures carry localizable metadata without
+    /// making the compiler or its technical Exception.Message language-dependent.
+    /// Keep the original exception base types for existing callers and tests.</summary>
+    public interface IPlayerNexusLocalizedError
+    {
+        string LocalizationKey { get; }
+        object[] LocalizationArguments { get; }
+    }
+
+    public sealed class PlayerNexusArgumentException : ArgumentException, IPlayerNexusLocalizedError
+    {
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
+
+        public PlayerNexusArgumentException(string message, string parameterName,
+            string key, params object[] args) : base(message, parameterName)
+        {
+            LocalizationKey = key;
+            LocalizationArguments = args ?? Array.Empty<object>();
+        }
+    }
+
+    public sealed class PlayerNexusOperationException : InvalidOperationException, IPlayerNexusLocalizedError
+    {
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
+
+        public PlayerNexusOperationException(string message, string key, params object[] args)
+            : base(message)
+        {
+            LocalizationKey = key;
+            LocalizationArguments = args ?? Array.Empty<object>();
+        }
+    }
+
+    public sealed class PlayerNexusFileNotFoundException : FileNotFoundException, IPlayerNexusLocalizedError
+    {
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
+
+        public PlayerNexusFileNotFoundException(string message, string key, params object[] args)
+            : base(message)
+        {
+            LocalizationKey = key;
+            LocalizationArguments = args ?? Array.Empty<object>();
+        }
+    }
+
+    /// <summary>Translate errors at the UI boundary; preserve raw technical messages
+    /// and the complete compiler diagnostics for source navigation.</summary>
+    public static class PlayerNexusErrorText
+    {
+        public static string Format(Exception exception)
+        {
+            if (exception == null) return string.Empty;
+            if (exception is IPlayerNexusLocalizedError localized)
+                return DirectivaLocalization.Get("Simulation", localized.LocalizationKey,
+                    localized.LocalizationArguments);
+            if (exception is DirectivaLocalizedException other)
+                return DirectivaLocalization.Get(other.Component, other.Key, other.Arguments);
+            if (exception is PlayerNexusCompilationException compilation)
+            {
+                if (compilation.Diagnostics.Count != 0)
+                    return DirectivaLocalization.Format(compilation.Diagnostics[0]);
+                return DirectivaLocalization.Get("Simulation", "nexus_compilation_failed");
+            }
+            // OS errors may contain localized platform-provided details.
+            return exception.Message;
+        }
+    }
+
     /// <summary>
     /// Reads saved player scripts from one isolated workspace root. The embedded
     /// editor owns editing and saving; the match only reads files on disk.
@@ -38,7 +111,8 @@ namespace Directiva.SimulationFrontend
 
         public static List<string> ListScripts(string root)
         {
-            if (string.IsNullOrEmpty(root)) throw new ArgumentException("Missing scripts root.", nameof(root));
+            if (string.IsNullOrEmpty(root)) throw new PlayerNexusArgumentException("Missing scripts root.",
+                nameof(root), "nexus_missing_root");
             if (!Directory.Exists(root)) return new List<string>();
 
             var result = new List<string>();
@@ -72,11 +146,13 @@ namespace Directiva.SimulationFrontend
         {
             if (string.IsNullOrEmpty(relativePath) ||
                 !relativePath.EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("Expected a relative .dscript file.", nameof(relativePath));
+                throw new PlayerNexusArgumentException("Expected a relative .dscript file.",
+                    nameof(relativePath), "nexus_invalid_script_path");
             string module = relativePath.Substring(0, relativePath.Length - Extension.Length)
                 .Replace('\\', '/').Replace('/', '.');
             if (!DScriptModuleLoader.IsValidName(module))
-                throw new ArgumentException("Invalid DScript module: " + relativePath, nameof(relativePath));
+                throw new PlayerNexusArgumentException("Invalid DScript module: " + relativePath,
+                    nameof(relativePath), "nexus_invalid_module", relativePath);
             return module;
         }
 
@@ -86,7 +162,8 @@ namespace Directiva.SimulationFrontend
             string module = ModuleFromPath(relativePath);
             var provider = new FileSystemDScriptSourceProvider(root);
             if (!provider.TryReadModule(module, out string source))
-                throw new FileNotFoundException("The script was not found: " + relativePath);
+                throw new PlayerNexusFileNotFoundException("The script was not found: " + relativePath,
+                    "nexus_script_not_found", relativePath);
 
             var lexer = new DScriptLexer(module, source);
             var tokens = lexer.Tokenize();
@@ -110,17 +187,20 @@ namespace Directiva.SimulationFrontend
         {
             string module = ModuleFromPath(relativePath);
             if (string.IsNullOrWhiteSpace(function))
-                throw new ArgumentException("Select an entry function.", nameof(function));
+                throw new PlayerNexusArgumentException("Select an entry function.",
+                    nameof(function), "nexus_select_function");
             if (!ListEntryFunctions(root, relativePath).Contains(function, StringComparer.Ordinal))
-                throw new InvalidOperationException("The entry function '" + function +
-                    "' does not exist or requires parameters in " + relativePath + ".");
+                throw new PlayerNexusOperationException("The entry function '" + function +
+                    "' does not exist or requires parameters in " + relativePath + ".",
+                    "nexus_entry_invalid", function, relativePath);
             var compilation = DScriptCompiler.Compile(module,
                 new FileSystemDScriptSourceProvider(root), SimulationDScriptProfile.Options);
             if (!compilation.Success)
                 throw new PlayerNexusCompilationException("Player script compilation failed:\n" +
                     string.Join("\n", compilation.Diagnostics), compilation.Diagnostics);
             if (!compilation.Program.TryGetFunctionId(module + "." + function, out _))
-                throw new InvalidOperationException("Entry function not found: " + module + "." + function);
+                throw new PlayerNexusOperationException("Entry function not found: " + module + "." + function,
+                    "nexus_entry_not_found", module + "." + function);
             return compilation.Program;
         }
     }

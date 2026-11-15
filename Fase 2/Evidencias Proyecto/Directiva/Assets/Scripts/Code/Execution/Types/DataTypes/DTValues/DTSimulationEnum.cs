@@ -36,7 +36,7 @@ namespace DSExecution.DataTypes
             if (target == DataTypeId.String)
             {
                 if (!value.TryGetSimulationEnum(out SimulationEnumKind kind, out int id))
-                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid simulation enum."));
+                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid simulation enum.", "detail_invalid_simulation_enum"));
                 string[] names = kind switch
                 {
                     SimulationEnumKind.Side => new[] { "Ally", "Enemy", "Neutral" },
@@ -46,7 +46,7 @@ namespace DSExecution.DataTypes
                     _ => System.Array.Empty<string>()
                 };
                 if (id < 0 || id >= names.Length)
-                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid simulation enum value."));
+                    return CastResult.Failure(RuntimeError.InvalidOperation("Invalid simulation enum value.", "detail_invalid_simulation_enum_value"));
                 return DTString.CreateValue(kind + "." + names[id], memory);
             }
             return base.CastTo(target, value, memory);

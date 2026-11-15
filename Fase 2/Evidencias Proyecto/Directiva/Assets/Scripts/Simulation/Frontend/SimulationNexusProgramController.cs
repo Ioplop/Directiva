@@ -116,7 +116,7 @@ namespace Directiva.SimulationFrontend
             }
             catch (Exception exception)
             {
-                picker.SetStatus(exception.Message, true);
+                picker.SetStatus(PlayerNexusErrorText.Format(exception), true);
                 ReportCompilationFailure(exception);
             }
         }
@@ -166,7 +166,7 @@ namespace Directiva.SimulationFrontend
             catch (Exception exception)
             {
                 picker.SetFunctions(Array.Empty<string>(), null);
-                picker.SetStatus(exception.Message, true);
+                picker.SetStatus(PlayerNexusErrorText.Format(exception), true);
                 ReportCompilationFailure(exception);
             }
         }
@@ -203,7 +203,8 @@ namespace Directiva.SimulationFrontend
                 ui?.CodeEditor?.PublishPlayerCompilationFailure(
                     compilationError.Message, compilationError.Diagnostics);
             else
-                ui?.CodeEditor?.PublishPlayerCompilationFailure(exception.Message, null);
+                ui?.CodeEditor?.PublishPlayerCompilationFailure(
+                    PlayerNexusErrorText.Format(exception), null);
         }
 
         private void LateUpdate()

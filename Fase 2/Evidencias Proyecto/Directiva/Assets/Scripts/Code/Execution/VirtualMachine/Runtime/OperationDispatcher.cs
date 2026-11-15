@@ -72,7 +72,8 @@ namespace DSExecution.VirtualMachine
             return new OperationDispatchResult(
                 OperationResult.OpError(
                     RuntimeError.InvalidOperation(
-                        BuildInvalidOperationDetails(operationId, arguments)
+                        BuildInvalidOperationDetails(operationId, arguments),
+                        "detail_unsupported_operation_types", operationId, FormatOperandTypes(arguments)
                     )
                 ),
                 -1
@@ -94,7 +95,8 @@ namespace DSExecution.VirtualMachine
             {
                 return OperationResult.OpError(
                     RuntimeError.InternalVmError(
-                        $"Pending operation {operationId} has invalid receiver index {receiverIndex}."
+                        $"Pending operation {operationId} has invalid receiver index {receiverIndex}.",
+                        "detail_internal_receiver_index", operationId, receiverIndex
                     )
                 );
             }
@@ -106,7 +108,8 @@ namespace DSExecution.VirtualMachine
             {
                 return OperationResult.OpError(
                     RuntimeError.InvalidOperation(
-                        BuildInvalidOperationDetails(operationId, arguments)
+                        BuildInvalidOperationDetails(operationId, arguments),
+                        "detail_unsupported_operation_types", operationId, FormatOperandTypes(arguments)
                     )
                 );
             }
@@ -125,12 +128,24 @@ namespace DSExecution.VirtualMachine
             {
                 return OperationResult.OpError(
                     RuntimeError.InternalVmError(
-                        $"Continued operation {operationId} became NotImplemented."
+                        $"Continued operation {operationId} became NotImplemented.",
+                        "detail_internal_continued_notimplemented", operationId
                     )
                 );
             }
 
             return result;
+        }
+
+        private static string FormatOperandTypes(DataValue[] arguments)
+        {
+            var builder = new StringBuilder();
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                if (i > 0) builder.Append(", ");
+                builder.Append(arguments[i].dataType);
+            }
+            return builder.ToString();
         }
 
         private static string BuildInvalidOperationDetails(

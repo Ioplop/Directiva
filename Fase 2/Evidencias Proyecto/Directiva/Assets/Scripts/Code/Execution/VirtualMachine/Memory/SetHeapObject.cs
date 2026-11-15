@@ -43,13 +43,12 @@ namespace DSExecution.VirtualMachine
                     new[] { existing, value }, memory).Result;
                 if (result.Status == OperationStatus.Error)
                 {
-                    error = result.Error ?? RuntimeError.InternalVmError("Set member equality failed without error.");
+                    error = result.Error ?? RuntimeError.InternalVmError("Set member equality failed without error.", "detail_internal_set_member_equality_failed_without_error");
                     return false;
                 }
                 if (result.Status != OperationStatus.Success || result.Value.dataType != DataTypeId.Bool)
                 {
-                    error = RuntimeError.InternalVmError(
-                        "Set member equality must finish synchronously and return Bool.");
+                    error = RuntimeError.InternalVmError("Set member equality must finish synchronously and return Bool.", "detail_internal_set_member_equality_must_finish_synchronously_and_return_bool");
                     return false;
                 }
                 if (result.Value.value != 0)

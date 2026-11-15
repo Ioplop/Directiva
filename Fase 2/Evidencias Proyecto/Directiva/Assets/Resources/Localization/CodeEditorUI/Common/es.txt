@@ -18,3 +18,4 @@
 [operation_failed]: La operación falló: {{1}}
 [analysis_exception]: El análisis de código falló: {{1}}
 [options_not_implemented]: Las opciones generales todavía no están implementadas.
+[localization_argument_missing]: Falta un argumento para la traducción {{1}}.{{2}}: {{3}}.

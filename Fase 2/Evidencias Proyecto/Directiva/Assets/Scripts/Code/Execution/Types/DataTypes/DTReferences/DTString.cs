@@ -55,7 +55,7 @@ namespace DSExecution.DataTypes
             if (!value.TryGetHeapReference(out uint memoryReference))
             {
                 errorResult = OperationResult.OpError(
-                    RuntimeError.InvalidOperation("String contains an invalid heap reference.")
+                    RuntimeError.InvalidOperation("String contains an invalid heap reference.", "detail_string_contains_an_invalid_heap_reference")
                 );
                 return false;
             }
@@ -186,7 +186,7 @@ namespace DSExecution.DataTypes
                     CultureInfo.InvariantCulture, out long integer))
                     return CastResult.Success(DataValue.FromInt(integer));
                 return CastResult.Failure(RuntimeError.InvalidCastValue(DataTypeId.String,
-                    DataTypeId.Int, "Expected a signed 64-bit integer."));
+                    DataTypeId.Int, "Expected a signed 64-bit integer.", "detail_cast_signed_int"));
             }
             if (decimal.TryParse(content, NumberStyles.Float, CultureInfo.InvariantCulture,
                 out decimal number))
@@ -201,7 +201,7 @@ namespace DSExecution.DataTypes
                 return CastResult.Failure(RuntimeError.Overflow());
             }
             return CastResult.Failure(RuntimeError.InvalidCastValue(DataTypeId.String,
-                DataTypeId.Decimal, "Expected a finite decimal number."));
+                DataTypeId.Decimal, "Expected a finite decimal number.", "detail_cast_finite_decimal"));
         }
 
         public OperationResult Subtract(OperationCall opCall) => OperationResult.NotImplemented();

@@ -144,10 +144,12 @@ namespace DOrchestration
             // Derive independent but reproducible streams from the match seed.
             firstSide = new SideRuntime(simulation, 1, side1Program,
                 unchecked(simulation.seed ^ SideSeedSalt), vmOptions, initializerBudget,
-                (entity, kind, text, debug) => RecordOutput(1, entity, kind, text, debug));
+                (entity, kind, text, debug, error, key, args) =>
+                    RecordOutput(1, entity, kind, text, debug, error, key, args));
             secondSide = new SideRuntime(simulation, 2, side2Program,
                 unchecked(simulation.seed ^ (SideSeedSalt * 2UL)), vmOptions, initializerBudget,
-                (entity, kind, text, debug) => RecordOutput(2, entity, kind, text, debug));
+                (entity, kind, text, debug, error, key, args) =>
+                    RecordOutput(2, entity, kind, text, debug, error, key, args));
         }
 
         /// <summary>
@@ -370,8 +372,7 @@ namespace DOrchestration
             {
                 if (++zeroCost > MaxZeroCostAdvancesPerTurn)
                 {
-                    vm.Abort(RuntimeError.InvalidOperation(
-                        "Too many consecutive zero-cost VM debug instructions."));
+                    vm.Abort(RuntimeError.InvalidOperation("Too many consecutive zero-cost VM debug instructions.", "detail_too_many_consecutive_zero_cost_vm_debug_instructions"));
                     break;
                 }
                 vm.Advance();
@@ -435,10 +436,12 @@ namespace DOrchestration
         };
 
         private void RecordOutput(int sideId, int? entityId, VMOutputKind kind,
-            string text, VMDebugState debug)
+            string text, VMDebugState debug, RuntimeError error,
+            string localizationKey, object[] localizationArguments)
         {
             var message = new VMOutputMessage(++outputSequence, simulation.Tick,
-                sideId, entityId, kind, text, debug);
+                sideId, entityId, kind, text, debug,
+                error, localizationKey, localizationArguments);
             if (kind == VMOutputKind.Error)
                 errorCounts[sideId]++;
             Queue<VMOutputMessage> queue = outputBySide[sideId];

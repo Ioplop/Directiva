@@ -31,24 +31,33 @@ namespace DOrchestration
         public SimulationCallStatus Status { get; }
         public object Value { get; }
         public string Message { get; }
+        public string LocalizationKey { get; }
+        public object[] LocalizationArguments { get; }
 
         /// <summary>
         /// Keeps the result value and any diagnostic together so the DScript integration
         /// can report problems without mistaking them for normal return values.
         /// </summary>
-        private SimulationCallResult(SimulationCallStatus status, object value, string message)
+        private SimulationCallResult(SimulationCallStatus status, object value, string message,
+            string localizationKey, object[] localizationArguments)
         {
             Status = status;
             Value = value;
             Message = message;
+            LocalizationKey = localizationKey;
+            LocalizationArguments = localizationArguments ?? Array.Empty<object>();
         }
 
         public static SimulationCallResult Success(object value) =>
-            new SimulationCallResult(SimulationCallStatus.Success, value, null);
-        public static SimulationCallResult Warning(string message) =>
-            new SimulationCallResult(SimulationCallStatus.Warning, null, message);
-        public static SimulationCallResult Error(string message) =>
-            new SimulationCallResult(SimulationCallStatus.Error, null, message);
+            new SimulationCallResult(SimulationCallStatus.Success, value, null, null, null);
+        public static SimulationCallResult Warning(string message, string localizationKey,
+            params object[] localizationArguments) =>
+            new SimulationCallResult(SimulationCallStatus.Warning, null, message,
+                localizationKey, localizationArguments);
+        public static SimulationCallResult Error(string message, string localizationKey,
+            params object[] localizationArguments) =>
+            new SimulationCallResult(SimulationCallStatus.Error, null, message,
+                localizationKey, localizationArguments);
     }
 
     /// <summary>
@@ -79,7 +88,7 @@ namespace DOrchestration
             // The catalog defines which observations exist; this bridge supplies the
             // particular entity whose point of view the script wants to inspect.
             if (!SimulationApiCatalog.TryGetObservation(name, out var operations))
-                return SimulationCallResult.Error("Unknown observation: " + name);
+                return SimulationCallResult.Error("Unknown observation: " + name, "bridge_unknown_observation", name);
             return Invoke(operations, observer, receiverId, arguments ?? Array.Empty<object>());
         }
 
@@ -91,9 +100,9 @@ namespace DOrchestration
         {
             // Knowing about another unit (even an ally) never gives us control of it.
             if (receiverId != controlledEntityId)
-                return SimulationCallResult.Error("A script cannot issue orders to an entity other than itself.");
+                return SimulationCallResult.Error("A script cannot issue orders to an entity other than itself.", "bridge_foreign_order");
             if (!SimulationApiCatalog.TryGetOrder(name, out var operations))
-                return SimulationCallResult.Error("Unknown order: " + name);
+                return SimulationCallResult.Error("Unknown order: " + name, "bridge_unknown_order", name);
             arguments ??= Array.Empty<object>();
             // Also accept move((x,y)) as a position tuple without adding a CLR overload.
             if (name == "move" && arguments.Length == 1 && arguments[0] is FixedVector2 point)
@@ -114,11 +123,11 @@ namespace DOrchestration
             // build() follows the same ownership rule as every other order, even though
             // its DScript function argument needs special handling outside the simulation.
             if (controlledEntityId != receiverId)
-                return SimulationCallResult.Error("A script cannot issue orders to an entity other than itself.");
+                return SimulationCallResult.Error("A script cannot issue orders to an entity other than itself.", "bridge_foreign_order");
             if (!observer.IsAlive(receiverId))
                 return SimulationCallResult.Success(null);
             if (observer.GetEntityType(receiverId) != SimulationEntityType.Nexus)
-                return SimulationCallResult.Warning("build() is not supported by this entity type.");
+                return SimulationCallResult.Warning("build() is not supported by this entity type.", "bridge_unsupported_member", "build");
 
             // Only the construction request crosses into Simulation. The future
             // orchestrator retains the requested entry function using request.requestId.
@@ -174,13 +183,15 @@ namespace DOrchestration
                 if (overloads[0].Kind == SimulationApiKind.Order && overloads[0].Name == "move" &&
                     arguments.Length == 2 && AreNumeric(arguments))
                     return SimulationCallResult.Error("move(x, y) only accepts positions inside world bounds; " +
-                        "one or both coordinates exceed the safe Fixed numeric range.");
+                        "one or both coordinates exceed the safe Fixed numeric range.", "bridge_move_fixed_range");
                 return SimulationCallResult.Error(manual
                     ? overloads[0].Name + "() requires manual orchestration."
-                    : "No matching arguments for " + overloads[0].Name + "().");
+                    : "No matching arguments for " + overloads[0].Name + "().",
+                    manual ? "bridge_manual_call" : "bridge_no_matching_arguments", overloads[0].Name);
             }
             if (ambiguous)
-                return SimulationCallResult.Error("Ambiguous overload of " + chosen.Name + "().");
+                return SimulationCallResult.Error("Ambiguous overload of " + chosen.Name + "().",
+                    "bridge_ambiguous_overload", chosen.Name);
 
             // Orders only target living entities. For observations, known dead
             // entities remain readable; truly unknown IDs still return None.
@@ -195,7 +206,8 @@ namespace DOrchestration
             // Keep type checking for archived receivers; a dead unit does not
             // suddenly acquire nexus- or resource-only properties.
             if (observer.IsRecorded(receiverId) && !AcceptsReceiver(chosen.AppliesTo, receiverId))
-                return SimulationCallResult.Warning(chosen.Name + "() is not supported by this entity type.");
+                return SimulationCallResult.Warning(chosen.Name + "() is not supported by this entity type.",
+                    "bridge_unsupported_member", chosen.Name);
 
             // A player can supply any Int64/Decimal, but the simulation's Fixed math is
             // only safe for world-scale values. Reject dangerous ranges before reflection.
@@ -253,7 +265,8 @@ namespace DOrchestration
                 if (x < 0 || y < 0 || x > size.Value.X || y > size.Value.Y)
                     return SimulationCallResult.Error(
                         "move(x, y) only accepts positions inside world bounds: " +
-                        "0 <= x <= " + size.Value.X + " and 0 <= y <= " + size.Value.Y + ".");
+                        "0 <= x <= " + size.Value.X + " and 0 <= y <= " + size.Value.Y + ".",
+                        "bridge_move_outside_world", size.Value.X, size.Value.Y);
             }
             else
             {
@@ -264,7 +277,8 @@ namespace DOrchestration
                 long maximumRaw = checked(size.Value.X.RawValue + size.Value.Y.RawValue);
                 if (distance.RawValue > maximumRaw)
                     return SimulationCallResult.Error(operation.Name +
-                        "() requires a distance no greater than the world width plus height.");
+                        "() requires a distance no greater than the world width plus height.",
+                        "bridge_distance_limit", operation.Name);
             }
             return null;
         }

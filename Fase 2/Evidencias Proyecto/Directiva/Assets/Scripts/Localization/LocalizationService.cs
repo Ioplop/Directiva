@@ -121,8 +121,16 @@ namespace Directiva.CodeUI
             var unresolved = Regex.Match(result, @"\{\{\d+\}\}");
             if (unresolved.Success)
             {
-                LocalizationWarning?.Invoke(
-                    $"Missing locale argument in {component}.{key}: {unresolved.Value}");
+                // Avoid recursion here: the diagnostic itself must not use Get(),
+                // which calls ApplyArguments and emits this same event.
+                string localeKey = string.Equals(CurrentLocale, "en", StringComparison.OrdinalIgnoreCase)
+                    ? "en" : "es";
+                string warningTemplate = TryGetRaw("Common", localeKey,
+                    "localization_argument_missing") ??
+                    "Parámetro de traducción faltante: {{1}}.{{2}} ({{3}}).";
+                string warning = warningTemplate.Replace("{{1}}", component)
+                    .Replace("{{2}}", key).Replace("{{3}}", unresolved.Value);
+                LocalizationWarning?.Invoke(warning);
             }
 
             return result;

@@ -44,7 +44,7 @@ namespace DSExecution.DataTypes
             error = null;
             if ((stackValues.Length & 1) != 0)
             {
-                error = RuntimeError.InternalVmError("DICT construction requires complete pairs.");
+                error = RuntimeError.InternalVmError("DICT construction requires complete pairs.", "detail_internal_dict_construction_requires_complete_pairs");
                 return false;
             }
             for (int i = 0; i < stackValues.Length; i += 2)
@@ -77,7 +77,7 @@ namespace DSExecution.DataTypes
             }
             if (!value.TryGetHeapReference(out uint id))
             {
-                failure = Fault(RuntimeError.InvalidOperation("Invalid Dictionary reference."));
+                failure = Fault(RuntimeError.InvalidOperation("Invalid Dictionary reference.", "detail_invalid_dictionary_reference"));
                 return false;
             }
             if (!memory.TryGetHeap(id, out HeapObject obj) || !(obj is DictHeapObject found))
@@ -90,7 +90,7 @@ namespace DSExecution.DataTypes
         }
 
         private static OperationResult Fault(RuntimeError error) => OperationResult.OpError(error);
-        private static OperationResult MissingKey() => Fault(RuntimeError.InvalidOperation("Dictionary key not found."));
+        private static OperationResult MissingKey() => Fault(RuntimeError.InvalidOperation("Dictionary key not found.", "detail_dictionary_key_not_found"));
 
         private static bool Find(DictHeapObject dict, DataValue key, IMemContext memory,
             out int index, out OperationResult failure)
@@ -159,7 +159,7 @@ namespace DSExecution.DataTypes
             if (!Find(dict, call.Arguments[1], call.Memory, out int index, out failure)) return failure;
             if (index < 0) return MissingKey();
             if (!call.Memory.TryResizeHeap((uint)call.Arguments[0].value, dict.Size - 2u))
-                return Fault(RuntimeError.InternalVmError("Dictionary shrink failed."));
+                return Fault(RuntimeError.InternalVmError("Dictionary shrink failed.", "detail_internal_dictionary_shrink_failed"));
             DataValue removed = dict.RemoveAuthorized(index);
             return OperationResult.Success(returnValue ? removed : DataValue.None());
         }
@@ -171,7 +171,7 @@ namespace DSExecution.DataTypes
             if (!Resolve(call.Memory, call.Arguments[0], out var dict, out var failure)) return failure;
             if (dict.Count == 0) return OperationResult.Success(DataValue.None());
             if (!call.Memory.TryResizeHeap((uint)call.Arguments[0].value, 1))
-                return Fault(RuntimeError.InternalVmError("Dictionary clear resize failed."));
+                return Fault(RuntimeError.InternalVmError("Dictionary clear resize failed.", "detail_internal_dictionary_clear_resize_failed"));
             dict.ClearAuthorized();
             return OperationResult.Success(DataValue.None());
         }
@@ -251,16 +251,17 @@ namespace DSExecution.DataTypes
             }
             if (!(call.State is DictOperationState state) || state.Kind != kind ||
                 call.AuxiliaryReference == 0)
-                return Fault(RuntimeError.InternalVmError("Invalid dictionary continuation state."));
+                return Fault(RuntimeError.InternalVmError("Invalid dictionary continuation state.", "detail_internal_invalid_dictionary_continuation_state"));
             if (left.Version != state.LeftVersion || left.Count != state.LeftCount ||
                 (right != null && (right.Version != state.RightVersion || right.Count != state.RightCount)))
-                return Fault(RuntimeError.InvalidOperation("Dictionary modified during continued " + kind + "."));
+                return Fault(RuntimeError.InvalidOperation("Dictionary modified during continued " + kind + ".",
+                    "detail_dict_changed", kind));
             if (!call.Memory.TryGetHeap(call.AuxiliaryReference, out HeapObject bufferObject))
-                return Fault(RuntimeError.InternalVmError("Lost dictionary auxiliary buffer."));
+                return Fault(RuntimeError.InternalVmError("Lost dictionary auxiliary buffer.", "detail_internal_lost_dictionary_auxiliary_buffer"));
             var auxDict = bufferObject as DictHeapObject;
             var auxList = bufferObject as ListHeapObject;
             if (listResult ? auxList == null || auxList.Count != state.NextIndex : auxDict == null)
-                return Fault(RuntimeError.InternalVmError("Dictionary auxiliary buffer type or size mismatch."));
+                return Fault(RuntimeError.InternalVmError("Dictionary auxiliary buffer type or size mismatch.", "detail_internal_dictionary_auxiliary_buffer_type_or_size_mismatch"));
             long totalLong = (long)state.LeftCount + (update ? state.RightCount : 0L);
             if (totalLong > int.MaxValue) return Fault(RuntimeError.OutOfMemory());
             int total = (int)totalLong;
@@ -311,9 +312,9 @@ namespace DSExecution.DataTypes
             if (!update)
                 return OperationResult.Success(DataValue.FromDictReference(call.AuxiliaryReference));
             if (!call.Memory.TrySwapHeapContents((uint)call.Arguments[0].value, call.AuxiliaryReference))
-                return Fault(RuntimeError.InternalVmError("Cannot commit DictUpdate."));
+                return Fault(RuntimeError.InternalVmError("Cannot commit DictUpdate.", "detail_internal_cannot_commit_dictupdate"));
             if (!call.Memory.FreeHeap(call.AuxiliaryReference))
-                return Fault(RuntimeError.InternalVmError("Cannot release DictUpdate buffer."));
+                return Fault(RuntimeError.InternalVmError("Cannot release DictUpdate buffer.", "detail_internal_cannot_release_dictupdate_buffer"));
             return OperationResult.Success(DataValue.None());
         }
 

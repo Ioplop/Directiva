@@ -38,3 +38,20 @@
 
 [debug_output_prefix]: [Bando {{1}} / Entidad {{2}} / Tick {{3}}]
 [debug_breakpoint_hit]: Breakpoint: entidad {{1}} en {{2}}:{{3}}.
+[debug_shared]: compartido
+[shared_initializer_error]: Inicializador compartido {{1}}.{{2}}: {{3}}
+[nexus_missing_root]: No se especificó la carpeta raíz de scripts.
+[nexus_invalid_script_path]: Selecciona un archivo .dscript válido mediante una ruta relativa.
+[nexus_invalid_module]: La ruta del módulo DScript no es válida: {{1}}.
+[nexus_script_not_found]: No se encontró el script: {{1}}.
+[nexus_select_function]: Selecciona una función de entrada.
+[nexus_entry_invalid]: La función de entrada '{{1}}' no existe o requiere parámetros en {{2}}.
+[nexus_entry_not_found]: No se encontró la función de entrada: {{1}}.
+[nexus_compilation_failed]: No se pudo compilar el programa seleccionado para el nexo.
+[level_entry_required]: El nivel '{{1}}' necesita un script y una función de entrada.
+[level_enemy_compile_failed]: No se pudo compilar el programa enemigo del nivel '{{1}}': {{2}}
+[level_enemy_entry_not_found]: No se encontró la función de entrada enemiga '{{1}}' del nivel '{{2}}'.
+[level_view_missing]: No se ha asignado la vista de simulación.
+[level_world_too_small]: El mundo debe medir al menos 16 × 16.
+[level_invalid_resources]: La configuración inicial de recursos no es válida.
+[level_resource_bounds]: Un recurso está fuera de los límites seguros del mundo: {{1}}.
