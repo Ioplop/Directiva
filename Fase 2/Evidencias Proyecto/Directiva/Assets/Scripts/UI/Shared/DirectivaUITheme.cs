@@ -37,6 +37,8 @@ namespace Directiva.UI
         public Sprite script;
         public Sprite folder;
         public Sprite step;
+        [Tooltip("Icon for the one-instruction VM step; uses the Step icon if omitted.")]
+        public Sprite stepInstruction;
         public Sprite stepIn;
         public Sprite stepOut;
         public Sprite breakpoint;

@@ -128,6 +128,9 @@
 
 .top-area {
     flex-shrink: 0;
+    min-width: 0;
+    /* Never let debugger buttons paint over the game when the editor is narrow. */
+    overflow: hidden;
     border-bottom-width: 1px;
     border-bottom-color: rgb(60, 64, 72);
     background-color: rgb(29, 32, 37);
@@ -144,6 +147,9 @@
 }
 
 .toolbar-row {
+    min-width: 0;
+    /* Groups can be wider than the viewport; clip instead of overflowing it. */
+    overflow: hidden;
     min-height: 42px;
     flex-direction: row;
     align-items: center;

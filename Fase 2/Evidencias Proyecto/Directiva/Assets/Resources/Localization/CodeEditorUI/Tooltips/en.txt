@@ -5,9 +5,10 @@
 [stop]: Stop execution
 [pause]: Pause execution
 [continue]: Continue execution
-[step]: Execute next instruction
-[step_in]: Step into current call
-[step_out]: Step out of current call
+[step]: Advance to the next source line without stopping inside called functions.
+[step_in]: Advance to the next source line, entering a called function.
+[step_out]: Continue until the current function returns.
+[step_instruction]: Advance one virtual-machine instruction.
 [back]: Back
 [options]: Options
 [expand_folder]: Expand folder

@@ -3,10 +3,11 @@
 [stop]: Detener
 [pause]: Pausar
 [continue]: Continuar
-[step]: Step
+[step]: Siguiente línea
 [execution_steps]: Pasos
-[step_in]: Step In
-[step_out]: Step Out
+[step_in]: Entrar
+[step_out]: Salir
+[step_instruction]: Instrucción VM
 [back]: Atrás
 [options]: Opciones
 [create]: Crear

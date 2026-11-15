@@ -1,3 +1,5 @@
+using DSExecution.VirtualMachine;
+
 namespace Directiva.CodeUI
 {
     /// <summary>
@@ -13,6 +15,9 @@ namespace Directiva.CodeUI
         void Continue();
         void Pause();
         void Stop();
+        // One scheduled charged VM instruction; intervening turns and physics
+        // advance as necessary to preserve match determinism.
         void Step();
+        void StepSource(VMSourceStepMode mode);
     }
 }

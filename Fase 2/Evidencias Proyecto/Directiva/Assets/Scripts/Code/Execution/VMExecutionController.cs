@@ -16,6 +16,7 @@ namespace Directiva.CodeUI
         private readonly Stopwatch _executionTimer = new();
         private int _suppressedBreakpointFunctionId = -1;
         private int _suppressedBreakpointInstructionPointer = -1;
+        private VMSourceStepPlan _sourceStep;
 
         public ScriptExecutionState State { get; private set; } = ScriptExecutionState.Stopped;
         public DirectivaVM CurrentVM => _vm;
@@ -53,6 +54,7 @@ namespace Directiva.CodeUI
             _vm.Printed += OnVMPrinted;
             TotalAdvances = 0;
             TotalLogicalSteps = 0;
+            _sourceStep = null;
             ClearBreakpointSuppression();
             _executionTimer.Restart();
             SetState(paused ? ScriptExecutionState.Paused : ScriptExecutionState.Running);
@@ -61,13 +63,37 @@ namespace Directiva.CodeUI
         public void Pause()
         {
             if (State == ScriptExecutionState.Running)
+            {
+                _sourceStep = null;
                 SetState(ScriptExecutionState.Paused);
+            }
         }
 
         public void Continue()
         {
             if (State == ScriptExecutionState.Paused && _vm != null)
+            {
+                _sourceStep = null;
                 SetState(ScriptExecutionState.Running);
+            }
+        }
+
+        /// <summary>
+        /// Start a nonblocking source-level step. Tick continues executing up to
+        /// its normal frame budget; an infinite function never blocks the UI.
+        /// </summary>
+        public void StepSource(VMSourceStepMode mode)
+        {
+            if (State != ScriptExecutionState.Paused || _vm == null)
+                return;
+            if (!ConsumeLeadingDebugMetadata())
+                return;
+            _sourceStep = new VMSourceStepPlan(_vm, mode);
+            // A manual step starts at the currently selected statement. Do not
+            // immediately re-hit a breakpoint on its very first instruction.
+            _suppressedBreakpointFunctionId = _vm.CurrentFunction?.Id ?? -1;
+            _suppressedBreakpointInstructionPointer = _vm.InstructionPointer;
+            SetState(ScriptExecutionState.Running);
         }
 
         public void Stop()
@@ -80,6 +106,7 @@ namespace Directiva.CodeUI
 
             _vm = null;
             LastFaultDebug = null;
+            _sourceStep = null;
             ClearBreakpointSuppression();
             SetState(ScriptExecutionState.Stopped);
         }
@@ -94,6 +121,7 @@ namespace Directiva.CodeUI
         {
             if (State != ScriptExecutionState.Paused || _vm == null)
                 return;
+            _sourceStep = null;
 
             if (skipDebugMetadata && !ConsumeLeadingDebugMetadata())
                 return;
@@ -180,6 +208,12 @@ namespace Directiva.CodeUI
             if (instructionBudget <= 0)
                 throw new ArgumentOutOfRangeException(nameof(instructionBudget));
 
+            if (_sourceStep != null)
+            {
+                TickSourceStep(instructionBudget);
+                return;
+            }
+
             // Preserve the existing fast batch path when no breakpoint checks are needed.
             if (BreakpointPredicate == null)
             {
@@ -228,6 +262,40 @@ namespace Directiva.CodeUI
                 if (!AdvanceOnce())
                     return;
                 logicalCost += cost;
+            }
+        }
+
+        private void TickSourceStep(int instructionBudget)
+        {
+            int used = 0;
+            while (used < instructionBudget && State == ScriptExecutionState.Running &&
+                _vm != null && _sourceStep != null)
+            {
+                if (TryPauseAtBreakpoint())
+                {
+                    _sourceStep = null;
+                    return;
+                }
+
+                int cost = _vm.NextInstructionCost;
+                if (!AdvanceOnce())
+                {
+                    _sourceStep = null;
+                    return;
+                }
+                used += cost;
+
+                if (!ConsumeLeadingDebugMetadata())
+                {
+                    _sourceStep = null;
+                    return;
+                }
+                if (_sourceStep.ReachedTarget(_vm))
+                {
+                    _sourceStep = null;
+                    SetState(ScriptExecutionState.Paused);
+                    return;
+                }
             }
         }
 

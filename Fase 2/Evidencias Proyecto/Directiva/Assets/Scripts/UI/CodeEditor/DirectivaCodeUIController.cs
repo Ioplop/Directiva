@@ -767,6 +767,9 @@ namespace Directiva.CodeUI
             _topBar.PauseClicked += Events.RaisePauseRequested;
             _topBar.ContinueClicked += Events.RaiseContinueRequested;
             _topBar.StepClicked += Events.RaiseStepRequested;
+            _topBar.StepInClicked += Events.RaiseStepInRequested;
+            _topBar.StepOutClicked += Events.RaiseStepOutRequested;
+            _topBar.StepInstructionClicked += Events.RaiseStepInstructionRequested;
             _topBar.BackClicked += Events.RaiseBackRequested;
             _topBar.OptionsClicked += Events.RaiseOptionsRequested;
 
@@ -787,7 +790,10 @@ namespace Directiva.CodeUI
             Events.ContinueRequested += HandleContinueRequested;
             Events.PauseRequested += HandlePauseRequested;
             Events.StopRequested += HandleStopRequested;
-            Events.StepRequested += HandleStepRequested;
+            Events.StepRequested += () => HandleSourceStepRequested(VMSourceStepMode.Over);
+            Events.StepInRequested += () => HandleSourceStepRequested(VMSourceStepMode.Into);
+            Events.StepOutRequested += () => HandleSourceStepRequested(VMSourceStepMode.Out);
+            Events.StepInstructionRequested += HandleStepRequested;
 
             Events.OptionsRequested += () =>
                 Output.Write(Localization.Get("Common", "options_not_implemented"));
@@ -1326,6 +1332,26 @@ namespace Directiva.CodeUI
                 StartActiveDScriptExecution();
         }
 
+        private void HandleSourceStepRequested(VMSourceStepMode mode)
+        {
+            if (_simulationDebugSession != null)
+            {
+                _simulationDebugSession.StepSource(mode);
+                RefreshSimulationDebugger();
+                return;
+            }
+
+            if (_executionController == null ||
+                _executionController.State == ScriptExecutionState.Running)
+                return;
+            if (_executionController.State == ScriptExecutionState.Stopped &&
+                !StartActiveDScriptExecution(startPaused: true))
+                return;
+            _executionController.StepSource(mode);
+            RefreshDScriptDebugHighlight();
+        }
+
+        // The original action is still available on the new processor-step button.
         private void HandleStepRequested()
         {
             if (_simulationDebugSession != null)

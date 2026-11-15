@@ -27,6 +27,7 @@ namespace Directiva.CodeUI
         private readonly Button _pause;
         private readonly Button _continue;
         private readonly Button _step;
+        private readonly Button _stepInstruction;
         private readonly Button _stepIn;
         private readonly Button _stepOut;
         private readonly Label _executionMetrics;
@@ -46,6 +47,9 @@ namespace Directiva.CodeUI
         public event Action PauseClicked;
         public event Action ContinueClicked;
         public event Action StepClicked;
+        public event Action StepInstructionClicked;
+        public event Action StepInClicked;
+        public event Action StepOutClicked;
         public event Action BackClicked;
         public event Action OptionsClicked;
         public event Action<string> EntryFunctionChanged;
@@ -109,8 +113,9 @@ namespace Directiva.CodeUI
             _pause = new Button(() => PauseClicked?.Invoke());
             _continue = new Button(() => ContinueClicked?.Invoke());
             _step = new Button(() => StepClicked?.Invoke());
-            _stepIn = new Button();
-            _stepOut = new Button();
+            _stepIn = new Button(() => StepInClicked?.Invoke());
+            _stepOut = new Button(() => StepOutClicked?.Invoke());
+            _stepInstruction = new Button(() => StepInstructionClicked?.Invoke());
 
             _stop.AddToClassList("execution-symbol-button");
             _stop.AddToClassList("stop-symbol-button");
@@ -130,8 +135,8 @@ namespace Directiva.CodeUI
             _stepOut.AddToClassList("execution-symbol-button");
             _stepOut.AddToClassList("step-symbol-button");
 
-            _stepIn.SetEnabled(false);
-            _stepOut.SetEnabled(false);
+            _stepInstruction.AddToClassList("execution-symbol-button");
+            _stepInstruction.AddToClassList("step-symbol-button");
 
             execution.Add(entryLabel);
             execution.Add(_entryFunction);
@@ -141,6 +146,7 @@ namespace Directiva.CodeUI
             execution.Add(_step);
             execution.Add(_stepIn);
             execution.Add(_stepOut);
+            execution.Add(_stepInstruction);
 
             _executionMetrics = new Label();
             _executionMetrics.style.height = 24f;
@@ -289,6 +295,7 @@ namespace Directiva.CodeUI
             tooltips.Register(_step, () => _locale.Get("Tooltips", "step"));
             tooltips.Register(_stepIn, () => _locale.Get("Tooltips", "step_in"));
             tooltips.Register(_stepOut, () => _locale.Get("Tooltips", "step_out"));
+            tooltips.Register(_stepInstruction, () => _locale.Get("Tooltips", "step_instruction"));
 
             tooltips.Register(_back, () => _locale.Get("Tooltips", "back"));
             tooltips.Register(_options, () => _locale.Get("Tooltips", "options"));
@@ -374,10 +381,10 @@ namespace Directiva.CodeUI
                     break;
             }
 
-            // Step currently advances one VM instruction; source-level Step In/Out
-            // require their own debugger and remain disabled for now.
-            _stepIn.SetEnabled(false);
-            _stepOut.SetEnabled(false);
+            bool canStep = _step.enabledSelf;
+            _stepIn.SetEnabled(canStep);
+            _stepOut.SetEnabled(canStep);
+            _stepInstruction.SetEnabled(canStep);
         }
 
         private void RefreshLocale()
@@ -398,10 +405,11 @@ namespace Directiva.CodeUI
             UIIconView.SetButton(_pause, _icons?.pause);
             UIIconView.SetButton(_continue, _icons?.play);
 
-            // Step advances VM instructions; source-level stepping remains future work.
             UIIconView.SetButton(_step, _icons?.step);
             UIIconView.SetButton(_stepIn, _icons?.stepIn);
             UIIconView.SetButton(_stepOut, _icons?.stepOut);
+            UIIconView.SetButton(_stepInstruction, _icons?.stepInstruction != null
+                ? _icons.stepInstruction : _icons?.step);
 
             _stop.tooltip = _locale.Get("Common", "stop");
             _pause.tooltip = _locale.Get("Common", "pause");
@@ -409,6 +417,7 @@ namespace Directiva.CodeUI
             _step.tooltip = _locale.Get("Common", "step");
             _stepIn.tooltip = _locale.Get("Common", "step_in");
             _stepOut.tooltip = _locale.Get("Common", "step_out");
+            _stepInstruction.tooltip = _locale.Get("Common", "step_instruction");
 
             UIIconView.SetButton(_back, _icons?.back);
             UIIconView.SetButton(_options, _icons?.options);

@@ -23,6 +23,7 @@ namespace Directiva.CodeUI
         public event Action StopRequested;
 
         public event Action StepRequested;
+        public event Action StepInstructionRequested;
         public event Action StepInRequested;
         public event Action StepOutRequested;
 
@@ -47,6 +48,7 @@ namespace Directiva.CodeUI
         public void RaiseStopRequested() => StopRequested?.Invoke();
 
         public void RaiseStepRequested() => StepRequested?.Invoke();
+        public void RaiseStepInstructionRequested() => StepInstructionRequested?.Invoke();
         public void RaiseStepInRequested() => StepInRequested?.Invoke();
         public void RaiseStepOutRequested() => StepOutRequested?.Invoke();
 

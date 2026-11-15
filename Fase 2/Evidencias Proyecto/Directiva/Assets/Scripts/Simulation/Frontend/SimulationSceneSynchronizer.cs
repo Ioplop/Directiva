@@ -349,17 +349,35 @@ namespace Directiva.SimulationFrontend
             return false;
         }
 
-        /// <summary>Advance only the chosen VM while simulation time is frozen.</summary>
+        /// <summary>
+        /// Resume the full deterministic match until the selected DScript VM
+        /// reaches a source boundary, dies, faults or the match ends.
+        /// </summary>
+        public void StepSource(VMSourceStepMode mode)
+        {
+            if (orchestrator == null || !HasSelectedVM || !programSelectionLocked ||
+                orchestrator.IsFinished) return;
+            if (running) Pause();
+            if (!orchestrator.BeginSourceStep(selectedDebugEntityId, mode)) return;
+            accumulatedTime = 0;
+            running = true;
+            ApplyPlaybackState();
+        }
+
+        /// <summary>
+        /// Advance one charged instruction of the selected VM at its NEXT normal
+        /// scheduler turn. Other entities and physics advance when their turns
+        /// precede it; this never grants the selected VM an extra turn.
+        /// </summary>
         public void Step()
         {
             if (orchestrator == null || !HasSelectedVM || !programSelectionLocked ||
                 orchestrator.IsFinished) return;
             if (running) Pause();
-            if (orchestrator.StepEntity(selectedDebugEntityId))
-            {
-                view?.ConsumeEvents();
-                connectedEditor?.RefreshSimulationDebugger(followExecution: true);
-            }
+            if (!orchestrator.BeginInstructionStep(selectedDebugEntityId)) return;
+            accumulatedTime = 0;
+            running = true;
+            ApplyPlaybackState();
         }
 
         public void Continue() => Play();
@@ -623,6 +641,7 @@ namespace Directiva.SimulationFrontend
 
         public void Pause()
         {
+            orchestrator?.CancelSourceStep();
             running = false;
             ApplyPlaybackState();
         }
@@ -630,6 +649,7 @@ namespace Directiva.SimulationFrontend
         /// <summary>Stop resets the match and shows its initial state, without running scripts.</summary>
         public void Stop()
         {
+            orchestrator?.CancelSourceStep();
             running = false;
             programSelectionLocked = false;
             SyncProgramPickerLock();
@@ -693,6 +713,7 @@ namespace Directiva.SimulationFrontend
                         running = false;
                         accumulatedTime = 0;
                         ApplyPlaybackState();
+                        connectedEditor?.RefreshSimulationDebugger(followExecution: true);
                         break;
                     }
                     if (orchestrator.IsFinished) break;

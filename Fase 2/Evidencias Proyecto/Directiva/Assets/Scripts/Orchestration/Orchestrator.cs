@@ -51,6 +51,11 @@ namespace DOrchestration
         private int nextRound;
         private int nextBinding;
         private int roundsInScheduledTick;
+        private VMSourceStepPlan sourceStep;
+        private int sourceStepEntityId;
+        // Unlike the old StepEntity implementation, this is a REQUEST to the
+        // normal scheduler, never an out-of-turn call to DirectivaVM.Advance().
+        private int instructionStepEntityId;
 
         /// <summary>Debugging stops all VMs before the matching source instruction and
         /// leaves the simulation tick unfinished until Continue is requested.</summary>
@@ -249,8 +254,15 @@ namespace DOrchestration
                             binding.VM.RestartCompleted();
                             binding.ResetSourceLine();
                         }
-                        if (AdvanceOneLogicalStep(binding, checkBreakpoints: true))
-                            return; // Resume this exact VM turn after Continue/Step.
+                        if (AdvanceOneLogicalStep(binding, checkBreakpoints: true,
+                            consumeTrailingMetadata: false, consumedTurn: out bool consumedTurn))
+                        {
+                            // A source-level step stops AFTER its instruction. A
+                            // normal breakpoint stops BEFORE it; only the latter
+                            // must retain the selected scheduler turn on resume.
+                            if (consumedTurn) nextBinding++;
+                            return;
+                        }
                     }
                     nextBinding++;
                 }
@@ -264,43 +276,96 @@ namespace DOrchestration
                 Finish(MatchOutcome.Draw, MatchEndReason.TimeLimit);
             CompleteBuilds();
             RemoveDeadBindings();
+            // Either kind of debug step can span multiple scheduler rounds and
+            // physics ticks. A dying target must not leave the debugger running
+            // forever while waiting for an instruction that can never execute.
+            int steppingEntityId = sourceStep != null
+                ? sourceStepEntityId : instructionStepEntityId;
+            if (steppingEntityId != 0 &&
+                (!TryGetBinding(steppingEntityId, out EntityVMBinding target) ||
+                 !IsLivingBinding(target)))
+            {
+                CancelSourceStep();
+                if (!IsFinished)
+                {
+                    IsPausedAtBreakpoint = true;
+                    BreakpointEntityId = steppingEntityId;
+                }
+            }
         }
 
         /// <summary>Continue a paused source breakpoint without discarding its tick.</summary>
         public void ResumeFromBreakpoint()
         {
+            CancelSourceStep();
             IsPausedAtBreakpoint = false;
             BreakpointEntityId = 0;
         }
 
         /// <summary>
-        /// Execute exactly one charged instruction of the selected living VM.
-        /// Other VMs and physics do not advance. Zero-cost source metadata on
-        /// either side is consumed so the highlight follows a DScript statement.
-        /// This is an explicit debugging intervention into scheduling order.
+        /// Schedule a line-level step without bypassing VM fairness or physics.
+        /// The regular Update loop advances the entire match until this VM reaches
+        /// the requested source boundary. No unbounded work occurs in the UI click.
         /// </summary>
-        public bool StepEntity(int entityId)
+        public bool BeginSourceStep(int entityId, VMSourceStepMode mode)
         {
-            if (IsFinished || entityId <= 0) return false;
-            if (!TryGetBinding(entityId, out EntityVMBinding binding) ||
+            if (IsFinished || entityId <= 0 ||
+                !TryGetBinding(entityId, out EntityVMBinding binding) ||
                 !IsLivingBinding(binding) || binding.VM.Status == VMExecutionStatus.Faulted)
                 return false;
+
             if (binding.VM.Status == VMExecutionStatus.Completed)
             {
                 binding.VM.RestartCompleted();
                 binding.ResetSourceLine();
             }
-            // Stepping past the current paused instruction consumes that round's
-            // turn, so continuing cannot execute it a second time.
-            bool pendingTurn = scheduledTick != null && nextRound < roundsInScheduledTick &&
-                nextBinding < scheduledTick.Count &&
-                ReferenceEquals(scheduledTick[nextBinding], binding);
-            AdvanceOneLogicalStep(binding, checkBreakpoints: false, consumeTrailingMetadata: true);
-            if (pendingTurn) nextBinding++;
-            IsPausedAtBreakpoint = true;
-            BreakpointEntityId = entityId;
+
+            ConsumeDebugMetadata(binding.VM);
+            if (binding.VM.Status != VMExecutionStatus.Running)
+                return false;
+            CancelSourceStep();
+            sourceStep = new VMSourceStepPlan(binding.VM, mode);
+            sourceStepEntityId = entityId;
+            IsPausedAtBreakpoint = false;
+            BreakpointEntityId = 0;
             return true;
         }
+
+        /// <summary>
+        /// Cancel a pending source-line or single-instruction debug request.
+        /// Pause, Stop, Continue and breakpoints must all discard these requests.
+        /// </summary>
+        public void CancelSourceStep()
+        {
+            sourceStep = null;
+            sourceStepEntityId = 0;
+            instructionStepEntityId = 0;
+        }
+
+        /// <summary>
+        /// Request one charged instruction of the selected VM, WITHOUT executing it
+        /// outside the deterministic scheduler. Update() runs all intervening VM
+        /// turns and world ticks normally, then pauses just after the target VM's
+        /// next scheduled instruction. Calling this method does no VM work.
+        /// </summary>
+        public bool BeginInstructionStep(int entityId)
+        {
+            if (IsFinished || entityId <= 0 ||
+                !TryGetBinding(entityId, out EntityVMBinding binding) ||
+                !IsLivingBinding(binding) || binding.VM.Status == VMExecutionStatus.Faulted)
+                return false;
+
+            // A completed VM is restarted at its scheduled turn by Update(), not
+            // ahead of its neighbors merely because the debugger selected it.
+            CancelSourceStep();
+            instructionStepEntityId = entityId;
+            IsPausedAtBreakpoint = false;
+            BreakpointEntityId = 0;
+            return true;
+        }
+
+        /// <summary>Compatibility entry point; stepping is now asynchronous and fair.</summary>
+        public bool StepEntity(int entityId) => BeginInstructionStep(entityId);
 
         public bool TryGetDebugState(int entityId, out VMDebugState debug)
         {
@@ -336,17 +401,27 @@ namespace DOrchestration
 
         /// <returns>True when the VM stopped at a breakpoint before execution.</returns>
         private bool AdvanceOneLogicalStep(EntityVMBinding binding, bool checkBreakpoints,
-            bool consumeTrailingMetadata = false)
+            bool consumeTrailingMetadata, out bool consumedTurn)
         {
+            consumedTurn = false;
             DirectivaVM vm = binding.VM;
             ConsumeDebugMetadata(vm);
             if (vm.Status == VMExecutionStatus.Running)
             {
                 bool enteredLine = binding.EnteredNewSourceLine();
-                if (checkBreakpoints && enteredLine && BreakpointPredicate != null &&
+                // Returning from a callee re-enters the caller's original source
+                // line. During a source step this is still the same instruction,
+                // not a new breakpoint: do not stop at the breakpoint we stepped
+                // away from. All other breakpoints keep their usual behavior.
+                bool isStepOrigin = sourceStep != null &&
+                    sourceStepEntityId == binding.EntityId &&
+                    sourceStep.IsStartingLocation(vm);
+                if (checkBreakpoints && enteredLine && !isStepOrigin &&
+                    BreakpointPredicate != null &&
                     BreakpointPredicate(binding.SideId, binding.EntityId, vm.Debug.File,
                         vm.Debug.Line + 1))
                 {
+                    CancelSourceStep(); // An explicit breakpoint preempts either step mode.
                     IsPausedAtBreakpoint = true;
                     BreakpointEntityId = binding.EntityId;
                     BreakpointHit?.Invoke(binding.EntityId, vm.Debug.Snapshot());
@@ -354,13 +429,36 @@ namespace DOrchestration
                 }
                 vm.Advance();
                 TotalVmSteps++;
-                if (consumeTrailingMetadata) ConsumeDebugMetadata(vm);
+                consumedTurn = true;
+                if (consumeTrailingMetadata ||
+                    (sourceStep != null && sourceStepEntityId == binding.EntityId) ||
+                    (instructionStepEntityId == binding.EntityId))
+                    ConsumeDebugMetadata(vm);
             }
             if (vm.Status == VMExecutionStatus.Faulted && binding.RecoverAtTick < 0)
             {
                 binding.RecoverAtTick = checked(simulation.Tick + faultRestartDelayTicks);
                 GetSide(binding.SideId).ReportError(binding);
                 EntityFaulted?.Invoke(binding.EntityId);
+            }
+            if (sourceStep != null && sourceStepEntityId == binding.EntityId &&
+                (vm.Status != VMExecutionStatus.Running || sourceStep.ReachedTarget(vm)))
+            {
+                CancelSourceStep();
+                IsPausedAtBreakpoint = true;
+                BreakpointEntityId = binding.EntityId;
+                return true;
+            }
+            if (instructionStepEntityId == binding.EntityId &&
+                (consumedTurn || vm.Status != VMExecutionStatus.Running))
+            {
+                // Only a NORMAL scheduler turn can complete a processor step.
+                // Update() advances its cursor before returning from this pause,
+                // so Continue cannot repeat the selected instruction.
+                CancelSourceStep();
+                IsPausedAtBreakpoint = true;
+                BreakpointEntityId = binding.EntityId;
+                return true;
             }
             return false;
         }
@@ -421,6 +519,7 @@ namespace DOrchestration
         private void Finish(MatchOutcome outcome, MatchEndReason reason)
         {
             if (IsFinished) return;
+            CancelSourceStep();
             Outcome = outcome;
             EndReason = reason;
             FinishedAtTick = simulation.Tick;

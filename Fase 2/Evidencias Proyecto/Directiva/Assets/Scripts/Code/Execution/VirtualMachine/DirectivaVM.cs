@@ -1334,6 +1334,15 @@ namespace DSExecution.VirtualMachine
                 return VMAdvanceResult.Completed(result);
             }
 
+            // The callee changed the shared visible source position. Restore the
+            // caller's last DEBUG_* metadata, including when its next instruction
+            // is on the very same DScript line as the call.
+            CallFrame callerSource = callStack[callStack.Count - 1];
+            Debug.File = callerSource.SourceFile;
+            Debug.Line = callerSource.SourceLine;
+            Debug.SpanStart = callerSource.SourceSpanStart;
+            Debug.SpanEnd = callerSource.SourceSpanEnd;
+
             if (!evaluationStack.TryPush(result))
                 return Fault(RuntimeError.StackOverflow());
 
@@ -1380,6 +1389,7 @@ namespace DSExecution.VirtualMachine
             }
 
             Debug.File = fileName;
+            frame.SourceFile = fileName;
             return AdvanceInstruction(frame);
         }
 
@@ -1395,6 +1405,7 @@ namespace DSExecution.VirtualMachine
             }
 
             Debug.Line = line;
+            frame.SourceLine = line;
             return AdvanceInstruction(frame);
         }
 
@@ -1411,6 +1422,8 @@ namespace DSExecution.VirtualMachine
 
             Debug.SpanStart = start;
             Debug.SpanEnd = end;
+            frame.SourceSpanStart = start;
+            frame.SourceSpanEnd = end;
             return AdvanceInstruction(frame);
         }
 

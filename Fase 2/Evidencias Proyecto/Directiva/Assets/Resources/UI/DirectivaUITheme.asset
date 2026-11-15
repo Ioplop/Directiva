@@ -55,6 +55,7 @@ MonoBehaviour:
     script: {fileID: 21300000, guid: 3b0a9b9bf47a1974698e5971c7df6643, type: 3}
     folder: {fileID: 21300000, guid: cb6af3045c07b504094218e2f4d17e2a, type: 3}
     step: {fileID: 21300000, guid: 30c058a0c2347c744bafd4e6af07a3bc, type: 3}
+    stepInstruction: {fileID: 21300000, guid: 8c650ca5eb1c4d24e88faec18382560d, type: 3}
     stepIn: {fileID: 21300000, guid: 5219da18b06eb684ca79754546b834e3, type: 3}
     stepOut: {fileID: 21300000, guid: ec48340fb755b814683c6a9abb0eae75, type: 3}
     breakpoint: {fileID: 21300000, guid: ba3de0d383bb4e24eba0052823fb79e0, type: 3}

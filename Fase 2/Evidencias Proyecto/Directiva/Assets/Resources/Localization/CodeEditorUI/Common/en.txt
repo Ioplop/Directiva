@@ -3,10 +3,11 @@
 [stop]: Stop
 [pause]: Pause
 [continue]: Continue
-[step]: Step
+[step]: Step Over
 [execution_steps]: Steps
-[step_in]: Step In
+[step_in]: Step Into
 [step_out]: Step Out
+[step_instruction]: VM Instruction
 [back]: Back
 [options]: Options
 [create]: Create

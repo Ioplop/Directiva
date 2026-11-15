@@ -5,9 +5,10 @@
 [stop]: Detener ejecución
 [pause]: Pausar ejecución
 [continue]: Continuar ejecución
-[step]: Ejecutar siguiente instrucción
-[step_in]: Entrar en la llamada actual
-[step_out]: Salir de la llamada actual
+[step]: Avanzar a la siguiente línea sin detenerse dentro de funciones llamadas.
+[step_in]: Avanzar a la siguiente línea, entrando en una función si se llama.
+[step_out]: Continuar hasta salir de la función actual.
+[step_instruction]: Avanzar una instrucción de la máquina virtual.
 [back]: Atrás
 [options]: Opciones
 [expand_folder]: Expandir carpeta

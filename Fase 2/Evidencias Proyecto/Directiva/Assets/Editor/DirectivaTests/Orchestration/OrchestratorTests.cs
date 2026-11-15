@@ -157,7 +157,7 @@ namespace Directiva.EditorTests.OrchestrationTests
             });
 
             Add("BreakpointPausesBeforeWorldAndResumesSameTick",
-                "Any friendly VM breakpoint freezes physics; Step advances only that VM", t =>
+                "A paused breakpoint retains the selected VM turn until its scheduled processor step", t =>
             {
                 Fixture f = NewFixture(withAlly: true);
                 Orchestrator o = Create(t, f,
@@ -174,7 +174,12 @@ namespace Directiva.EditorTests.OrchestrationTests
                 t.Check(o.HasPendingTick, "partially scheduled tick retained");
                 t.Equal(0L, f.World.Tick, "simulation physics has not advanced");
                 long beforeStep = o.TotalVmSteps;
-                t.Check(o.StepEntity(f.FirstUnit.id), "manually advance the paused VM");
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id),
+                    "schedule one instruction of the selected VM");
+                t.Equal(beforeStep, o.TotalVmSteps,
+                    "requesting a step does not execute a VM out of turn");
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "processor step paused after its scheduled turn");
                 t.Equal(beforeStep + 1, o.TotalVmSteps, "exactly one charged step");
                 t.Equal(0L, f.World.Tick, "manual step does not move the world");
                 t.Check(o.TryGetDebugState(f.FirstUnit.id, out var debug),
@@ -187,6 +192,284 @@ namespace Directiva.EditorTests.OrchestrationTests
                 t.Check(!o.HasPendingTick, "no stale tick cursor after resume");
                 t.Equal(6L, o.TotalVmSteps,
                     "2 VMs x 3 scheduled turns, including the single manual step");
+            });
+
+            Add("InstructionStepWaitsForOwnTurn",
+                "Repeated processor steps cannot skip the intervening entity VM", t =>
+            {
+                Fixture f = NewFixture(withAlly: true);
+                Orchestrator o = Create(t, f,
+                    "def main():\n    print(self.id)\n    pass\n", steps: 4);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BindInitialEntity(f.Ally.id, "test.main");
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    id == f.FirstUnit.id && line == 2;
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "break before the first VM turn");
+                o.BreakpointPredicate = null;
+
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "request first step");
+                long initial = o.TotalVmSteps;
+                o.Update();
+                t.Equal(initial + 1, o.TotalVmSteps, "first turn belongs to selected VM");
+                t.Check(o.IsPausedAtBreakpoint, "first step completed");
+
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "request second step");
+                long beforeSecond = o.TotalVmSteps;
+                o.Update();
+                t.Equal(beforeSecond + 2, o.TotalVmSteps,
+                    "the ally takes its turn before the second selected step");
+                t.Check(o.IsPausedAtBreakpoint, "second step completed");
+                t.Equal(0L, f.World.Tick, "still the same partially scheduled tick");
+                o.ResumeFromBreakpoint();
+                o.Update();
+                t.Equal(1L, f.World.Tick, "remaining turns and physics execute once");
+                t.Equal(8L, o.TotalVmSteps, "two VMs x four ordered turns");
+            });
+
+            Add("InstructionStepCrossesTickBoundary",
+                "Processor stepping performs intervening physics when selected turn is next tick", t =>
+            {
+                Fixture f = NewFixture(withAlly: true);
+                Orchestrator o = Create(t, f,
+                    "def main():\n    print(self.id)\n", steps: 1);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BindInitialEntity(f.Ally.id, "test.main");
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    id == f.FirstUnit.id && line == 2;
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "initial breakpoint");
+                o.BreakpointPredicate = null;
+
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "first step");
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "first turn consumed");
+                t.Equal(0L, f.World.Tick, "tick has not yet completed");
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "step across tick boundary");
+                o.Update();
+                t.Check(!o.IsPausedAtBreakpoint, "target had no remaining turn in this tick");
+                t.Equal(1L, f.World.Tick, "physics executed after ally's turn");
+                t.Equal(2L, o.TotalVmSteps, "both entities ran once before physics");
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "next selected VM turn reached");
+                t.Equal(3L, o.TotalVmSteps, "exactly one additional selected instruction");
+                t.Equal(1L, f.World.Tick, "next world tick remains unfinished at breakpoint");
+            });
+
+            Add("InstructionStepPreemptedByOtherBreakpoint",
+                "A breakpoint in an intervening VM cancels the outstanding processor step", t =>
+            {
+                Fixture f = NewFixture(withAlly: true);
+                Orchestrator o = Create(t, f,
+                    "def main():\n    print(self.id)\n    pass\n", steps: 3);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BindInitialEntity(f.Ally.id, "test.main");
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    id == f.FirstUnit.id && line == 2;
+                o.Update();
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "step first entity once");
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "first entity step completed");
+                long before = o.TotalVmSteps;
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    id == f.Ally.id && line == 2;
+                t.Check(o.BeginInstructionStep(f.FirstUnit.id), "wait for next scheduled first turn");
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "intervening breakpoint preempts the step");
+                t.Equal(f.Ally.id, o.BreakpointEntityId, "stopped at the ally's breakpoint");
+                t.Equal(before, o.TotalVmSteps, "ally instruction not executed yet");
+                o.BreakpointPredicate = null;
+                o.ResumeFromBreakpoint();
+                o.Update();
+                t.Check(!o.IsPausedAtBreakpoint, "the canceled processor step does not pause again");
+                t.Equal(1L, f.World.Tick, "remaining schedule completed normally");
+                t.Equal(6L, o.TotalVmSteps, "no skipped or duplicated VM turns");
+            });
+
+            Add("InstructionSteppingPreservesFullMatchTrace",
+                "A debugged match has identical outputs, positions and step totals to uninterrupted play", t =>
+            {
+                const string script =
+                    "def main():\n    move(22, 20)\n    print(self.id)\n";
+                Fixture normalFixture = NewFixture(seed: 9981UL, withAlly: true);
+                Fixture debugFixture = NewFixture(seed: 9981UL, withAlly: true);
+                Orchestrator normal = Create(t, normalFixture, script, steps: 8);
+                Orchestrator debug = Create(t, debugFixture, script, steps: 8);
+                void BindAll(Orchestrator o, Fixture f)
+                {
+                    o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                    o.BindInitialEntity(f.Ally.id, "test.main");
+                    o.BindInitialEntity(f.SecondUnit.id, "test.main");
+                }
+                BindAll(normal, normalFixture);
+                BindAll(debug, debugFixture);
+                debug.BreakpointPredicate = (side, id, file, line) =>
+                    id == debugFixture.FirstUnit.id && line == 2;
+                debug.Update();
+                t.Check(debug.IsPausedAtBreakpoint, "first source breakpoint hit");
+                debug.BreakpointPredicate = null;
+
+                // Deliberately select the same VM multiple times, including
+                // when its turn is NOT next in the global entity-ID ordering.
+                for (int i = 0; i < 19; i++)
+                {
+                    t.Check(debug.BeginInstructionStep(debugFixture.FirstUnit.id),
+                        "processor step request #" + i);
+                    int ticks = 0;
+                    while (!debug.IsPausedAtBreakpoint && !debug.IsFinished && ticks++ < 8)
+                        debug.Update();
+                    t.Check(debug.IsPausedAtBreakpoint, "processor step finished #" + i);
+                    debug.ResumeFromBreakpoint();
+                }
+                while (debug.Simulation.Tick < 30 && !debug.IsFinished) debug.Update();
+                while (normal.Simulation.Tick < 30 && !normal.IsFinished) normal.Update();
+                t.Equal(30L, debugFixture.World.Tick, "debug run reached requested tick");
+                t.Equal(normalFixture.World.Tick, debugFixture.World.Tick, "identical world ticks");
+                t.Equal(normalFixture.World.Time.RawValue, debugFixture.World.Time.RawValue,
+                    "identical simulated time");
+                t.Equal(normal.TotalVmSteps, debug.TotalVmSteps,
+                    "identical number of VM instructions");
+                t.Equal(normalFixture.FirstUnit.Position.X.RawValue,
+                    debugFixture.FirstUnit.Position.X.RawValue, "first unit X");
+                t.Equal(normalFixture.FirstUnit.Position.Y.RawValue,
+                    debugFixture.FirstUnit.Position.Y.RawValue, "first unit Y");
+                t.Equal(normalFixture.Ally.Position.X.RawValue,
+                    debugFixture.Ally.Position.X.RawValue, "ally X");
+                t.Equal(normalFixture.Ally.Position.Y.RawValue,
+                    debugFixture.Ally.Position.Y.RawValue, "ally Y");
+                t.Equal(normalFixture.SecondUnit.Position.X.RawValue,
+                    debugFixture.SecondUnit.Position.X.RawValue, "enemy X");
+                t.Equal(normalFixture.SecondUnit.Position.Y.RawValue,
+                    debugFixture.SecondUnit.Position.Y.RawValue, "enemy Y");
+                string[] Trace(Orchestrator o) =>
+                    o.GetOutput(1).Concat(o.GetOutput(2))
+                        .OrderBy(m => m.Sequence)
+                        .Select(m => m.Sequence + ":" + m.Tick + ":" + m.SideId + ":" +
+                            m.EntityId + ":" + m.Kind + ":" + m.Text).ToArray();
+                string[] normalTrace = Trace(normal);
+                string[] debugTrace = Trace(debug);
+                t.Check(normalTrace.Length > 10, "trace exercises repeated interleaved prints");
+                t.Equal(string.Join("\n", normalTrace), string.Join("\n", debugTrace),
+                    "identical attributed logs in identical order");
+            });
+
+            Add("SourceStepOverSchedulesWorld", "Step Over crosses functions using normal fair match ticks", t =>
+            {
+                const string source =
+                    "def child():\n    print('inner')\n    return 3\n" +
+                    "def main():\n    value = child()\n    print('outer')\n";
+                Fixture f = NewFixture(withAlly: true);
+                Orchestrator o = Create(t, f, source, steps: 2);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BindInitialEntity(f.Ally.id, "test.main");
+                int breakpointHits = 0;
+                o.BreakpointHit += (id, position) => breakpointHits++;
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    side == 1 && id == f.FirstUnit.id && line == 5;
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "stop before calling child");
+                t.Equal(1, breakpointHits, "entry breakpoint hit once");
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Over), "start step over");
+                int ticks = 0;
+                while (!o.IsPausedAtBreakpoint && !o.IsFinished && ticks++ < 300) o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "pause at next caller line");
+                t.Check(o.TryGetDebugState(f.FirstUnit.id, out VMDebugState position),
+                    "source position available");
+                t.Equal(5, position.Line, "line 6 is next caller line (zero based)");
+                t.Equal(1, breakpointHits,
+                    "step over must not re-trigger the original breakpoint upon return");
+                t.Check(f.World.Tick > 0L, "physics advanced normally during source step");
+                t.Equal(1, Messages(o, 1, VMOutputKind.Print).Count(m =>
+                    m.EntityId == f.FirstUnit.id && m.Text == "inner"),
+                    "selected helper ran only once");
+                o.BreakpointPredicate = null;
+                o.ResumeFromBreakpoint();
+                for (int i = 0; i < 300 &&
+                    !Messages(o, 1, VMOutputKind.Print).Any(m =>
+                        m.EntityId == f.FirstUnit.id && m.Text == "outer"); i++)
+                    o.Update();
+                t.Check(Messages(o, 1, VMOutputKind.Print).Any(m =>
+                    m.EntityId == f.FirstUnit.id && m.Text == "outer"),
+                    "caller continued past the paused source step");
+                t.Equal(1, Messages(o, 1, VMOutputKind.Print).Count(m =>
+                    m.EntityId == f.FirstUnit.id && m.Text == "inner"),
+                    "resuming the partial tick did not replay the selected VM turn");
+            });
+
+            Add("SourceStepOverHonorsCalleeBreakpoint",
+                "Step Over skips its origin breakpoint but still honors breakpoints in called functions", t =>
+            {
+                const string source =
+                    "def child():\n    print('inner')\n    return 3\n" +
+                    "def main():\n    value = child()\n    print('outer')\n";
+                Fixture f = NewFixture();
+                Orchestrator o = Create(t, f, source, steps: 2);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                int breakpointHits = 0;
+                o.BreakpointHit += (id, position) => breakpointHits++;
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    side == 1 && id == f.FirstUnit.id && (line == 5 || line == 2);
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "paused at caller call site");
+                t.Equal(1, breakpointHits, "caller breakpoint hit");
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Over),
+                    "started step over");
+                for (int i = 0; i < 300 && !o.IsPausedAtBreakpoint; i++) o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "callee breakpoint preempted step over");
+                t.Equal(f.FirstUnit.id, o.BreakpointEntityId, "callee breakpoint entity");
+                t.Check(o.TryGetDebugState(f.FirstUnit.id, out VMDebugState inside),
+                    "callee source available");
+                t.Equal(1, inside.Line, "stopped at callee's first executable line");
+                t.Equal(2, breakpointHits, "different breakpoint was not suppressed");
+                t.Equal(0, Messages(o, 1, VMOutputKind.Print).Count(m =>
+                    m.EntityId == f.FirstUnit.id && m.Text == "inner"),
+                    "callee breakpoint stops before print executes");
+            });
+
+            Add("SourceStepIntoAndOut", "Step Into enters the callee; Step Out returns to caller", t =>
+            {
+                const string source =
+                    "def child():\n    pass\n    return 3\n" +
+                    "def main():\n    value = child()\n    pass\n";
+                Fixture f = NewFixture();
+                Orchestrator o = Create(t, f, source, steps: 2);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    side == 1 && id == f.FirstUnit.id && line == 5;
+                o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "initial breakpoint hit");
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Into), "start into");
+                for (int i = 0; i < 300 && !o.IsPausedAtBreakpoint; i++) o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "entered callee");
+                t.Check(o.TryGetDebugState(f.FirstUnit.id, out VMDebugState inside), "debug inside");
+                t.Equal(1, inside.Line, "first line of child");
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Out), "start out");
+                for (int i = 0; i < 300 && !o.IsPausedAtBreakpoint; i++) o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "returned to main");
+                t.Check(o.TryGetDebugState(f.FirstUnit.id, out VMDebugState caller), "debug after return");
+                t.Equal(4, caller.Line, "caller's original call line restored");
+            });
+
+            Add("SourceStepOutInfiniteKeepsTimeMoving", "Infinite callee does not block orchestration or physics", t =>
+            {
+                const string source =
+                    "def loop():\n    while True:\n        pass\n" +
+                    "def main():\n    loop()\n";
+                Fixture f = NewFixture();
+                Orchestrator o = Create(t, f, source, steps: 2);
+                o.BindInitialEntity(f.FirstUnit.id, "test.main");
+                o.BreakpointPredicate = (side, id, file, line) =>
+                    side == 1 && id == f.FirstUnit.id && line == 5;
+                o.Update();
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Into), "enter loop");
+                for (int i = 0; i < 300 && !o.IsPausedAtBreakpoint; i++) o.Update();
+                t.Check(o.IsPausedAtBreakpoint, "paused in loop");
+                t.Check(o.BeginSourceStep(f.FirstUnit.id, VMSourceStepMode.Out), "try to exit loop");
+                long oldTick = f.World.Tick;
+                for (int i = 0; i < 40; i++) o.Update();
+                t.Check(!o.IsPausedAtBreakpoint, "no fake completion on infinite loop");
+                t.Check(f.World.Tick > oldTick, "normal physics ticks continue while stepping out");
+                o.CancelSourceStep();
             });
 
             Add("FaultRecoveryPreservesSharedMemory",

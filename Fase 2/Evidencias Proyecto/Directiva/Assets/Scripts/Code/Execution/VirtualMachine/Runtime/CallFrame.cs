@@ -24,6 +24,12 @@ namespace DSExecution.VirtualMachine
         }
 
         public FunctionContext Function { get; }
+        // Keep DEBUG_* with the frame without allocating an extra debug object
+        // on every function call (recursive DScript can create many frames).
+        public string SourceFile { get; set; }
+        public int SourceLine { get; set; } = -1;
+        public int SourceSpanStart { get; set; } = -1;
+        public int SourceSpanEnd { get; set; } = -1;
         public LocalMemory Locals { get; }
         public int EvalStackBase { get; }
         public int InstructionPointer { get; set; }
