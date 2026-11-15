@@ -10,6 +10,8 @@ public class VisualEntity : MonoBehaviour
     [SerializeField] private Transform nozzle;
     [SerializeField] private Transform center;
     [SerializeField] private SideColorGiver side;
+    // Optional; only unit prefabs need to assign this initially.
+    [SerializeField] private ShieldHitAnimator shield;
 
     [Header("Death")]
     [SerializeField] private GameObject deathEffectPrefab;
@@ -23,6 +25,13 @@ public class VisualEntity : MonoBehaviour
     public Vector3 CenterPosition => Center.position;
 
     public SideColorGiver Side => side;
+
+    /// <summary>Shows a hit on the optional shield mesh; no effect if unassigned.</summary>
+    public void ShowShieldHit(Vector3 attackerWorldPosition)
+    {
+        if (shield != null)
+            shield.ShowHit(attackerWorldPosition);
+    }
 
     /// <summary>
     /// Plays the death effect and destroys this visual entity.

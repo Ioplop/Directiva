@@ -17,20 +17,20 @@ MonoBehaviour:
   codeBoldFont: {fileID: 11400000, guid: b60bf10205cf38248ac02089b9a2cf6c, type: 2}
   codeSyntaxColors:
     enabled: 1
-    plain: {r: 0.83137255, g: 0.83137255, b: 0.83137255, a: 1}
-    keyword: {r: 0.77254902, g: 0.52549020, b: 0.75294118, a: 1}
-    literal: {r: 0.33725490, g: 0.61176471, b: 0.83921569, a: 1}
-    number: {r: 0.70980392, g: 0.80784314, b: 0.65882353, a: 1}
-    stringLiteral: {r: 0.80784314, g: 0.56862745, b: 0.47058824, a: 1}
-    comment: {r: 0.41568627, g: 0.60000000, b: 0.33333333, a: 1}
-    operation: {r: 0.83137255, g: 0.83137255, b: 0.83137255, a: 1}
-    variable: {r: 0.61176471, g: 0.86274510, b: 0.99607843, a: 1}
-    sharedVariable: {r: 0.30588235, g: 0.78823529, b: 0.69019608, a: 1}
-    function: {r: 0.86274510, g: 0.86274510, b: 0.66666667, a: 1}
-    module: {r: 0.30980392, g: 0.75686275, b: 1.00000000, a: 1}
-    member: {r: 0.86274510, g: 0.86274510, b: 0.66666667, a: 1}
-  mainMenuLogo: {fileID: 21300000, guid: bd9f5f0542069fc4981a70c259cb7646, type: 3}
-  mainMenuLogoHeight: 140
+    plain: {r: 0.83137256, g: 0.83137256, b: 0.83137256, a: 1}
+    keyword: {r: 0.77254903, g: 0.5254902, b: 0.7529412, a: 1}
+    literal: {r: 0.3372549, g: 0.6117647, b: 0.8392157, a: 1}
+    number: {r: 0.70980394, g: 0.80784315, b: 0.65882355, a: 1}
+    stringLiteral: {r: 0.80784315, g: 0.5686275, b: 0.47058824, a: 1}
+    comment: {r: 0.41568628, g: 0.6, b: 0.33333334, a: 1}
+    operation: {r: 0.83137256, g: 0.83137256, b: 0.83137256, a: 1}
+    variable: {r: 0.6117647, g: 0.8627451, b: 0.99607843, a: 1}
+    sharedVariable: {r: 0.30588236, g: 0.7882353, b: 0.6901961, a: 1}
+    function: {r: 0.8627451, g: 0.8627451, b: 0.6666667, a: 1}
+    module: {r: 0.30980393, g: 0.75686276, b: 1, a: 1}
+    member: {r: 0.8627451, g: 0.8627451, b: 0.6666667, a: 1}
+  mainMenuLogo: {fileID: -5313765715294466809, guid: 2fa66eee8ad7e8d4eb8fdd78e3e8ce69, type: 3}
+  mainMenuLogoHeight: 150
   mainMenuLogoMaxWidth: 720
   icons:
     play: {fileID: 21300000, guid: c1da2773ec4b5c74c83309188c9c2efe, type: 3}
@@ -51,6 +51,7 @@ MonoBehaviour:
     revert: {fileID: 21300000, guid: 094f82ea32bb24248a32cbaf93168c41, type: 3}
     addScript: {fileID: 21300000, guid: 6f3b0c4b36220c946981af9f1f3eef0c, type: 3}
     addFolder: {fileID: 21300000, guid: 64a8257df3d93804a9e06d7f45521859, type: 3}
+    openScriptsFolder: {fileID: 21300000, guid: cb6af3045c07b504094218e2f4d17e2a, type: 3}
     script: {fileID: 21300000, guid: 3b0a9b9bf47a1974698e5971c7df6643, type: 3}
     folder: {fileID: 21300000, guid: cb6af3045c07b504094218e2f4d17e2a, type: 3}
     step: {fileID: 21300000, guid: 30c058a0c2347c744bafd4e6af07a3bc, type: 3}

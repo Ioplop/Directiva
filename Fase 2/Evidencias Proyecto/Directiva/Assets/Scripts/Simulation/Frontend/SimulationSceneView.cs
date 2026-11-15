@@ -52,6 +52,8 @@ namespace Directiva.SimulationFrontend
             internal SimulationTransformInterpolator Interpolator;
             internal FixedVector2 Position;
             internal Fixed Rotation;
+            // Event-stream value, not the final post-tick simulation state.
+            internal Fixed Shields;
         }
 
         private sealed class ActiveGather
@@ -183,10 +185,15 @@ namespace Directiva.SimulationFrontend
                         statusOverlay?.SetHealth(healthEvent.id, healthEvent.health);
                         break;
                     case EventShields shieldsEvent:
+                        // This event may be caused by damage OR regeneration. Keep
+                        // the event-time value for the next EventAttack in this tick.
+                        if (entities.TryGetValue(shieldsEvent.id, out EntityVisual shielded))
+                            shielded.Shields = shieldsEvent.shields;
                         statusOverlay?.SetShields(shieldsEvent.id, shieldsEvent.shields);
                         break;
                     case EventAttack attackEvent:
                         SpawnAttack(attackEvent.attackerId, attackEvent.targetId);
+                        SpawnShieldHit(attackEvent.attackerId, attackEvent.targetId);
                         break;
                     case EventGather gatherEvent:
                         BeginGather(gatherEvent.gethererId, gatherEvent.resourceId);
@@ -255,7 +262,8 @@ namespace Directiva.SimulationFrontend
                 View = visual,
                 Interpolator = interpolator,
                 Position = position,
-                Rotation = rotation
+                Rotation = rotation,
+                Shields = status.Shields
             });
             if (kind == SimulationVisualKind.Resource)
                 statusOverlay?.TrackResource(id, visual.Center, status, amount, capacity);
@@ -305,6 +313,26 @@ namespace Directiva.SimulationFrontend
                 effectContainer != null ? effectContainer : transform);
             effect.Align(attacker.NozzlePosition, target.CenterPosition);
         }
+
+        /// <summary>
+        /// Shield damage is reported AFTER EventAttack. Use the view's shield
+        /// snapshot, advanced in event order, so the hit that exhausts the last
+        /// shield points still flashes, while later hits against health do not.
+        /// </summary>
+        private void SpawnShieldHit(int attackerId, int targetId)
+        {
+            if (!entities.TryGetValue(targetId, out EntityVisual target) ||
+                target.View == null || !ShouldAnimateShieldHit(target.Shields) ||
+                !TryGetVisual(attackerId, out VisualEntity attacker))
+                return;
+
+            // The shader wants a world-space attacker position; the animator
+            // converts it to the shield mesh's own local coordinates.
+            target.View.ShowShieldHit(attacker.NozzlePosition);
+        }
+
+        /// <summary>Whether shields existed when the attack was emitted.</summary>
+        public static bool ShouldAnimateShieldHit(Fixed shieldsBeforeAttack) => shieldsBeforeAttack > 0;
 
         private void BeginGather(int unitId, int resourceId)
         {

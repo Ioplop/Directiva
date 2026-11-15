@@ -5,6 +5,7 @@ using Directiva.SimulationFrontend;
 using Directiva.SimulationUI;
 using DSimulation;
 using DMath;
+using DSEvents;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -63,6 +64,61 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 t.Equal(new Vector2(38f, -22f), clamped, "focus cannot leave the world");
                 t.Equal(new Vector2(0f, 0f), CameraController.ClampToBounds(Vector2.zero, bounds),
                     "a point within the world is unchanged");
+            });
+
+            Add("ShieldHitOnlyWhenShieldsRemainBeforeAttack",
+                "The last shield point absorbs an impact; health-only hits do not flash", t =>
+            {
+                t.Check(!SimulationSceneView.ShouldAnimateShieldHit((Fixed)0),
+                    "zero shield points never trigger the shield flash");
+                t.Check(!SimulationSceneView.ShouldAnimateShieldHit((Fixed)(-1)),
+                    "nonpositive shield values cannot trigger the flash");
+                t.Check(SimulationSceneView.ShouldAnimateShieldHit((Fixed)1),
+                    "even the very last shield point flashes on impact");
+                t.Check(SimulationSceneView.ShouldAnimateShieldHit((Fixed)50),
+                    "an intact shield flashes on impact");
+            });
+
+            Add("ShieldAttackEventPrecedesShieldUpdate",
+                "An actual simulated attack is emitted before its shield damage event", t =>
+            {
+                var world = new DSimulation.Simulation(123UL, new FixedVector2(40, 40));
+                var enemy = new SBUnit(world.GetSide(2), new FixedVector2(15, 10), (Fixed)180);
+                var nexus = new SBNexus(world.GetSide(1), new FixedVector2(10, 10));
+                world.EnqueueCreation(enemy);
+                world.EnqueueCreation(nexus);
+                world.Start();
+                while (world.TryConsumeEvent(out DSEvents.Event ignored)) { }
+
+                Fixed shieldsBefore = enemy.Shields;
+                t.Check(shieldsBefore > 0, "enemy initially has shields");
+                world.Update();
+
+                int attackIndex = -1;
+                int changeIndex = -1;
+                Fixed shieldsAtAttack = shieldsBefore;
+                Fixed eventShields = shieldsBefore;
+                int index = 0;
+                while (world.TryConsumeEvent(out DSEvents.Event message))
+                {
+                    if (message is EventAttack attack && attack.targetId == enemy.id)
+                    {
+                        attackIndex = index;
+                        shieldsAtAttack = eventShields;
+                    }
+                    if (message is EventShields change && change.id == enemy.id)
+                    {
+                        changeIndex = index;
+                        eventShields = change.shields;
+                    }
+                    index++;
+                }
+
+                t.Check(attackIndex >= 0, "an attack event was emitted");
+                t.Check(changeIndex > attackIndex, "shield damage follows the attack event");
+                t.Check(SimulationSceneView.ShouldAnimateShieldHit(shieldsAtAttack),
+                    "the frontend still observes the pre-damage shields at attack time");
+                t.Equal(enemy.Shields, eventShields, "subsequent shield event updates the visual cache");
             });
 
             Add("PlaybackSpeedButtonsUseFiveAndTwenty",
