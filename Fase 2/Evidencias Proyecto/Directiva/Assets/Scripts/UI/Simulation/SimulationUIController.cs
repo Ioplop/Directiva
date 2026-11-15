@@ -295,8 +295,8 @@ namespace Directiva.SimulationUI
 
             controls.Add(CreateControlButton(_theme?.icons?.slowMotion, "slow_motion", () => SelectSpeed("0.25×"), controlEvents.slowMotion, false));
             controls.Add(CreateControlButton(null, "normal_speed", () => SelectSpeed("1×"), controlEvents.normalSpeed, false, "1×"));
-            controls.Add(CreateControlButton(_theme?.icons?.doubleSpeed, "double_speed", () => SelectSpeed("2×"), controlEvents.doubleSpeed, false));
-            controls.Add(CreateControlButton(_theme?.icons?.quintupleSpeed, "quintuple_speed", () => SelectSpeed("5×"), controlEvents.quintupleSpeed, false));
+            controls.Add(CreateControlButton(_theme?.icons?.doubleSpeed, "double_speed", () => SelectSpeed("5×"), controlEvents.doubleSpeed, false));
+            controls.Add(CreateControlButton(_theme?.icons?.quintupleSpeed, "quintuple_speed", () => SelectSpeed("20×"), controlEvents.quintupleSpeed, false));
 
             _statusLabel = new Label(T("status_stopped") + " · 1×");
             _statusLabel.AddToClassList("sim-status");

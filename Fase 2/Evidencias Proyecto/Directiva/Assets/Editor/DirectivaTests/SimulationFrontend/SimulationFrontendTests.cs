@@ -65,6 +65,29 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                     "a point within the world is unchanged");
             });
 
+            Add("PlaybackSpeedButtonsUseFiveAndTwenty",
+                "Fast buttons select 5x and 20x without changing normal or slow motion", t =>
+            {
+                var gameObject = new GameObject("test-simulation-playback-speeds");
+                try
+                {
+                    var synchronizer = gameObject.AddComponent<SimulationSceneSynchronizer>();
+                    synchronizer.DoubleSpeed();
+                    t.Equal(5f, synchronizer.PlaybackSpeed, "first fast button uses x5");
+                    synchronizer.QuintupleSpeed();
+                    t.Equal(20f, synchronizer.PlaybackSpeed, "second fast button uses x20");
+                    synchronizer.SlowMotion();
+                    t.Equal(0.25f, synchronizer.PlaybackSpeed, "slow motion unchanged");
+                    synchronizer.NormalSpeed();
+                    t.Equal(1f, synchronizer.PlaybackSpeed, "normal speed unchanged");
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(gameObject);
+                    Time.timeScale = 1f;
+                }
+            });
+
             Add("PlayRequiresValidSavedPlayerProgram",
                 "Unavailable Play explains missing Nexus code, compilation errors and setup failures", t =>
             {

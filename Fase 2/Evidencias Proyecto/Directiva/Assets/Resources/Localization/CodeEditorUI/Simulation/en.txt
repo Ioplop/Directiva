@@ -10,8 +10,8 @@
 [pause]: Pause
 [slow_motion]: Slow motion
 [normal_speed]: Normal speed (1×)
-[double_speed]: 2× speed
-[quintuple_speed]: 5× speed
+[double_speed]: 5× speed
+[quintuple_speed]: 20× speed
 [status_playing]: Running
 [status_stopped]: Stopped
 [status_paused]: Paused

@@ -10,8 +10,8 @@
 [pause]: Pausar
 [slow_motion]: Cámara lenta
 [normal_speed]: Velocidad normal (1×)
-[double_speed]: Velocidad x2
-[quintuple_speed]: Velocidad x5
+[double_speed]: Velocidad x5
+[quintuple_speed]: Velocidad x20
 [status_playing]: Ejecutando
 [status_stopped]: Detenida
 [status_paused]: Pausada

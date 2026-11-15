@@ -645,8 +645,9 @@ namespace Directiva.SimulationFrontend
 
         public void SlowMotion() => SetSpeed(0.25f);
         public void NormalSpeed() => SetSpeed(1f);
-        public void DoubleSpeed() => SetSpeed(2f);
-        public void QuintupleSpeed() => SetSpeed(5f);
+        // Keep the legacy method/event names for existing UnityEvent scene bindings.
+        public void DoubleSpeed() => SetSpeed(5f);
+        public void QuintupleSpeed() => SetSpeed(20f);
 
         private void SetSpeed(float newSpeed)
         {
