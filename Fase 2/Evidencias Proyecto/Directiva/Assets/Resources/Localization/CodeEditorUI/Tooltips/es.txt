@@ -19,3 +19,5 @@
 [execution_metrics]: Pasos lógicos consumidos por el programa y tiempo real transcurrido, incluidas las pausas.
 
 [error_did_you_mean]: ¿Quisiste escribir «{{1}}»?
+
+[open_scripts_folder]: Abrir carpeta de scripts en explorador

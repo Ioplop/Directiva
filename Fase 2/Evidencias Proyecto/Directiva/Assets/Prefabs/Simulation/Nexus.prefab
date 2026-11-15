@@ -44,6 +44,7 @@ GameObject:
   - component: {fileID: 3303307770527758514}
   - component: {fileID: 1907397033981327127}
   - component: {fileID: 4439590693765628893}
+  - component: {fileID: 1906732134887280308}
   m_Layer: 0
   m_Name: Nexo_sin_plataforma1
   m_TagString: Untagged
@@ -123,6 +124,28 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!64 &1906732134887280308
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2782208925857505800}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 4183042810148447388, guid: 3c10d479ad007ee499a9005627631921, type: 3}
 --- !u!1 &5721573925797659126
 GameObject:
   m_ObjectHideFlags: 0

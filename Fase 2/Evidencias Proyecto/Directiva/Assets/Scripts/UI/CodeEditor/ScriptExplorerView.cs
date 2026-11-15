@@ -26,6 +26,7 @@ namespace Directiva.CodeUI
         private readonly VisualElement _toolbar;
         private readonly Button _newScript;
         private readonly Button _newFolder;
+        private readonly Button _openScriptsFolder;
         private readonly ScrollView _tree;
         private readonly VisualElement _popupLayer;
         private readonly HashSet<string> _expanded =
@@ -64,6 +65,9 @@ namespace Directiva.CodeUI
         public event Action<string, string> MoveRequested;
         public event Action NewScriptRequested;
         public event Action NewFolderRequested;
+        public event Action<string> NewScriptInFolderRequested;
+        public event Action<string> NewFolderInFolderRequested;
+        public event Action OpenScriptsFolderRequested;
         public event Action<float> FontSizeChanged;
 
         public ScriptExplorerView(
@@ -93,12 +97,15 @@ namespace Directiva.CodeUI
 
             _newScript = new Button(() => NewScriptRequested?.Invoke());
             _newFolder = new Button(() => NewFolderRequested?.Invoke());
+            _openScriptsFolder = new Button(() => OpenScriptsFolderRequested?.Invoke());
 
             _newScript.AddToClassList("explorer-symbol-button");
             _newFolder.AddToClassList("explorer-symbol-button");
+            _openScriptsFolder.AddToClassList("explorer-symbol-button");
 
             _toolbar.Add(_newScript);
             _toolbar.Add(_newFolder);
+            _toolbar.Add(_openScriptsFolder);
             ApplyToolbarFontSize();
 
             _tree = new ScrollView(ScrollViewMode.Vertical);
@@ -163,6 +170,10 @@ namespace Directiva.CodeUI
             _tooltips.Register(
                 _newFolder,
                 () => _locale.Get("Tooltips", "new_folder"));
+
+            _tooltips.Register(
+                _openScriptsFolder,
+                () => _locale.Get("Tooltips", "open_scripts_folder"));
 
             // Rebuild so currently visible dynamic tree buttons are registered too.
             Rebuild();
@@ -240,6 +251,7 @@ namespace Directiva.CodeUI
         {
             _newScript.style.fontSize = _fontSize;
             _newFolder.style.fontSize = _fontSize;
+            _openScriptsFolder.style.fontSize = _fontSize;
         }
 
         // The USS gives rows a fixed 28 px height. Override it on each rebuild:
@@ -295,9 +307,12 @@ namespace Directiva.CodeUI
         {
             UIIconView.SetButton(_newScript, _icons?.addScript);
             UIIconView.SetButton(_newFolder, _icons?.addFolder);
+            // Fall back to the existing folder icon until a dedicated one is assigned.
+            UIIconView.SetButton(_openScriptsFolder, _icons?.openScriptsFolder ?? _icons?.folder);
 
             _newScript.tooltip = _locale.Get("ScriptExplorer", "new_script");
             _newFolder.tooltip = _locale.Get("ScriptExplorer", "new_folder");
+            _openScriptsFolder.tooltip = _locale.Get("ScriptExplorer", "open_scripts_folder");
         }
 
         private void Rebuild()
@@ -706,6 +721,28 @@ namespace Directiva.CodeUI
                 HideContextMenu();
                 DeleteRequested?.Invoke(path);
             }) { text = _locale.Get("ScriptExplorer", "delete") };
+
+            // Folder-context creation must use the clicked folder, not whichever
+            // directory the toolbar currently considers the creation target.
+            if (isFolder)
+            {
+                var createScript = new Button(() =>
+                {
+                    HideContextMenu();
+                    _expanded.Add(path); // Show the new item when the workspace rebuilds.
+                    NewScriptInFolderRequested?.Invoke(path);
+                }) { text = _locale.Get("ScriptExplorer", "new_script_here") };
+
+                var createFolder = new Button(() =>
+                {
+                    HideContextMenu();
+                    _expanded.Add(path);
+                    NewFolderInFolderRequested?.Invoke(path);
+                }) { text = _locale.Get("ScriptExplorer", "new_folder_here") };
+
+                _contextMenu.Add(createScript);
+                _contextMenu.Add(createFolder);
+            }
 
             bool locked = IsPathLocked(path);
             rename.SetEnabled(!locked);

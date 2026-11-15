@@ -32,6 +32,8 @@ namespace Directiva.UI
         public Sprite revert;
         public Sprite addScript;
         public Sprite addFolder;
+        [Tooltip("Optional icon for opening DirectivaScripts in the desktop file manager. Defaults to folder if omitted.")]
+        public Sprite openScriptsFolder;
         public Sprite script;
         public Sprite folder;
         public Sprite step;

@@ -8,3 +8,6 @@
 [root]: Scripts root
 [locked_during_execution]: Read-only while the program is running
 [locked_action_blocked]: Cannot modify, move, rename or delete a file while it is running.
+[new_script_here]: New script
+[new_folder_here]: New folder
+[open_scripts_folder]: Open scripts folder in file manager

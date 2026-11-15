@@ -661,6 +661,9 @@ namespace Directiva.CodeUI
             _explorer.ScriptSelected += path => _workspace.Open(path);
             _explorer.NewScriptRequested += () => Events.RaiseCreateScriptRequested();
             _explorer.NewFolderRequested += () => Events.RaiseCreateFolderRequested();
+            _explorer.NewScriptInFolderRequested += ShowCreateScriptPrompt;
+            _explorer.NewFolderInFolderRequested += ShowCreateFolderPrompt;
+            _explorer.OpenScriptsFolderRequested += OpenScriptsFolder;
             _explorer.SaveQuickRequested += path => Events.RaiseSaveRequested(path);
             _explorer.RevertQuickRequested += path => Events.RaiseRevertRequested(path);
             _explorer.RenameRequested += (path, name) => Events.RaiseRenameRequested(path, name);
@@ -904,10 +907,11 @@ namespace Directiva.CodeUI
             Codebase?.Refresh();
         }
 
-        private void ShowCreateScriptPrompt()
-        {
-            var folder = _explorer.GetPreferredCreationFolder();
+        private void ShowCreateScriptPrompt() =>
+            ShowCreateScriptPrompt(_explorer.GetPreferredCreationFolder());
 
+        private void ShowCreateScriptPrompt(string folder)
+        {
             _modal.Prompt(
                 Localization.Get("Dialogs", "create_script_title"),
                 Localization.Get("Dialogs", "create_script_message", folder.Length == 0 ? "/" : folder),
@@ -922,10 +926,11 @@ namespace Directiva.CodeUI
                 Localization.Get("Common", "cancel"));
         }
 
-        private void ShowCreateFolderPrompt()
-        {
-            var folder = _explorer.GetPreferredCreationFolder();
+        private void ShowCreateFolderPrompt() =>
+            ShowCreateFolderPrompt(_explorer.GetPreferredCreationFolder());
 
+        private void ShowCreateFolderPrompt(string folder)
+        {
             _modal.Prompt(
                 Localization.Get("Dialogs", "create_folder_title"),
                 Localization.Get("Dialogs", "create_folder_message", folder.Length == 0 ? "/" : folder),
@@ -937,6 +942,15 @@ namespace Directiva.CodeUI
                 }),
                 Localization.Get("Common", "create"),
                 Localization.Get("Common", "cancel"));
+        }
+
+        private void OpenScriptsFolder()
+        {
+            SafeAction(() =>
+            {
+                _storage.EnsureRoot();
+                ScriptsFolderOpener.Open(_storage.RootPath, Application.platform);
+            });
         }
 
         private void SaveScript(string path)

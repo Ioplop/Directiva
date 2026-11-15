@@ -8,3 +8,6 @@
 [root]: Raíz de scripts
 [locked_during_execution]: Solo lectura mientras el programa está en ejecución
 [locked_action_blocked]: No se puede modificar, mover, renombrar ni eliminar un archivo durante la ejecución.
+[new_script_here]: Nuevo script
+[new_folder_here]: Nueva carpeta
+[open_scripts_folder]: Abrir carpeta de scripts en explorador

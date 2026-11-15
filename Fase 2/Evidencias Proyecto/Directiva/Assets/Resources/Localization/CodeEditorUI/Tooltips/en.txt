@@ -19,3 +19,5 @@
 [execution_metrics]: Logical steps consumed by the program and elapsed real time, including pauses.
 
 [error_did_you_mean]: Did you mean "{{1}}"?
+
+[open_scripts_folder]: Open scripts folder in file manager
