@@ -151,6 +151,7 @@ namespace Directiva.CodeUI
         private string _completionCycleSource;
         private string _completionCyclePreviewText;
         private bool _tabKeyHandled;
+        private readonly CodeEditorTabTextGuard _tabTextGuard = new CodeEditorTabTextGuard();
 
         // Escape dismisses signature help until its call changes or text is edited.
         // KeyUp schedules another refresh, so hiding the popup alone is insufficient.
@@ -460,6 +461,7 @@ namespace Directiva.CodeUI
                 HideCompletion();
                 HideSignatureHelp();
                 HideDiagnosticTooltip();
+                _tabTextGuard.Reset();
             });
 
             SetEnabled(false);
@@ -1232,6 +1234,7 @@ namespace Directiva.CodeUI
             _returnKeyHandled = false;
             ++_pendingEditSelectionRevision;
             _tabKeyHandled = false;
+            _tabTextGuard.Reset();
             _signatureDismissedSource = null;
             HideCompletion();
             HideSignatureHelp();
@@ -1285,6 +1288,7 @@ namespace Directiva.CodeUI
         {
             ++_pendingEditSelectionRevision;
             _tabKeyHandled = false;
+            _tabTextGuard.Reset();
             _signatureDismissedSource = null;
             HideCompletion();
             HideSignatureHelp();
@@ -1685,6 +1689,7 @@ namespace Directiva.CodeUI
             input.RegisterCallback<FocusOutEvent>(_ =>
             {
                 _codeInputHasFocus = false;
+                _tabTextGuard.Reset();
                 HideSignatureHelp();
                 PreserveScrollAcrossFocus(focusReturning: false);
             }, TrickleDown.TrickleDown);
@@ -1723,6 +1728,7 @@ namespace Directiva.CodeUI
 
         private void OnCodePointerDown(PointerDownEvent evt)
         {
+            _tabTextGuard.Reset();
             HideCompletion();
             _completionDismissed = false;
             var world = new Vector2(evt.position.x, evt.position.y);
@@ -2679,6 +2685,16 @@ namespace Directiva.CodeUI
 
         private void OnEditorLineShortcut(KeyDownEvent evt)
         {
+            // After a dead key, the OS may flush a standalone accent when Tab is
+            // pressed. It arrives as a separate character-only KeyDownEvent even
+            // though Tab was already handled. Stop it BEFORE TextField inserts it:
+            // otherwise it corrupts the candidate and ends the Tab cycle.
+            if (_tabTextGuard.ShouldConsume(evt.keyCode, evt.character))
+            {
+                evt.StopImmediatePropagation();
+                return;
+            }
+
             // Capture Escape even when no popup is visible. Otherwise the native
             // TextField may interpret it as cancel/revert editing in some Unity
             // versions. Dismissing UI MUST NOT modify the source or its history.
@@ -2708,6 +2724,7 @@ namespace Directiva.CodeUI
                 // A character-only Tab event after KeyCode.Tab must not cycle twice.
                 if (evt.keyCode == KeyCode.Tab || evt.character == '\t')
                 {
+                    _tabTextGuard.Arm();
                     evt.StopImmediatePropagation();
                     if (!_tabKeyHandled)
                         CycleCompletion(evt.shiftKey);
@@ -2744,10 +2761,12 @@ namespace Directiva.CodeUI
                     // regular line-break/indentation path, and Space type normally.
                     HideCompletion();
                 }
-                else if (_completionCycling && evt.keyCode != KeyCode.None)
+                else if (_completionCycling &&
+                    CodeEditorTabTextGuard.ShouldDismissPreviewForKey(evt.keyCode))
                 {
-                    // Any ordinary editing or navigation ends the Tab preview;
-                    // the actual key is still delivered to the native editor.
+                    // Navigating/deleting ends the preview immediately. Plain
+                    // physical typing keys do NOT: an accent dead key emits one
+                    // without text. Actual typing closes it in ChangeEvent.
                     HideCompletion();
                 }
             }
@@ -2940,6 +2959,7 @@ namespace Directiva.CodeUI
             if (evt.keyCode != KeyCode.Tab)
                 return;
 
+            _tabTextGuard.Arm();
             evt.StopImmediatePropagation();
             _forceHistoryBoundaryNextChange = true;
 
