@@ -18,6 +18,59 @@ namespace Directiva.EditorTests.CodeUITests
             void Add(string id, string description, Action<DirectivaTestContext> run) =>
                 tests.Add(new DirectivaTestCase("CodeUI", "OutputNavigation", id, description, run));
 
+            void AddNotification(string id, string description, Action<DirectivaTestContext> run) =>
+                tests.Add(new DirectivaTestCase("CodeUI", "OutputNotifications", id, description, run));
+
+            OutputPanel CollapsedPanel(OutputService output)
+            {
+                var panel = new OutputPanel(output, new LocalizationService("es"), 12f);
+                var toggle = typeof(OutputPanel).GetMethod("ToggleCollapsed",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (toggle == null)
+                    throw new InvalidOperationException("OutputPanel collapse action not found");
+                toggle.Invoke(panel, null);
+                return panel;
+            }
+
+            AddNotification("ClearAcknowledgesCollapsedMessages",
+                "Clearing a collapsed console removes its pending flash without opening it", t =>
+            {
+                var output = new OutputService();
+                var panel = CollapsedPanel(output);
+                output.WriteWarning("Unseen warning");
+                t.Check(panel.ClassListContains("output-flash-warning"), "warning triggers flashing");
+
+                // The Clear button calls OutputService.Clear, including while collapsed.
+                output.Clear();
+                t.Equal(0, output.Entries.Count(), "buffer cleared");
+                t.Check(!panel.ClassListContains("output-flash-message"), "message flash removed");
+                t.Check(!panel.ClassListContains("output-flash-warning"), "warning flash removed");
+                t.Check(!panel.ClassListContains("output-flash-error"), "error flash removed");
+                var pending = typeof(OutputPanel).GetField("_pendingSeverity",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                t.Check(pending != null && pending.GetValue(panel) == null,
+                    "pending notification is cleared so scheduled pulses cannot restart it");
+            });
+
+            AddNotification("NewMessagesAfterClearFlashAgain",
+                "A new message after Clear starts a fresh notification, even at lower severity", t =>
+            {
+                var output = new OutputService();
+                var panel = CollapsedPanel(output);
+                output.WriteError("Old error");
+                t.Check(panel.ClassListContains("output-flash-error"), "old error flashes");
+                output.Clear();
+
+                output.Write("New info");
+                t.Check(panel.ClassListContains("output-flash-message"),
+                    "new lower-severity message must alert again");
+                t.Check(!panel.ClassListContains("output-flash-error"),
+                    "old error severity is not retained");
+                output.WriteWarning("New warning");
+                t.Check(panel.ClassListContains("output-flash-warning"),
+                    "warning can escalate the fresh notification");
+            });
+
             Add("MessageClickCopiesClipboard",
                 "Console copy preserves message, warning and error text", t =>
             {

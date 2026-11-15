@@ -37,6 +37,7 @@ namespace Directiva.CodeUI
         private bool _collapsed;
         private float _expandedHeight = DefaultExpandedHeight;
         private OutputSeverity? _pendingSeverity;
+        private int _flashGeneration;
         private bool _resizing;
         private float _resizeStartY;
         private float _resizeStartHeight;
@@ -125,7 +126,7 @@ namespace Directiva.CodeUI
             Add(_body);
 
             _output.EntryAdded += OnEntryAdded;
-            _output.Cleared += Rebuild;
+            _output.Cleared += OnCleared;
             _locale.LocaleChanged += _ => RefreshLocale();
 
             _messagesToggle.RegisterValueChangedCallback(_ => Rebuild());
@@ -363,15 +364,30 @@ namespace Directiva.CodeUI
                 Rebuild();
             }
 
+            DismissUnreadNotification();
+            RefreshLocale();
+        }
+
+        private void OnCleared()
+        {
+            // Clearing the buffered messages also acknowledges notifications
+            // received while the panel was collapsed.
+            DismissUnreadNotification();
+            Rebuild();
+        }
+
+        private void DismissUnreadNotification()
+        {
             _pendingSeverity = null;
+            _flashGeneration++; // Invalidate any scheduled pulse from before Clear/Expand.
             RemoveFromClassList("output-flash-message");
             RemoveFromClassList("output-flash-warning");
             RemoveFromClassList("output-flash-error");
-            RefreshLocale();
         }
 
         private void FlashCollapsed(OutputSeverity severity)
         {
+            int generation = ++_flashGeneration;
             RemoveFromClassList("output-flash-message");
             RemoveFromClassList("output-flash-warning");
             RemoveFromClassList("output-flash-error");
@@ -387,13 +403,17 @@ namespace Directiva.CodeUI
 
             schedule.Execute(() =>
             {
+                // A Clear, Expand or newer severity must win over an older pulse.
+                if (generation != _flashGeneration)
+                    return;
+
                 RemoveFromClassList(className);
 
                 if (_collapsed && _pendingSeverity.HasValue)
                 {
                     schedule.Execute(() =>
                     {
-                        if (_collapsed && _pendingSeverity.HasValue)
+                        if (generation == _flashGeneration && _collapsed && _pendingSeverity.HasValue)
                             FlashCollapsed(_pendingSeverity.Value);
                     }).ExecuteLater(550);
                 }
