@@ -120,6 +120,7 @@ namespace Directiva.CodeUI
         private bool _lastSimulationHasVM;
         private string _runningFunctionName;
         private VMMemoryContext _runningMemory;
+        private DScriptCompiledProgram _runningProgram;
         private readonly DScriptLineBreakpointGate _breakpointGate = new DScriptLineBreakpointGate();
         private readonly ExecutionSourceLock _executionSourceLock = new ExecutionSourceLock();
         private DScriptCompilationResult _lastCompilation;
@@ -480,10 +481,16 @@ namespace Directiva.CodeUI
                 if (_lastSimulationDebugState != state || _lastSimulationHasVM != hasVM)
                 {
                     _topBar?.SetSimulationDebugState(state, hasVM);
+                    _outputPanel?.SetDebuggerMode(state == ScriptExecutionState.Paused);
                     _lastSimulationDebugState = state;
                     _lastSimulationHasVM = hasVM;
                 }
                 _topBar?.SetSimulationExecutionMetrics(_simulationDebugSession.TotalLogicalSteps);
+                if (state == ScriptExecutionState.Paused && _outputPanel?.IsDebuggerMode == true &&
+                    _simulationDebugSession.TryGetSelectedVariables(out DebuggerVariableSnapshot values))
+                    _outputPanel.SetDebuggerSnapshot(values);
+                else
+                    _outputPanel?.SetDebuggerSnapshot(null);
                 if (!hasVM || !_simulationDebugSession.TryGetSelectedSource(
                     out string path, out int line) || !_storage.ScriptExists(path))
                 {
@@ -1407,6 +1414,7 @@ namespace Directiva.CodeUI
             RefreshExecutionMetrics();
             _runningFunctionName = null;
             _runningMemory = null;
+            _runningProgram = null;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -1494,6 +1502,7 @@ namespace Directiva.CodeUI
                 _executionSourceLock.LockModules(prepared.Compilation.Analysis.Modules.Keys);
                 _runningFunctionName = prepared.FunctionName;
                 _runningMemory = prepared.Memory;
+                _runningProgram = prepared.Program;
                 _breakpointGate.Reset();
                 // DEBUG_* metadata is always generated. Breakpoints do not require
                 // continuous source-line highlighting while the VM is running.
@@ -1568,6 +1577,11 @@ namespace Directiva.CodeUI
         {
             if (state == ScriptExecutionState.Stopped)
                 _executionSourceLock.Clear();
+            if (_simulationDebugSession == null)
+            {
+                _outputPanel?.SetDebuggerMode(state == ScriptExecutionState.Paused);
+                RefreshStandaloneVariableSnapshot();
+            }
             RefreshExecutionLockPresentation();
 
             // Show the current source line only while paused. Play/Continue immediately
@@ -1622,6 +1636,7 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
+            _runningProgram = null;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -1646,6 +1661,7 @@ namespace Directiva.CodeUI
 
             _runningFunctionName = null;
             _runningMemory = null;
+            _runningProgram = null;
             _runningBreakpointsByModule.Clear();
             _breakpointGate.Reset();
             _executionController.BreakpointPredicate = null;
@@ -1665,6 +1681,18 @@ namespace Directiva.CodeUI
             RefreshDScriptDebugHighlight(followExecution: true);
         }
 
+        private void RefreshStandaloneVariableSnapshot()
+        {
+            if (_outputPanel == null || _simulationDebugSession != null) return;
+            DirectivaVM vm = _executionController?.CurrentVM;
+            if (_executionController?.State == ScriptExecutionState.Paused &&
+                _outputPanel.IsDebuggerMode && vm != null && _runningProgram != null)
+                _outputPanel.SetDebuggerSnapshot(DebuggerVariableSnapshot.Capture(
+                    vm, _runningProgram));
+            else
+                _outputPanel.SetDebuggerSnapshot(null);
+        }
+
         private void RefreshDScriptDebugHighlight(bool followExecution = false)
         {
             if (_simulationDebugSession != null)
@@ -1681,6 +1709,7 @@ namespace Directiva.CodeUI
             }
 
             DirectivaVM vm = _executionController.CurrentVM;
+            RefreshStandaloneVariableSnapshot();
 
             // DEBUG_FILE, DEBUG_LINE and DEBUG_SPAN are separate Advance() calls even
             // though their logical cost is zero. If a frame ends after DEBUG_FILE, File has changed but

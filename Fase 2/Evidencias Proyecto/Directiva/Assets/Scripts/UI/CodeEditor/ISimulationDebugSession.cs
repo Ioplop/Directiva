@@ -12,6 +12,8 @@ namespace Directiva.CodeUI
         bool HasSelectedVM { get; }
         long TotalLogicalSteps { get; }
         bool TryGetSelectedSource(out string file, out int oneBasedLine);
+        /// <summary>A read-only snapshot of the selected VM and entity.</summary>
+        bool TryGetSelectedVariables(out DebuggerVariableSnapshot snapshot);
         void Continue();
         void Pause();
         void Stop();

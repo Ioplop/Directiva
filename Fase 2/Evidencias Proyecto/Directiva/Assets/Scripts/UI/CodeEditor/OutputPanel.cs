@@ -13,7 +13,7 @@ namespace Directiva.CodeUI
         private readonly DirectivaUIIcons _icons;
 
         private readonly Button _collapseButton;
-        private readonly Label _title;
+        private readonly Button _title;
         private readonly Toggle _messagesToggle;
         private readonly Toggle _warningsToggle;
         private readonly Toggle _errorsToggle;
@@ -23,6 +23,8 @@ namespace Directiva.CodeUI
         private readonly Button _clearButton;
         private readonly VisualElement _header;
         private readonly ScrollView _scroll;
+        private readonly ScrollView _debugScroll;
+        private readonly VisualElement _consoleControls;
         private readonly VisualElement _body;
         private readonly VisualElement _resizeHandle;
 
@@ -35,6 +37,24 @@ namespace Directiva.CodeUI
         private float _fontSize;
 
         private bool _collapsed;
+        private bool _debuggerMode;
+        private DebuggerVariableSnapshot _debugSnapshot;
+
+        private const string DebuggerLocalsKey = "debug_locals";
+        private const string DebuggerGlobalsKey = "debug_globals";
+        private const string DebuggerSharedKey = "debug_shared";
+        private const string DebuggerSelfKey = "debug_self";
+
+        private readonly Dictionary<string, bool> _debuggerGroupExpanded =
+            new Dictionary<string, bool>(StringComparer.Ordinal)
+            {
+                [DebuggerLocalsKey] = true,
+                [DebuggerGlobalsKey] = true,
+                [DebuggerSharedKey] = true,
+                [DebuggerSelfKey] = true
+            };
+
+        public bool IsDebuggerMode => _debuggerMode;
         private float _expandedHeight = DefaultExpandedHeight;
         private OutputSeverity? _pendingSeverity;
         private int _flashGeneration;
@@ -80,8 +100,9 @@ namespace Directiva.CodeUI
             _collapseButton = new Button(ToggleCollapsed);
             _collapseButton.AddToClassList("icon-button");
 
-            _title = new Label();
+            _title = new Button(() => SetDebuggerMode(!_debuggerMode));
             _title.AddToClassList("output-title");
+            _title.AddToClassList("output-tab-button");
 
             _messagesToggle = new Toggle { value = true };
             _warningsToggle = new Toggle { value = true };
@@ -108,11 +129,17 @@ namespace Directiva.CodeUI
 
             _header.Add(_collapseButton);
             _header.Add(_title);
-            _header.Add(messagesFilter);
-            _header.Add(warningsFilter);
-            _header.Add(errorsFilter);
-            _header.Add(new VisualElement { style = { flexGrow = 1 } });
-            _header.Add(_clearButton);
+            _consoleControls = new VisualElement();
+            _consoleControls.style.flexDirection = FlexDirection.Row;
+            _consoleControls.style.alignItems = Align.Center;
+            _consoleControls.style.flexGrow = 1;
+            _consoleControls.style.minWidth = 0;
+            _consoleControls.Add(messagesFilter);
+            _consoleControls.Add(warningsFilter);
+            _consoleControls.Add(errorsFilter);
+            _consoleControls.Add(new VisualElement { style = { flexGrow = 1 } });
+            _consoleControls.Add(_clearButton);
+            _header.Add(_consoleControls);
 
             _body = new VisualElement();
             _body.AddToClassList("output-body");
@@ -121,6 +148,12 @@ namespace Directiva.CodeUI
             _scroll.AddToClassList("output-scroll");
             _scroll.AddToClassList("directiva-scroll-view");
             _body.Add(_scroll);
+            _debugScroll = new ScrollView(ScrollViewMode.Vertical);
+            _debugScroll.AddToClassList("output-scroll");
+            _debugScroll.AddToClassList("directiva-scroll-view");
+            _debugScroll.AddToClassList("debugger-scroll");
+            _debugScroll.style.display = DisplayStyle.None;
+            _body.Add(_debugScroll);
 
             Add(_header);
             Add(_body);
@@ -156,6 +189,10 @@ namespace Directiva.CodeUI
             tooltips.Register(
                 _clearButton,
                 () => _locale.Get("Tooltips", "clear_output"));
+            tooltips.Register(
+                _title,
+                () => _locale.Get("Output", _debuggerMode
+                    ? "switch_console" : "switch_debugger"));
         }
 
         public void SetFontSize(float fontSize)
@@ -172,6 +209,7 @@ namespace Directiva.CodeUI
             style.fontSize = _fontSize;
             ApplyFontSizeToStaticControls();
             Rebuild();
+            RenderDebugger();
         }
 
         private void OnWheel(WheelEvent evt)
@@ -191,6 +229,7 @@ namespace Directiva.CodeUI
                 style.fontSize = _fontSize;
                 ApplyFontSizeToStaticControls();
                 Rebuild();
+                RenderDebugger();
                 FontSizeChanged?.Invoke(_fontSize);
             }
 
@@ -256,13 +295,14 @@ namespace Directiva.CodeUI
 
         private void RefreshLocale()
         {
-            _title.text = _locale.Get("Output", "title");
+            _title.text = _locale.Get("Output", _debuggerMode ? "debugger" : "title");
             _messagesLabel.text = _locale.Get("Output", "messages");
             _warningsLabel.text = _locale.Get("Output", "warnings");
             _errorsLabel.text = _locale.Get("Output", "errors");
             _clearButton.text = _locale.Get("Output", "clear");
             UIIconView.SetButton(_collapseButton,
                 _collapsed ? _icons?.arrowUp : _icons?.arrowDown, 16f);
+            RenderDebugger();
         }
 
         private void OnEntryAdded(OutputEntry entry)
@@ -278,6 +318,8 @@ namespace Directiva.CodeUI
                 }
                 return;
             }
+            // The console remains buffered while the debugger tab is visible.
+            if (_debuggerMode) return;
 
             // Batch visual work: a single VM tick can produce many print() calls.
             // Keep only the most recent entries if the batch itself exceeds capacity.
@@ -300,9 +342,9 @@ namespace Directiva.CodeUI
         private void FlushPendingEntries()
         {
             _refreshScheduled = false;
-            if (_collapsed)
+            if (_collapsed || _debuggerMode)
             {
-                // Expanding the panel will rebuild from the bounded OutputService.
+                // Expanding the console tab will rebuild from the bounded OutputService.
                 _pendingEntries.Clear();
                 _fullRebuildRequired = false;
                 return;
@@ -359,14 +401,156 @@ namespace Directiva.CodeUI
                 _resizeHandle.style.display = DisplayStyle.Flex;
                 style.height = Mathf.Max(DefaultExpandedHeight, _expandedHeight);
 
-                // Messages still enter OutputService while collapsed.
-                // Rebuild the visual list so those buffered entries become visible now.
-                Rebuild();
+                // Messages remain in OutputService even when hidden.
+                if (_debuggerMode) RenderDebugger();
+                else Rebuild();
             }
 
             DismissUnreadNotification();
             RefreshLocale();
         }
+
+        /// <summary>Switch views without changing the expanded/collapsed state.</summary>
+        public void SetDebuggerMode(bool debugger)
+        {
+            if (_debuggerMode == debugger) return;
+            _debuggerMode = debugger;
+            _consoleControls.style.display = debugger ? DisplayStyle.None : DisplayStyle.Flex;
+            _scroll.style.display = debugger ? DisplayStyle.None : DisplayStyle.Flex;
+            _debugScroll.style.display = debugger ? DisplayStyle.Flex : DisplayStyle.None;
+            if (debugger) RenderDebugger();
+            else Rebuild(); // The console was still receiving buffered messages.
+            RefreshLocale();
+        }
+
+        /// <summary>Update the selected VM's values only when their display actually changes.</summary>
+        public void SetDebuggerSnapshot(DebuggerVariableSnapshot snapshot)
+        {
+            if (SnapshotsEqual(_debugSnapshot, snapshot)) return;
+            _debugSnapshot = snapshot;
+            if (_debuggerMode && !_collapsed) RenderDebugger();
+        }
+
+        private static bool SnapshotsEqual(DebuggerVariableSnapshot first,
+            DebuggerVariableSnapshot second)
+        {
+            if (ReferenceEquals(first, second)) return true;
+            if (first == null || second == null) return false;
+            return EntriesEqual(first.Locals, second.Locals) &&
+                EntriesEqual(first.Globals, second.Globals) &&
+                EntriesEqual(first.Shared, second.Shared) &&
+                EntriesEqual(first.Self, second.Self);
+        }
+
+        private static bool EntriesEqual(IReadOnlyList<DebuggerVariableEntry> first,
+            IReadOnlyList<DebuggerVariableEntry> second)
+        {
+            if (first.Count != second.Count) return false;
+            for (int i = 0; i < first.Count; i++)
+                if (first[i].Name != second[i].Name || first[i].Value != second[i].Value)
+                    return false;
+            return true;
+        }
+
+        private void RenderDebugger()
+        {
+            if (_debugScroll == null)
+                return;
+
+            _debugScroll.Clear();
+            if (_debugSnapshot == null)
+            {
+                var noVm = new Label(_locale.Get("Output", "debug_no_vm"));
+                noVm.AddToClassList("debugger-empty");
+                noVm.style.fontSize = _fontSize;
+                _debugScroll.Add(noVm);
+                return;
+            }
+
+            AddDebuggerGroup(DebuggerLocalsKey, _debugSnapshot.Locals);
+            AddDebuggerGroup(DebuggerGlobalsKey, _debugSnapshot.Globals);
+            AddDebuggerGroup(DebuggerSharedKey, _debugSnapshot.Shared);
+            AddDebuggerGroup(DebuggerSelfKey, _debugSnapshot.Self);
+        }
+
+        private void AddDebuggerGroup(string localizationKey,
+            IReadOnlyList<DebuggerVariableEntry> entries)
+        {
+            var group = new VisualElement();
+            group.AddToClassList("debugger-group");
+
+            var title = new Button(() => ToggleDebuggerGroup(localizationKey))
+            {
+                text = GetDebuggerGroupTitle(localizationKey)
+            };
+            title.AddToClassList("debugger-group-title");
+            title.AddToClassList("debugger-group-toggle");
+            title.style.fontSize = _fontSize;
+            title.style.minHeight = GetDebuggerGroupHeaderHeight();
+            group.Add(title);
+
+            var body = new VisualElement();
+            body.AddToClassList("debugger-group-body");
+            body.style.display = IsDebuggerGroupExpanded(localizationKey)
+                ? DisplayStyle.Flex : DisplayStyle.None;
+            group.Add(body);
+
+            float rowHeight = GetDebuggerRowHeight();
+            float nameWidth = GetDebuggerNameColumnWidth();
+
+            foreach (DebuggerVariableEntry entry in entries)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("debugger-table-row");
+                row.tooltip = entry.Name + " = " + entry.Value;
+                row.style.minHeight = rowHeight;
+                row.RegisterCallback<MouseEnterEvent>(_ =>
+                    row.AddToClassList("debugger-table-row-hover"));
+                row.RegisterCallback<MouseLeaveEvent>(_ =>
+                    row.RemoveFromClassList("debugger-table-row-hover"));
+
+                var name = new Label(entry.Name);
+                name.AddToClassList("debugger-variable-name");
+                name.style.fontSize = _fontSize;
+                name.style.width = nameWidth;
+                name.style.minWidth = nameWidth;
+                name.style.maxWidth = nameWidth;
+
+                var value = new Label(entry.Value);
+                value.AddToClassList("debugger-variable-value");
+                value.style.fontSize = _fontSize;
+
+                row.Add(name);
+                row.Add(value);
+                body.Add(row);
+            }
+
+            _debugScroll.Add(group);
+        }
+
+        private void ToggleDebuggerGroup(string localizationKey)
+        {
+            bool expanded = IsDebuggerGroupExpanded(localizationKey);
+            _debuggerGroupExpanded[localizationKey] = !expanded;
+            if (_debuggerMode && !_collapsed)
+                RenderDebugger();
+        }
+
+        private bool IsDebuggerGroupExpanded(string localizationKey) =>
+            !_debuggerGroupExpanded.TryGetValue(localizationKey, out bool expanded) || expanded;
+
+        private string GetDebuggerGroupTitle(string localizationKey) =>
+            (IsDebuggerGroupExpanded(localizationKey) ? "▼ " : "▶ ") +
+            _locale.Get("Output", localizationKey);
+
+        private float GetDebuggerNameColumnWidth() =>
+            UnityEngine.Mathf.Clamp((_fontSize * 11f) + 24f, 140f, 320f);
+
+        private float GetDebuggerRowHeight() =>
+            UnityEngine.Mathf.Max(18f, _fontSize + 4f);
+
+        private float GetDebuggerGroupHeaderHeight() =>
+            UnityEngine.Mathf.Max(20f, _fontSize + 6f);
 
         private void OnCleared()
         {

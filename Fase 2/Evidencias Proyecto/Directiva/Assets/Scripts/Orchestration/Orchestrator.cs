@@ -378,6 +378,25 @@ namespace DOrchestration
             return false;
         }
 
+        /// <summary>
+        /// Exposes the selected entity's exact compiled code and VM for read-only
+        /// debugger inspection. Never call Advance() here: scheduling remains owned
+        /// exclusively by Update().
+        /// </summary>
+        public bool TryGetDebugInspection(int entityId, out DirectivaVM vm,
+            out DScriptCompiledProgram program)
+        {
+            if (TryGetBinding(entityId, out EntityVMBinding binding))
+            {
+                vm = binding.VM;
+                program = GetSide(binding.SideId).Program;
+                return true;
+            }
+            vm = null;
+            program = null;
+            return false;
+        }
+
         private bool TryGetBinding(int entityId, out EntityVMBinding binding) =>
             firstSide.TryGetBinding(entityId, out binding) ||
             secondSide.TryGetBinding(entityId, out binding);

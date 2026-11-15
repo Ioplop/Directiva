@@ -349,6 +349,18 @@ namespace Directiva.SimulationFrontend
             return false;
         }
 
+        public bool TryGetSelectedVariables(out DebuggerVariableSnapshot snapshot)
+        {
+            snapshot = null;
+            if (State != ScriptExecutionState.Paused || !HasSelectedVM ||
+                !orchestrator.TryGetDebugInspection(selectedDebugEntityId,
+                    out DirectivaVM vm, out DScriptCompiledProgram program))
+                return false;
+            snapshot = DebuggerVariableSnapshot.Capture(vm, program,
+                orchestrator.Simulation.Observer, selectedDebugEntityId);
+            return true;
+        }
+
         /// <summary>
         /// Resume the full deterministic match until the selected DScript VM
         /// reaches a source boundary, dies, faults or the match ends.

@@ -3,3 +3,11 @@
 [warnings]: Warnings
 [errors]: Errors
 [clear]: Clear
+[debugger]: Debugger
+[switch_debugger]: Show debugger
+[switch_console]: Show console
+[debug_no_vm]: No VM selected for inspection.
+[debug_locals]: Local variables
+[debug_globals]: Global variables
+[debug_shared]: Shared variables
+[debug_self]: Self variables

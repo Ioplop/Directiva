@@ -1203,3 +1203,99 @@ Toggle {
     color: rgb(155, 168, 186);
     max-width: 480px;
 }
+
+/* Debugger shares the console footprint; only the active tab is visible. */
+.output-tab-button {
+    background-color: transparent;
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    color: rgb(238, 241, 246);
+}
+.output-tab-button:hover { color: rgb(140, 190, 255); }
+.debugger-scroll {
+    min-height: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.debugger-group {
+    margin-top: 1px;
+    margin-bottom: 1px;
+}
+
+.debugger-group-title {
+    color: rgb(155, 190, 238);
+    -unity-font-style: bold;
+    margin-top: 1px;
+    margin-bottom: 1px;
+}
+
+.debugger-group-toggle {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 0;
+    padding-bottom: 0;
+    -unity-text-align: middle-left;
+}
+
+.debugger-group-toggle:hover {
+    background-color: rgba(91, 131, 190, 0.14);
+}
+
+.debugger-group-body {
+    margin-bottom: 2px;
+}
+
+.debugger-table-row {
+    flex-direction: row;
+    align-items: flex-start;
+    padding-left: 10px;
+    padding-right: 6px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+    border-bottom-left-radius: 2px;
+    border-bottom-right-radius: 2px;
+}
+
+.debugger-table-row:hover,
+.debugger-table-row-hover {
+    background-color: rgba(91, 131, 190, 0.14);
+}
+
+.debugger-variable-name {
+    color: rgb(222, 231, 242);
+    -unity-text-align: upper-left;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-right: 12px;
+    white-space: normal;
+}
+
+.debugger-variable-value {
+    color: rgb(236, 240, 247);
+    flex-grow: 1;
+    -unity-text-align: upper-left;
+    margin-top: 0;
+    margin-bottom: 0;
+    white-space: normal;
+}
+
+.debugger-empty {
+    color: rgb(163, 171, 184);
+    margin-top: 6px;
+}

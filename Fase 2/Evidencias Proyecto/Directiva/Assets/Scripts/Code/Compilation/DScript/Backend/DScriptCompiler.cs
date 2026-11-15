@@ -22,6 +22,9 @@ namespace DSCompilation.DScript.Backend
         public IReadOnlyList<DScriptCompiledInitializer> Initializers { get; }
         public IReadOnlyList<DScriptSymbol> SharedSlots { get; }
         public IReadOnlyList<DScriptSymbol> VmGlobalSlots { get; }
+        /// <summary>Named, compiler-assigned local slots for each source function.
+        /// Temporary DIL slots have no user-facing name and are deliberately omitted.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<DScriptSymbol>> FunctionLocalSlots { get; }
 
         internal DScriptCompiledProgram(DScriptAnalysis analysis, string bootstrapModule,
             Dictionary<string, string> dil, CodeContext code,
@@ -37,6 +40,15 @@ namespace DSCompilation.DScript.Backend
             Initializers = initializers;
             SharedSlots = Array.AsReadOnly(analysis.GlobalSlots.ToArray());
             VmGlobalSlots = Array.AsReadOnly(analysis.VmGlobalSlots.ToArray());
+            var locals = new Dictionary<string, IReadOnlyList<DScriptSymbol>>(StringComparer.Ordinal);
+            foreach (DScriptFunctionSymbols symbols in analysis.FunctionSymbols.Values)
+            {
+                string qualified = symbols.Module.Name + "." + symbols.Ast.Name;
+                locals.Add(qualified, Array.AsReadOnly(symbols.Locals.Values
+                    .OrderBy(symbol => symbol.Slot).ToArray()));
+            }
+            FunctionLocalSlots = new System.Collections.ObjectModel.ReadOnlyDictionary<
+                string, IReadOnlyList<DScriptSymbol>>(locals);
         }
 
         /// <summary>Qualified function identifiers are module.name (not just name).</summary>

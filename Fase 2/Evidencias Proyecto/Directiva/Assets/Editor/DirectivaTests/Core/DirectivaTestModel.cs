@@ -161,6 +161,7 @@ namespace Directiva.EditorTests
             LocalizationTests.LocalizationTests.Register(tests);
             CodeUITests.OutputNavigationTests.Register(tests);
             CodeUITests.OutputPrintTests.Register(tests);
+            CodeUITests.DebuggerVariableTests.Register(tests);
             CodeUITests.SourceStepTests.Register(tests);
             CodeUITests.ExecutionSourceLockTests.Register(tests);
             CodeUITests.CodeEditorTextCommandsTests.Register(tests);

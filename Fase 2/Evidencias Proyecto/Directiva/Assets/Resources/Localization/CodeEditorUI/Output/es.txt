@@ -3,3 +3,11 @@
 [warnings]: Advertencias
 [errors]: Errores
 [clear]: Limpiar
+[debugger]: Depurador
+[switch_debugger]: Ver depurador
+[switch_console]: Ver consola
+[debug_no_vm]: No hay ninguna VM seleccionada para inspeccionar.
+[debug_locals]: Variables locales
+[debug_globals]: Variables globales
+[debug_shared]: Variables compartidas
+[debug_self]: Variables self
