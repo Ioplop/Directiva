@@ -332,74 +332,158 @@
     font-size: 12px;
     color: rgb(232, 239, 248);
 }
-.sim-nexus-panel-dropdown {
-    flex-grow: 1;
-    flex-shrink: 1;
-    min-width: 0;
-    height: 34px;
-    min-height: 34px;
-    color: rgb(244, 249, 255);
-    font-size: 12px;
-}
-/* No internal BaseField label: the left column owns the only visible label. */
-.sim-nexus-panel-dropdown .unity-base-field__label { display: none; }
-.sim-nexus-panel-dropdown .unity-base-field__input {
-    flex-grow: 1;
-    flex-shrink: 1;
-    min-width: 0;
-    height: 34px;
-    min-height: 34px;
-    padding-top: 0;
-    padding-bottom: 0;
-}
-/* Popup input has its own default light theme; style it explicitly. */
-.sim-nexus-panel-dropdown .unity-base-popup-field__input {
+/* Both program choices use the same in-game dark selector, not Unity's
+   system DropdownField popup (which uses an unrelated light theme). */
+.sim-nexus-panel-select {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0;
     min-height: 34px;
     height: 34px;
-    align-items: center;
-    padding-top: 0;
-    padding-bottom: 0;
     padding-left: 9px;
-    padding-right: 5px;
+    padding-right: 7px;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     background-color: rgb(39, 53, 74);
-    color: rgb(244, 249, 255);
     border-width: 1px;
     border-color: rgb(99, 133, 169);
     border-radius: 4px;
+    color: rgb(244, 249, 255);
+    font-size: 12px;
 }
-.sim-nexus-panel-dropdown .unity-base-popup-field__input:hover {
+.sim-nexus-panel-select:hover {
     background-color: rgb(51, 72, 101);
     border-color: rgb(131, 174, 220);
 }
-.sim-nexus-panel-dropdown .unity-base-popup-field__text {
+.sim-nexus-panel-select:disabled { opacity: 0.5; }
+.sim-nexus-panel-select-text {
     flex-grow: 1;
+    flex-shrink: 1;
     min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: rgb(244, 249, 255);
+    -unity-text-align: middle-left;
+}
+.sim-nexus-panel-select-arrow {
+    flex-shrink: 0;
+    margin-left: 8px;
+    color: rgb(207, 224, 242);
+    font-size: 11px;
+}
+/* A popup is rendered at overlay level so nested menus are not clipped by
+   the narrow, world-anchored Nexus panel. */
+.sim-nexus-menu-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+.sim-nexus-menu-dismiss {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+.sim-nexus-popup-menu {
+    position: absolute;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 2px;
+    padding-right: 2px;
+    background-color: rgb(28, 37, 51);
+    border-width: 1px;
+    border-color: rgb(92, 125, 165);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.sim-nexus-popup-scroll {
+    width: 100%;
+    height: 100%;
     min-height: 0;
-    margin-top: 0;
-    margin-bottom: 0;
+    flex-grow: 1;
+}
+.sim-nexus-popup-scroll .unity-scroll-view__content-container {
+    min-width: 0;
+}
+.sim-nexus-popup-item {
+    flex-direction: row;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    height: 30px;
+    min-height: 30px;
+    padding-left: 9px;
+    padding-right: 7px;
     padding-top: 0;
     padding-bottom: 0;
-    -unity-text-align: middle-left;
-    color: rgb(244, 249, 255);
-    white-space: nowrap;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-radius: 3px;
+    color: rgb(226, 235, 246);
+    font-size: 12px;
+}
+.sim-nexus-popup-item:hover,
+.sim-nexus-popup-expanded {
+    background-color: rgb(50, 77, 113);
+    color: rgb(250, 252, 255);
+}
+.sim-nexus-popup-selected {
+    background-color: rgb(37, 83, 129);
+    color: rgb(255, 255, 255);
+}
+.sim-nexus-popup-item-text {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
     overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
+    -unity-text-align: middle-left;
 }
-.sim-nexus-panel-status {
-    white-space: normal;
-    font-size: 11px;
-    margin-top: 7px;
-    color: rgb(186, 215, 192);
-}
-.sim-nexus-panel-status.sim-nexus-panel-error { color: rgb(255, 155, 155); }
-
-.sim-nexus-panel-dropdown .unity-base-popup-field__arrow {
-    -unity-background-image-tint-color: rgb(211, 227, 245);
-    align-self: center;
+.sim-nexus-popup-item-marker {
     flex-shrink: 0;
+    width: 18px;
+    min-width: 18px;
+    margin-left: 6px;
+    -unity-text-align: middle-center;
+    color: rgb(171, 204, 244);
+    font-size: 11px;
+}
+.sim-nexus-popup-scroll .unity-scroller--vertical {
+    width: 8px;
+    min-width: 8px;
+    max-width: 8px;
+    background-color: rgb(31, 42, 59);
+}
+.sim-nexus-popup-scroll .unity-scroller__low-button,
+.sim-nexus-popup-scroll .unity-scroller__high-button { display: none; }
+.sim-nexus-popup-scroll .unity-scroller__slider {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+}
+.sim-nexus-popup-scroll .unity-base-slider__tracker {
+    background-color: rgb(43, 56, 73);
+}
+.sim-nexus-popup-scroll .unity-base-slider__dragger {
+    background-color: rgb(93, 120, 155);
+    border-color: rgb(113, 148, 191);
 }
 
 /* Readable RTS-style match data panel, 20% thinner than the first pass. */

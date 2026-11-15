@@ -28,6 +28,8 @@
 [nexus_locked_warning]: You cannot change these settings while a match is in progress. Press Stop first.
 [nexus_script]: Script
 [nexus_function]: Entry function
+[nexus_choose_script]: Select script
+[nexus_choose_function]: Select function
 [nexus_close]: Close
 [nexus_no_scripts]: No saved .dscript files. Create one in the Editor.
 [nexus_no_functions]: No parameterless functions in this script.

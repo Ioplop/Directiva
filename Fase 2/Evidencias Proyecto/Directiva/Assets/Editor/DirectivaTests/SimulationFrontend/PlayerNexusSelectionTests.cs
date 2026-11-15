@@ -259,6 +259,70 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                     "hidden selector is removed from hit testing");
             });
 
+            Add("NexusScriptMenuBuildsNestedFolders",
+                "The file selector groups folders recursively, keeps exact paths and omits .dscript in labels", t =>
+            {
+                var tree = NexusScriptMenuNode.Build(new[]
+                {
+                    "Root.dscript", "Level02/attack.dscript", "Level01/zeta.dscript",
+                    "Level01/Nested/worker.dscript", "Level01/alpha.dscript"
+                });
+                t.Equal(3, tree.Children.Count, "two folders plus the root script");
+                t.Check(tree.Children[0].IsFolder && tree.Children[0].Name == "Level01",
+                    "folders are sorted before files");
+                t.Check(tree.Children[1].IsFolder && tree.Children[1].Name == "Level02",
+                    "folders are sorted alphabetically");
+                t.Check(!tree.Children[2].IsFolder && tree.Children[2].Name == "Root",
+                    "root file has no visible extension");
+                t.Equal("Root.dscript", tree.Children[2].ScriptPath,
+                    "root file retains exact saved path");
+                var firstFolder = tree.Children[0];
+                t.Equal(3, firstFolder.Children.Count, "nested folder and two direct files");
+                t.Equal("Nested", firstFolder.Children[0].Name,
+                    "subfolder appears before files");
+                t.Equal("alpha", firstFolder.Children[1].Name,
+                    "files are sorted alphabetically without extension");
+                t.Equal("Level01/Nested/worker.dscript",
+                    firstFolder.Children[0].Children[0].ScriptPath,
+                    "nested leaf retains the original relative script path");
+            });
+
+            Add("NexusScriptSubmenusFlipNearViewportEdge",
+                "Submenus prefer right, but flip left before escaping a narrow game window", t =>
+            {
+                t.Equal(220f, SimulationNexusProgramPicker.ChooseSubmenuX(
+                    25f, 220f, 200f, 700f), "submenu opens to right with free space");
+                t.Equal(300f, SimulationNexusProgramPicker.ChooseSubmenuX(
+                    500f, 680f, 200f, 700f), "submenu opens to left near right edge");
+            });
+
+            Add("NexusScriptPickerUsesDarkCustomControls",
+                "Both selectors use themed buttons, a shared popup layer and compact display paths", t =>
+            {
+                var root = new VisualElement();
+                var picker = new SimulationNexusProgramPicker(root);
+                var scriptSelector = root.Q<Button>("nexus-script-dropdown");
+                var functionSelector = root.Q<Button>("nexus-function-dropdown");
+                var layer = root.Q<VisualElement>("nexus-popup-layer");
+                t.Check(scriptSelector != null && functionSelector != null,
+                    "both selectors are custom buttons, not native DropdownField popups");
+                t.Check(scriptSelector.ClassListContains("sim-nexus-panel-select") &&
+                    functionSelector.ClassListContains("sim-nexus-panel-select"),
+                    "script and entry function controls share a theme");
+                t.Equal(DisplayStyle.None, layer.style.display.value,
+                    "popup does not intercept interaction when closed");
+                picker.SetScripts(new[] { "Main/nexo.dscript" }, "Main/nexo.dscript");
+                picker.SetFunctions(new[] { "nexus_main" }, "nexus_main");
+                t.Equal("Main/nexo", scriptSelector.Q<Label>(className:
+                    "sim-nexus-panel-select-text").text,
+                    "script display hides extension but preserves folder context");
+                t.Equal("Main/nexo.dscript", picker.SelectedScript,
+                    "selection API retains the original path for compilation");
+                t.Equal("nexus_main", functionSelector.Q<Label>(className:
+                    "sim-nexus-panel-select-text").text,
+                    "entry function display remains unchanged");
+            });
+
             Add("PickerDoesNotInventAnInitialSelection",
                 "A populated script list still has blank script and function fields until chosen", t =>
             {
@@ -274,9 +338,9 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                     "first file must not appear assigned by default");
                 t.Equal(string.Empty, picker.SelectedFunction,
                     "no script means no entry function");
-                t.Check(root.Q<DropdownField>("nexus-script-dropdown").enabledSelf,
+                t.Check(root.Q<Button>("nexus-script-dropdown").enabledSelf,
                     "user may choose a script while stopped");
-                t.Check(!root.Q<DropdownField>("nexus-function-dropdown").enabledSelf,
+                t.Check(!root.Q<Button>("nexus-function-dropdown").enabledSelf,
                     "no entry function may be chosen without a script");
                 t.Equal(0, assignments, "listing scripts must not silently start a program");
 
@@ -319,9 +383,9 @@ namespace Directiva.EditorTests.SimulationFrontendTests
                 t.Equal(0, scriptChanged, "programmatic script selection is silent");
                 t.Equal(0, functionChanged, "programmatic entry selection is silent");
 
-                var scriptField = root.Q<DropdownField>("nexus-script-dropdown");
-                var functionField = root.Q<DropdownField>("nexus-function-dropdown");
-                t.Check(scriptField != null && functionField != null, "both dropdowns exist");
+                var scriptField = root.Q<Button>("nexus-script-dropdown");
+                var functionField = root.Q<Button>("nexus-function-dropdown");
+                t.Check(scriptField != null && functionField != null, "both custom selectors exist");
                 // Detached UI Toolkit fields do not dispatch ChangeEvent in all
                 // Unity versions. Selection callback delivery is checked in
                 // Play Mode; here we validate silent programmatic refreshes.
@@ -345,11 +409,11 @@ namespace Directiva.EditorTests.SimulationFrontendTests
             {
                 var root = new VisualElement();
                 var picker = new SimulationNexusProgramPicker(root);
-                var scriptField = root.Q<DropdownField>("nexus-script-dropdown");
-                var functionField = root.Q<DropdownField>("nexus-function-dropdown");
+                var scriptField = root.Q<Button>("nexus-script-dropdown");
+                var functionField = root.Q<Button>("nexus-function-dropdown");
                 var lockWarning = root.Q<Label>("nexus-locked-warning");
                 var unsavedWarning = root.Q<Label>(className: "sim-nexus-panel-warning");
-                t.Check(scriptField != null && functionField != null, "dropdowns exist");
+                t.Check(scriptField != null && functionField != null, "custom selectors exist");
                 t.Check(lockWarning != null, "localized locked warning exists");
                 picker.SetScripts(new[] { "one.dscript", "two.dscript" }, "one.dscript");
                 picker.SetFunctions(new[] { "main", "other" }, "main");
@@ -382,8 +446,8 @@ namespace Directiva.EditorTests.SimulationFrontendTests
             {
                 var root = new VisualElement();
                 var picker = new SimulationNexusProgramPicker(root);
-                var scriptField = root.Q<DropdownField>("nexus-script-dropdown");
-                var functionField = root.Q<DropdownField>("nexus-function-dropdown");
+                var scriptField = root.Q<Button>("nexus-script-dropdown");
+                var functionField = root.Q<Button>("nexus-function-dropdown");
                 picker.SetScripts(Array.Empty<string>(), null);
                 picker.SetFunctions(Array.Empty<string>(), null);
                 picker.SetSelectionLocked(true);

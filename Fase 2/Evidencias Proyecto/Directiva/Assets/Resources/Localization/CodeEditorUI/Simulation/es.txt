@@ -28,6 +28,8 @@
 [nexus_locked_warning]: No puedes cambiar estos parámetros mientras la simulación está en marcha. Pulsa Detener primero.
 [nexus_script]: Script
 [nexus_function]: Función de entrada
+[nexus_choose_script]: Seleccionar script
+[nexus_choose_function]: Seleccionar función
 [nexus_close]: Cerrar
 [nexus_no_scripts]: No hay archivos .dscript guardados. Crea uno desde el Editor.
 [nexus_no_functions]: No hay funciones sin parámetros en el script seleccionado.
