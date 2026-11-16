@@ -62,68 +62,61 @@ namespace Directiva.EditorTests.CodeUITests
                 t.Equal("scripts", ScriptDisplayNames.ForNode("lib/scripts.dscript", false), "script node");
             });
 
-            Add("WindowsPlayerUsesShell", "Windows opens the directory with its configured shell", t =>
+            Add("WindowsPlayerUsesNativeShell", "Windows uses the native desktop folder handler", t =>
             {
-                var info = ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.WindowsPlayer);
-                t.Equal(SamplePath(), info.FileName, "Windows opens the actual folder");
-                t.Check(info.UseShellExecute, "use the Windows system shell");
-                t.Check(string.IsNullOrEmpty(info.Arguments), "no command-line injection or arguments");
+                var request = ScriptsFolderOpener.CreateOpenRequest(SamplePath(), RuntimePlatform.WindowsPlayer);
+                t.Equal(SamplePath(), request.FolderPath, "opens the actual folder");
+                t.Equal(ScriptsFolderOpenMode.WindowsShell, request.Mode, "Windows uses ShellExecute");
             });
 
-            Add("WindowsEditor", "Opening scripts in the Unity Windows Editor uses the same route", t =>
+            Add("WindowsEditorUsesNativeShell", "Windows Editor uses the same native opener", t =>
             {
-                var info = ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.WindowsEditor);
-                t.Equal(SamplePath(), info.FileName, "folder, not browser URL");
-                t.Check(info.UseShellExecute, "uses system file association");
+                var request = ScriptsFolderOpener.CreateOpenRequest(SamplePath(), RuntimePlatform.WindowsEditor);
+                t.Equal(ScriptsFolderOpenMode.WindowsShell, request.Mode, "Editor uses Windows shell");
             });
 
-            Add("LinuxPlayerUsesXdgOpen", "Linux launches default file manager without naming Nautilus or Nemo", t =>
+            Add("LinuxPlayerUsesDefaultManager", "Linux opens file URIs with the configured file manager", t =>
             {
-                var info = ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.LinuxPlayer);
-                t.Equal("xdg-open", info.FileName, "freedesktop desktop opener");
-                t.Check(!info.UseShellExecute, "does not invoke a command shell");
-                t.Check(info.Arguments.StartsWith("\"file:", StringComparison.Ordinal),
-                    "single quoted file URI argument");
-                t.Check(info.Arguments.Contains("Directiva%20Scripts"), "spaces URI-escaped");
+                var request = ScriptsFolderOpener.CreateOpenRequest(SamplePath(), RuntimePlatform.LinuxPlayer);
+                t.Equal(ScriptsFolderOpenMode.LinuxDefaultFileManager, request.Mode, "GIO default handler");
+                t.Check(request.FileUri.StartsWith("file:", StringComparison.Ordinal), "local file URI");
+                t.Contains("Directiva%20Scripts", request.FileUri, "spaces URI-escaped");
             });
 
-            Add("LinuxEditor", "Unity's Linux Editor uses the same desktop opener", t =>
+            Add("LinuxEditorUsesDefaultManager", "Linux Editor uses the native desktop opener", t =>
             {
-                var info = ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.LinuxEditor);
-                t.Equal("xdg-open", info.FileName, "xdg-open in Editor");
-                t.Check(!info.UseShellExecute, "no shell string interpolation");
+                var request = ScriptsFolderOpener.CreateOpenRequest(SamplePath(), RuntimePlatform.LinuxEditor);
+                t.Equal(ScriptsFolderOpenMode.LinuxDefaultFileManager, request.Mode, "same GIO route");
             });
 
-            Add("LinuxSpecialCharacters", "Folder paths containing spaces and special characters remain one URI", t =>
+            Add("LinuxSpecialCharacters", "File URI encodes spaces and special characters", t =>
             {
-                // Test logic also runs inside the Windows Unity Editor, where a
-                // quote is illegal in a path. Unix-specific quote test is conditional.
-                var path = Path.Combine(Path.GetTempPath(), "Scripts with spaces & symbols");
-                var info = ScriptsFolderOpener.CreateStartInfo(path, RuntimePlatform.LinuxPlayer);
-                t.Check(info.Arguments.Contains("%20"), "spaces encoded in file URI");
-                t.Check(info.Arguments.EndsWith("\"", StringComparison.Ordinal), "one complete argument");
+                string path = Path.Combine(Path.GetTempPath(), "Scripts with spaces & symbols");
+                var request = ScriptsFolderOpener.CreateOpenRequest(path, RuntimePlatform.LinuxPlayer);
+                t.Contains("%20", request.FileUri, "spaces encoded in URI");
+                t.Check(!request.FileUri.Contains("\""), "no unescaped quotes");
                 if (Path.DirectorySeparatorChar == '/')
                 {
                     path = Path.Combine(Path.GetTempPath(), "Scripts with \"quotes\"");
-                    info = ScriptsFolderOpener.CreateStartInfo(path, RuntimePlatform.LinuxPlayer);
-                    t.Check(info.Arguments.Contains("%22"), "Unix quotes encoded in URI");
+                    request = ScriptsFolderOpener.CreateOpenRequest(path, RuntimePlatform.LinuxPlayer);
+                    t.Contains("%22", request.FileUri, "Unix quotes encoded in URI");
                 }
             });
 
             Add("MissingPathRejected", "A missing script directory path is rejected", t =>
             {
                 bool threw = false;
-                try { ScriptsFolderOpener.CreateStartInfo("", RuntimePlatform.WindowsPlayer); }
+                try { ScriptsFolderOpener.CreateOpenRequest("", RuntimePlatform.WindowsPlayer); }
                 catch (ArgumentException) { threw = true; }
                 t.Check(threw, "invalid path rejected");
             });
 
-            Add("UnsupportedPlatform", "Only desktop OSes use the scripts folder launcher", t =>
+            Add("UnsupportedPlatform", "Only supported desktop platforms have a native opener", t =>
             {
                 bool threw = false;
-                try { ScriptsFolderOpener.CreateStartInfo(SamplePath(), RuntimePlatform.Android); }
+                try { ScriptsFolderOpener.CreateOpenRequest(SamplePath(), RuntimePlatform.Android); }
                 catch (PlatformNotSupportedException) { threw = true; }
-                t.Check(threw, "no invalid launch on mobile");
+                t.Check(threw, "mobile opener rejected");
             });
 
             Add("NestedFolderCreation", "Context-targeted creation stays in the clicked folder", t =>

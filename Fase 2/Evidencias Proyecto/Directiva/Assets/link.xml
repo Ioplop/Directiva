@@ -11,5 +11,41 @@
     <type fullname="DSimulation.SimulationObservationAttribute" preserve="all" />
     <type fullname="DSimulation.SimulationOrderAttribute" preserve="all" />
     <type fullname="DSimulation.SimulationEntityArgumentAttribute" preserve="all" />
+    <!-- DataType registers operators through annotated interfaces and DScript
+         methods/getters/setters through reflection. Keep their metadata and
+         implementations in IL2CPP players even when no direct calls exist. -->
+    <type fullname="DSExecution.DataTypes.DataType" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTUninitialized" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTNone" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTBool" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTInt" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTDecimal" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTString" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTTuple" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTList" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTSet" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTDict" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTFunction" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTRange" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTIterator" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTSimulationObject" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DTSimulationEnum" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DScriptMethodAttribute" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DScriptGetterAttribute" preserve="all" />
+    <type fullname="DSExecution.DataTypes.DScriptSetterAttribute" preserve="all" />
+    <type fullname="DSExecution.Operations.OperationBindingAttribute" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpArithmetic" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpBoolean" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpContainer" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpDictionary" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpExtend" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpHash" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpLength" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpOrdering" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpReferenceEquality" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpSearch" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpSet" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpTruthiness" preserve="all" />
+    <type fullname="DSExecution.Operations.IOpValueEquality" preserve="all" />
   </assembly>
 </linker>

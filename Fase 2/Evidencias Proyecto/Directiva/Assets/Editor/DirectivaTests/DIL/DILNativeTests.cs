@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
+using System.Xml;
 using DSCompilation.DIL;
 using DSExecution.DataTypes;
 using DSExecution.Errors;
@@ -48,6 +50,51 @@ namespace Directiva.EditorTests.DIL
         {
             void Add(string group, string id, string description, Action<DirectivaTestContext> action)
                 => DirectivaTestCatalog.Add(tests, group, id, description, action);
+
+            Add("RuntimeCompatibility", "IL2CPPReflectionPreservation",
+                "link.xml protects every runtime type and operation interface discovered by reflection", t =>
+            {
+                string path = Path.Combine(UnityEngine.Application.dataPath, "link.xml");
+                t.Check(File.Exists(path), "Assets/link.xml exists");
+
+                var xml = new XmlDocument();
+                xml.Load(path);
+                var preserved = new HashSet<string>(StringComparer.Ordinal);
+                foreach (XmlNode node in xml.GetElementsByTagName("type"))
+                {
+                    string name = node.Attributes?["fullname"]?.Value;
+                    if (!string.IsNullOrEmpty(name)) preserved.Add(name);
+                }
+
+                foreach (DataTypeId id in Enum.GetValues(typeof(DataTypeId)))
+                {
+                    DataType dataType = DataType.GetDataType(id);
+                    if (dataType == null) continue;
+                    t.Check(preserved.Contains(dataType.GetType().FullName),
+                        "IL2CPP preserves " + dataType.GetType().FullName);
+                }
+
+                foreach (Type interfaceType in typeof(DataType).Assembly.GetTypes()
+                    .Where(type => type.IsInterface &&
+                        type.Namespace == "DSExecution.Operations" &&
+                        type.Name.StartsWith("IOp", StringComparison.Ordinal)))
+                    t.Check(preserved.Contains(interfaceType.FullName),
+                        "IL2CPP preserves operation interface " + interfaceType.FullName);
+
+                foreach (string name in new[]
+                {
+                    "DSExecution.DataTypes.DScriptMethodAttribute",
+                    "DSExecution.DataTypes.DScriptGetterAttribute",
+                    "DSExecution.DataTypes.DScriptSetterAttribute",
+                    "DSExecution.Operations.OperationBindingAttribute",
+                    "DSExecution.Native.NativeBuiltins",
+                    "DSExecution.Native.NativeMath",
+                    "DSExecution.Native.NativeRandom",
+                    "DSimulation.SimulationObserver",
+                    "DSimulation.SimulationController"
+                })
+                    t.Check(preserved.Contains(name), "IL2CPP preserves " + name);
+            });
 
             // Basic global functions, returned native function values and stack semantics.
             Add("NativeBuiltins", "PrintInt", "print(Int) raises Printed and returns None", t => {
