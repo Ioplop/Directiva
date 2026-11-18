@@ -172,6 +172,7 @@ namespace Directiva.EditorTests
             CodeUITests.GoToDefinitionTests.Register(tests);
             CodeUITests.CodeEditorDeadKeyTests.Register(tests);
             CodeUITests.ScriptExplorerActionsTests.Register(tests);
+            CodeUITests.FolderImportRefactorTests.Register(tests);
             CodeUITests.ExampleCodeTests.Register(tests);
             DirectivaTupleSmokeTests.Register(tests);
             Directiva_TupleCompletionSmokeTests.Register(tests);

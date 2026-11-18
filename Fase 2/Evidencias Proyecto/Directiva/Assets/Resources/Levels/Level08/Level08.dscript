@@ -1,0 +1,40 @@
+# Made by Ignacio Vargas at 2026-11-15 during his playtest
+# Asigna nexus_main como función de entrada del nexo.
+# build recibe una referencia a la función que ejecutará la nueva unidad.
+# El nexo vuelve a invocar esta función en sus turnos.
+
+def nexus_main():
+    if self.can_build and len(self.units()) <=10:
+        # Pasamos la función, sin paréntesis.
+        build(worker)
+
+global atacar=False
+
+global recurso = None
+
+def recolectar():
+    if recurso and recurso.alive:
+        return
+    recursos = resource_nodes()
+    for r in recursos:
+        if r.is_available_to_gather:
+            recurso = r
+    recurso = closest_resource()            
+
+
+def worker():
+    recolectar()
+    # wssSustituye pass por órdenes para darle un comportamiento.
+    if self.cargo >=5:
+        move(self.nexus)
+        self.can_unload
+    elif atacar == True:   
+        move(self.closest_enemy())
+        self.attack(closest_enemy())        
+     
+    elif count_allies() <= 6:    
+        self.move(recurso)
+        self.gather(recurso) 
+    else:
+        atacar = True        
+    

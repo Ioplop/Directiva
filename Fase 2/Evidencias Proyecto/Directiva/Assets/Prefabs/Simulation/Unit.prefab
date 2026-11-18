@@ -142,7 +142,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.133, z: -0.10333347}
-  m_LocalScale: {x: 0.4, y: 0.4, z: 0.4}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8965299442060400482}
@@ -216,7 +216,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e3674b825d5c504991a6c19f384ec63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShieldHitAnimator
-  duration: 0.25
+  duration: 1
 --- !u!1 &5163979325250971381
 GameObject:
   m_ObjectHideFlags: 0

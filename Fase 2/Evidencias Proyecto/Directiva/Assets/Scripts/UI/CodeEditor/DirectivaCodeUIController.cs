@@ -1069,14 +1069,24 @@ namespace Directiva.CodeUI
                 var isFolder = _storage.DirectoryExists(path);
                 var targetName = isFolder ? newName : StripScriptExtension(newName);
 
+                // A folder rename can rewrite imports in scripts outside that folder.
+                // Never mutate one of those scripts while its source is locked by
+                // a running program. The preview is read-only.
+                if (isFolder && _workspace.GetFolderRenameAffectedScripts(path, targetName)
+                    .Any(affected => _executionSourceLock.IsFileLocked(affected)))
+                {
+                    Output.WriteWarning(Localization.Get("ScriptExplorer", "locked_action_blocked"));
+                    return;
+                }
+
                 var request = new RefactorRequest(
                     RefactorOperationKind.Rename,
                     path,
                     targetName);
 
                 var plan = Refactorer.Prepare(Codebase, request);
-                // NoOpRefactorer devuelve NoChanges en v1.
-                // El flujo de confirmación de refactor real se conectará aquí.
+                // Symbol rename/move hooks remain independent from folder-import
+                // rewriting, which is committed atomically by ScriptWorkspace.
                 Refactorer.Apply(Codebase, plan);
 
                 if (isFolder)

@@ -486,14 +486,147 @@ namespace Directiva.CodeUI
             return newPath;
         }
 
+        private sealed class FolderImportUpdate
+        {
+            internal string Path;
+            internal string OldSaved;
+            internal string OldBackup;
+            internal bool HadBackup;
+            internal string NewSaved;
+            internal string NewWorking;
+        }
+
+        private static string RenamedFolderPath(string folder, string name)
+        {
+            folder = Normalize(folder).TrimEnd('/');
+            int lastSlash = folder.LastIndexOf('/');
+            return (lastSlash < 0 ? string.Empty : folder.Substring(0, lastSlash + 1)) +
+                (name ?? string.Empty).Trim();
+        }
+
+        private List<FolderImportUpdate> CollectFolderImportUpdates(string oldFolder,
+            string newFolder, IEnumerable<string> scripts)
+        {
+            var updates = new List<FolderImportUpdate>();
+            foreach (string path in scripts)
+            {
+                string saved = _storage.ReadSaved(path);
+                string working = GetWorkingContent(path);
+                string newSaved = DScriptFolderImportRefactor.Rewrite(saved, oldFolder, newFolder);
+                string newWorking = DScriptFolderImportRefactor.Rewrite(working, oldFolder, newFolder);
+                if (string.Equals(saved, newSaved, StringComparison.Ordinal) &&
+                    string.Equals(working, newWorking, StringComparison.Ordinal))
+                    continue;
+
+                bool hadBackup = _storage.BackupExists(path);
+                updates.Add(new FolderImportUpdate
+                {
+                    Path = path,
+                    OldSaved = saved,
+                    HadBackup = hadBackup,
+                    OldBackup = hadBackup ? _storage.ReadBackup(path) : null,
+                    NewSaved = newSaved,
+                    NewWorking = newWorking
+                });
+            }
+            return updates;
+        }
+
+        /// <summary>
+        /// Preview the full-solution changes caused by renaming a folder. The UI uses
+        /// these paths to reject a rename if any dependent script is executing.
+        /// </summary>
+        public IReadOnlyList<string> GetFolderRenameAffectedScripts(string folder, string newName)
+        {
+            string oldPath = Normalize(folder).TrimEnd('/');
+            string newPath = RenamedFolderPath(oldPath, newName);
+            return CollectFolderImportUpdates(oldPath, newPath, EnumerateAllScripts(string.Empty))
+                .Select(update => update.Path).ToArray();
+        }
+
+        /// <summary>
+        /// Rename the folder and all import paths that refer to modules beneath it.
+        /// Saved and unsaved sources are rewritten independently; unrelated pending
+        /// changes are never saved as a side effect of the rename.
+        /// </summary>
         public string RenameFolder(string folder, string newName)
         {
             FlushActiveBackup();
-            var oldPath = Normalize(folder);
-            var newPath = Normalize(_storage.RenameFolder(oldPath, newName));
-            RemapPath(oldPath, newPath, true);
-            return newPath;
+            string oldPath = Normalize(folder).TrimEnd('/');
+            string targetPath = RenamedFolderPath(oldPath, newName);
+            var updates = CollectFolderImportUpdates(oldPath, targetPath,
+                EnumerateAllScripts(string.Empty));
+
+            string movedPath = null;
+            var written = new List<FolderImportUpdate>();
+            try
+            {
+                movedPath = Normalize(_storage.RenameFolder(oldPath, newName));
+                if (!string.Equals(movedPath, targetPath, StringComparison.Ordinal))
+                    throw new IOException("Folder rename produced an unexpected path.");
+
+                foreach (FolderImportUpdate update in updates)
+                {
+                    string path = MapFolderChildPath(update.Path, oldPath, movedPath);
+                    // Record first: a partial I/O write must still be rolled back.
+                    written.Add(update);
+                    if (!string.Equals(update.OldSaved, update.NewSaved, StringComparison.Ordinal))
+                        _storage.WriteSaved(path, update.NewSaved);
+                    if (string.Equals(update.NewSaved, update.NewWorking, StringComparison.Ordinal))
+                        _storage.DeleteBackup(path);
+                    else
+                        _storage.WriteBackup(path, update.NewWorking);
+                }
+            }
+            catch
+            {
+                foreach (FolderImportUpdate update in written.AsEnumerable().Reverse())
+                {
+                    try
+                    {
+                        string path = MapFolderChildPath(update.Path, oldPath, movedPath);
+                        _storage.WriteSaved(path, update.OldSaved);
+                        if (update.HadBackup) _storage.WriteBackup(path, update.OldBackup);
+                        else _storage.DeleteBackup(path);
+                    }
+                    catch { /* Best-effort rollback; preserve the original exception. */ }
+                }
+                if (movedPath != null)
+                {
+                    try { _storage.RenameFolder(movedPath, oldPath.Substring(oldPath.LastIndexOf('/') + 1)); }
+                    catch { /* Preserve the original failure. */ }
+                }
+                throw;
+            }
+
+            // The editor's ActiveChanged callback reads these fields. Update before
+            // remapping/reopening so it sees the new text rather than stale content.
+            if (Active != null)
+            {
+                FolderImportUpdate activeUpdate = updates.FirstOrDefault(u =>
+                    string.Equals(u.Path, Active.RelativePath, StringComparison.OrdinalIgnoreCase));
+                if (activeUpdate != null)
+                {
+                    Active.SavedContent = activeUpdate.NewSaved;
+                    Active.SavedHash = Hash(activeUpdate.NewSaved);
+                    Active.WorkingContent = activeUpdate.NewWorking;
+                    Active.WorkingHash = Hash(activeUpdate.NewWorking);
+                }
+                _previousDirty = Active.IsDirty;
+            }
+
+            RemapPath(oldPath, movedPath, true);
+            foreach (FolderImportUpdate update in updates)
+                ScriptStateChanged?.Invoke(MapFolderChildPath(update.Path, oldPath, movedPath));
+            // Moving a module changes compilation inputs even if no file imported it.
+            SavedScriptsChanged?.Invoke();
+            return movedPath;
         }
+
+        private static string MapFolderChildPath(string path, string oldFolder, string newFolder) =>
+            IsPathInside(path, oldFolder)
+                ? newFolder + Normalize(path).Substring(oldFolder.Length)
+                : path;
 
         public string MoveScript(string path, string targetFolder)
         {
@@ -521,11 +654,42 @@ namespace Directiva.CodeUI
             return newPath;
         }
 
+        /// <summary>
+        /// Copy the working versions of a folder's scripts, then retarget imports
+        /// within the copy. Originals and references elsewhere are never modified.
+        /// </summary>
         public string DuplicateFolder(string folder, string newName)
         {
             FlushActiveBackup();
-            var newPath = _storage.DuplicateFolder(folder, newName);
+            string oldPath = Normalize(folder).TrimEnd('/');
+            string targetPath = RenamedFolderPath(oldPath, newName);
+            var updates = CollectFolderImportUpdates(oldPath, targetPath,
+                EnumerateAllScripts(oldPath));
+            string newPath = null;
+            try
+            {
+                newPath = Normalize(_storage.DuplicateFolder(oldPath, newName));
+                if (!string.Equals(newPath, targetPath, StringComparison.Ordinal))
+                    throw new IOException("Folder duplication produced an unexpected path.");
+                foreach (FolderImportUpdate update in updates)
+                {
+                    // DuplicateFolder already copied the latest working content to
+                    // a regular .dscript, so do not create dirty backups in the copy.
+                    string copiedPath = MapFolderChildPath(update.Path, oldPath, newPath);
+                    _storage.WriteSaved(copiedPath, update.NewWorking);
+                }
+            }
+            catch
+            {
+                if (newPath != null)
+                {
+                    try { _storage.DeleteFolder(newPath); }
+                    catch { /* Preserve the original I/O failure. */ }
+                }
+                throw;
+            }
             TreeChanged?.Invoke();
+            SavedScriptsChanged?.Invoke();
             return newPath;
         }
 

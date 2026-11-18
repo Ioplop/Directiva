@@ -15,8 +15,8 @@ MonoBehaviour:
   levelName: B4-CH1CH4
   levelNumber: 6
   requiredStars: 10
-  maxMatchDurationSeconds: 600
-  fastVictorySeconds: 400
+  maxMatchDurationSeconds: 300
+  fastVictorySeconds: 200
   scenePath: Assets/Scenes/BaseSimulation.unity
   codeFolder: Level06
   entryModule: lvl06

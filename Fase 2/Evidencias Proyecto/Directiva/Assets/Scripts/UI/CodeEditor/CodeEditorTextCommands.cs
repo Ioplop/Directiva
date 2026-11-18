@@ -68,6 +68,33 @@ namespace Directiva.CodeUI
     public static class CodeEditorTextCommands
     {
         /// <summary>
+        /// Smart Home: first go to the first non-indentation character, then to
+        /// the absolute start of the line. The caller can retain its selection
+        /// anchor for Shift+Home. No text or indices are normalized here.
+        /// </summary>
+        public static int SmartHomeCaretIndex(string text, int caret)
+        {
+            text ??= string.Empty;
+            caret = Clamp(caret, text.Length);
+
+            int lineStart = FindLineStart(text, caret);
+            int lineEnd = text.IndexOf('\n', lineStart);
+            if (lineEnd < 0)
+                lineEnd = text.Length;
+
+            int firstContent = lineStart;
+            while (firstContent < lineEnd &&
+                   (text[firstContent] == ' ' || text[firstContent] == '\t'))
+                firstContent++;
+
+            // Empty/whitespace-only lines have just one meaningful Home position.
+            if (firstContent == lineStart || firstContent == lineEnd)
+                return lineStart;
+
+            return caret == firstContent ? lineStart : firstContent;
+        }
+
+        /// <summary>
         /// VS Code-style Alt+Up/Down: move the whole line or selected contiguous
         /// block one position without changing its contents or indentation.
         /// A selection ending immediately after a newline excludes the next line.

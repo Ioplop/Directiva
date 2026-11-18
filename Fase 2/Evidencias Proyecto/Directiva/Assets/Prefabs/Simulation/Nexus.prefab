@@ -250,7 +250,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e3674b825d5c504991a6c19f384ec63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShieldHitAnimator
-  duration: 0.25
+  duration: 0.5
 --- !u!1 &5721573925797659126
 GameObject:
   m_ObjectHideFlags: 0

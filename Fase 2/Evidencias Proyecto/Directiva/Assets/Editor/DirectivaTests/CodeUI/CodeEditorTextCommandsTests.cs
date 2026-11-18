@@ -12,6 +12,79 @@ namespace Directiva.EditorTests.CodeUITests
             void Add(string id, string description, Action<DirectivaTestContext> run) =>
                 tests.Add(new DirectivaTestCase("CodeUI", "TextShortcuts", id, description, run));
 
+            Add("SmartHomeIndentedLine", "Home alternates indentation and absolute line start", t =>
+            {
+                const string source = "def main():\n    x = 1";
+                int atContent = source.IndexOf("x = 1", StringComparison.Ordinal);
+                int atStart = source.IndexOf('\n') + 1;
+
+                int first = CodeEditorTextCommands.SmartHomeCaretIndex(source, source.Length);
+                int second = CodeEditorTextCommands.SmartHomeCaretIndex(source, first);
+                t.Equal(atContent, first, "first Home goes to content after indentation");
+                t.Equal(atStart, second, "second Home goes to column zero");
+                t.Equal(atContent, CodeEditorTextCommands.SmartHomeCaretIndex(source, atStart),
+                    "Home from column zero goes back to content");
+            });
+
+            Add("SmartHomeMixedWhitespace", "Tabs and spaces count as indentation", t =>
+            {
+                const string source = "pass\n\t  value = 2";
+                int atContent = source.IndexOf("value", StringComparison.Ordinal);
+                int atStart = source.IndexOf('\n') + 1;
+                t.Equal(atContent, CodeEditorTextCommands.SmartHomeCaretIndex(source, source.Length),
+                    "mixed tab/space prefix");
+                t.Equal(atStart, CodeEditorTextCommands.SmartHomeCaretIndex(source, atContent),
+                    "mixed tab/space second press");
+            });
+
+            Add("SmartHomeFromIndent", "Home first targets indentation boundary even inside whitespace", t =>
+            {
+                const string source = "    x = 1";
+                t.Equal(4, CodeEditorTextCommands.SmartHomeCaretIndex(source, 2),
+                    "caret inside indentation");
+                t.Equal(0, CodeEditorTextCommands.SmartHomeCaretIndex(source, 4),
+                    "caret at first content");
+            });
+
+            Add("SmartHomeUnindented", "Unindented lines go directly to column zero", t =>
+            {
+                const string source = "x = 1";
+                t.Equal(0, CodeEditorTextCommands.SmartHomeCaretIndex(source, source.Length),
+                    "unindented content");
+                t.Equal(0, CodeEditorTextCommands.SmartHomeCaretIndex(source, 0),
+                    "already at start");
+            });
+
+            Add("SmartHomeEmptyAndWhitespaceOnly", "Empty and whitespace-only lines use column zero", t =>
+            {
+                const string source = "first\n    \n\t\t\nlast\n";
+                t.Equal(6, CodeEditorTextCommands.SmartHomeCaretIndex(source, 10),
+                    "only spaces");
+                t.Equal(11, CodeEditorTextCommands.SmartHomeCaretIndex(source, 13),
+                    "only tabs");
+                t.Equal(source.Length, CodeEditorTextCommands.SmartHomeCaretIndex(source, source.Length),
+                    "trailing empty line");
+            });
+
+            Add("SmartHomePreservesSourceOffsets", "Smart Home does not normalize line endings or change document text", t =>
+            {
+                const string source = "head\r\n\t next";
+                int atContent = source.IndexOf("next", StringComparison.Ordinal);
+                int atStart = source.IndexOf('\n') + 1;
+                t.Equal(atContent, CodeEditorTextCommands.SmartHomeCaretIndex(source, source.Length),
+                    "caret offsets remain valid with CRLF");
+                t.Equal(atStart, CodeEditorTextCommands.SmartHomeCaretIndex(source, atContent),
+                    "absolute start remains based on original text");
+            });
+
+            Add("SmartHomeClampsIndices", "Home is safe for out-of-range caret positions", t =>
+            {
+                t.Equal(0, CodeEditorTextCommands.SmartHomeCaretIndex(null, -5),
+                    "null and negative caret");
+                t.Equal(4, CodeEditorTextCommands.SmartHomeCaretIndex("    y", 500),
+                    "caret beyond EOF");
+            });
+
             Add("EnterIndentsCurrentLevel", "Enter preserves the current line's indentation", t =>
             {
                 const string source = "def main():\n    move(self.nexus)";

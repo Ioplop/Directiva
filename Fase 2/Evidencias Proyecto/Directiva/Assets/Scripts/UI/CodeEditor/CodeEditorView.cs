@@ -2784,6 +2784,17 @@ namespace Directiva.CodeUI
                 return;
             }
 
+            // Smart Home toggles between the indentation boundary and column 0.
+            // Leave Ctrl/Command+Home to Unity (document start), and preserve
+            // Shift+Home selection semantics instead of editing the document.
+            if (evt.keyCode == KeyCode.Home &&
+                !evt.ctrlKey && !evt.commandKey && !evt.altKey)
+            {
+                evt.StopImmediatePropagation();
+                MoveCaretToSmartHome(evt.shiftKey);
+                return;
+            }
+
             // Capture Alt+Up/Down before the native TextField moves its caret.
             // Shift is deliberately excluded (VS Code uses Alt+Shift to duplicate).
             if (evt.altKey && !evt.ctrlKey && !evt.commandKey && !evt.shiftKey &&
@@ -2865,6 +2876,24 @@ namespace Directiva.CodeUI
             {
                 evt.StopImmediatePropagation();
             }
+        }
+
+        private void MoveCaretToSmartHome(bool extendSelection)
+        {
+            string text = Text;
+            int cursor = Mathf.Clamp(_textField.textSelection.cursorIndex, 0, text.Length);
+            int anchor = Mathf.Clamp(_textField.textSelection.selectIndex, 0, text.Length);
+            int target = CodeEditorTextCommands.SmartHomeCaretIndex(text, cursor);
+
+            if (_completionOpen)
+                HideCompletion();
+
+            _focusScroll.CancelForNavigation();
+            // A pending Tab/completion caret restore must not undo this Home key.
+            _pendingEditSelectionRevision++;
+            _textField.textSelection.SelectRange(target, extendSelection ? anchor : target);
+            CaptureActiveHistorySelection();
+            CaretMoved?.Invoke();
         }
 
         private void InsertEditorLineBreak()

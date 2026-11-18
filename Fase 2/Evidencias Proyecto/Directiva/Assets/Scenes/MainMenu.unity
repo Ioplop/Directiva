@@ -2384,7 +2384,6 @@ MonoBehaviour:
   languageSettingLabel: Idioma
   masterVolumeSettingLabel: Volumen general
   musicVolumeSettingLabel: "Volumen de la m\xFAsica"
-  uiVolumeSettingLabel: Volumen de la interfaz
   simulationVolumeSettingLabel: "Volumen de la partida / simulaci\xF3n"
   resolutionSettingLabel: "Resoluci\xF3n"
   mouseCaptureSettingLabel: Atrapar el mouse
@@ -2407,6 +2406,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 3b87fc06200a4d24d85ca8702b506591, type: 2}
   - {fileID: 11400000, guid: d4ca2f9bf67f154429d8f22a297111bc, type: 2}
   - {fileID: 11400000, guid: db0536f95da373f4fbc017c433ada68b, type: 2}
+  - {fileID: 11400000, guid: 12233c82ed2adae4baefb49dbe2bca20, type: 2}
   levels:
   - name: Funciones
     stars: 3
